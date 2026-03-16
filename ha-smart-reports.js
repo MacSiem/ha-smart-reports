@@ -42,12 +42,108 @@ class HASmartReports extends HTMLElement {
 
   _render() {
     const tabs = [];
-    if (this._config.show_energy) tabs.push({ id: 'energy', label: 'Energy', icon: '?' });
-    if (this._config.show_automations) tabs.push({ id: 'automations', label: 'Automations', icon: '??' });
-    if (this._config.show_system) tabs.push({ id: 'system', label: 'System', icon: '???' });
+    if (this._config.show_energy) tabs.push({ id: 'energy', label: 'Energy', icon: '⚡' });
+    if (this._config.show_automations) tabs.push({ id: 'automations', label: 'Automations', icon: '🤖' });
+    if (this._config.show_system) tabs.push({ id: 'system', label: 'System', icon: '🖥️' });
 
     this.shadowRoot.innerHTML = `
       <style>
+        :host {
+          --primary: var(--ha-card-header-color, #1976d2);
+          --bg: var(--ha-card-background, var(--card-background-color, #fff));
+          --text: var(--primary-text-color, #333);
+          --text2: var(--secondary-text-color, #666);
+          --border: var(--divider-color, #e0e0e0);
+          --hover: var(--table-row-alternative-background-color, #f5f5f5);
+          --green: #4caf50; --red: #f44336; --orange: #ff9800; --blue: #2196f3;
+        }
+        .reports-card {
+          background: var(--bg); border-radius: 12px; padding: 16px;
+          font-family: var(--ha-card-header-font-family, inherit); color: var(--text);
+        }
+        .card-header {
+          display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+        }
+        .card-header h2 { margin: 0; font-size: 18px; font-weight: 500; }
+        .period-select {
+          padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+          background: var(--bg); color: var(--text); font-size: 12px;
+        }
+        .tabs {
+          display: flex; gap: 4px; margin-bottom: 16px;
+          border-bottom: 1px solid var(--border); padding-bottom: 8px;
+        }
+        .tab {
+          padding: 6px 14px; border: none; border-radius: 6px 6px 0 0;
+          background: transparent; color: var(--text2); cursor: pointer;
+          font-size: 13px; font-weight: 500; transition: all 0.2s;
+        }
+        .tab:hover { background: var(--hover); }
+        .tab.active { background: var(--primary); color: #fff; }
+        .tab-icon { margin-right: 4px; }
+        .section { margin-bottom: 16px; }
+        .section-title {
+          font-size: 14px; font-weight: 600; margin-bottom: 8px;
+          display: flex; align-items: center; gap: 6px;
+        }
+        .stats-grid {
+          display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+          gap: 10px; margin-bottom: 16px;
+        }
+        .stat-card {
+          background: var(--hover); border-radius: 8px; padding: 12px;
+          text-align: center;
+        }
+        .stat-value { font-size: 22px; font-weight: 700; }
+        .stat-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+        .stat-trend { font-size: 11px; margin-top: 4px; }
+        .trend-up { color: var(--red); }
+        .trend-down { color: var(--green); }
+        .bar-chart { margin: 8px 0; }
+        .bar-row {
+          display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px;
+        }
+        .bar-label { width: 80px; text-align: right; font-size: 12px; color: var(--text2); flex-shrink: 0; }
+        .bar-container { flex: 1; height: 20px; background: var(--hover); border-radius: 4px; overflow: hidden; }
+        .bar-fill {
+          height: 100%; border-radius: 4px; transition: width 0.5s ease;
+          display: flex; align-items: center; padding: 0 6px;
+          font-size: 11px; color: #fff; font-weight: 500; min-width: 30px;
+        }
+        .bar-value { font-size: 12px; width: 60px; text-align: right; font-family: monospace; flex-shrink: 0; }
+        .auto-list { }
+        .auto-item {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+        }
+        .auto-item:last-child { border-bottom: none; }
+        .auto-name { font-weight: 500; flex: 1; }
+        .auto-count {
+          background: var(--hover); padding: 2px 8px; border-radius: 12px;
+          font-size: 12px; font-weight: 600; margin-left: 8px;
+        }
+        .auto-status {
+          font-size: 11px; color: var(--text2); margin-left: 8px; width: 60px; text-align: right;
+        }
+        .health-item {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 8px 12px; background: var(--hover); border-radius: 6px;
+          margin-bottom: 6px; font-size: 13px;
+        }
+        .health-dot {
+          width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0;
+        }
+        .health-name { flex: 1; font-weight: 500; }
+        .health-value { font-family: monospace; font-size: 12px; color: var(--text2); }
+        .export-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+        .btn-export {
+          padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px;
+          background: var(--bg); color: var(--text); cursor: pointer; font-size: 12px;
+        }
+        .btn-export:hover { background: var(--hover); }
+        .btn-export.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+      
+/* === Modern Bento Light Mode === */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -420,12 +516,12 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         <div class="stat-card">
           <div class="stat-value" style="color:var(--orange)">${totalEnergy.toFixed(1)}</div>
           <div class="stat-label">kWh Total</div>
-          <div class="stat-trend trend-down">ˇ 5% vs prev</div>
+          <div class="stat-trend trend-down">↓ 5% vs prev</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:var(--blue)">${cost.toFixed(2)}</div>
           <div class="stat-label">${this._config.currency} Cost</div>
-          <div class="stat-trend trend-down">ˇ 3% vs prev</div>
+          <div class="stat-trend trend-down">↓ 3% vs prev</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:var(--green)">${sensors.length}</div>
@@ -437,7 +533,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         </div>
       </div>
       <div class="section">
-        <div class="section-title">? Energy by Sensor</div>
+        <div class="section-title">⚡ Energy by Sensor</div>
         <div class="bar-chart">
           ${sensors.map((s, i) => `
             <div class="bar-row">
@@ -497,7 +593,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         </div>
       </div>
       <div class="section">
-        <div class="section-title">?? Recent Activity</div>
+        <div class="section-title">🤖 Recent Activity</div>
         <div class="auto-list">
           ${automations.slice(0, 10).map(a => `
             <div class="auto-item">
@@ -531,7 +627,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 
     const domainColors = {
       sensor: '#4caf50', binary_sensor: '#8bc34a', light: '#ffc107',
-      switch: 'var(--primary-color, #03a9f4)', automation: '#ff9800', climate: '#00bcd4',
+      switch: '#2196f3', automation: '#ff9800', climate: '#00bcd4',
       media_player: '#9c27b0', cover: '#795548', person: '#607d8b',
       input_boolean: '#e91e63', script: '#ff5722'
     };
@@ -556,7 +652,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         </div>
       </div>
       <div class="section">
-        <div class="section-title">??? Entities by Domain</div>
+        <div class="section-title">🖥️ Entities by Domain</div>
         <div class="bar-chart">
           ${topDomains.map(([d, count]) => `
             <div class="bar-row">
@@ -572,7 +668,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         </div>
       </div>
       <div class="section">
-        <div class="section-title">?? Health Check</div>
+        <div class="section-title">🏥 Health Check</div>
         ${this._renderHealthItems(unavailable, unknown, allEntities.length)}
       </div>
     `;
@@ -670,6 +766,6 @@ window.customCards.push({
 
 console.info(
   '%c  HA-SMART-REPORTS  %c v1.0.0 ',
-  'background: #4caf50; color: var(--card-background-color, #1e1e1e); font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
+  'background: #4caf50; color: #fff; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #e8f5e9; color: #4caf50; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
