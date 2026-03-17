@@ -461,12 +461,12 @@ canvas {
         <div class="stat-card">
           <div class="stat-value" style="color:var(--orange)">${totalEnergy.toFixed(1)}</div>
           <div class="stat-label">kWh Total</div>
-          <div class="stat-trend trend-down">↓ 5% vs prev</div>
+          <div class="stat-trend" style="font-size:11px;color:var(--bento-text-muted)">${sensors.filter(s => s.unit.includes('kWh')).length} sensor\u00F3w kWh</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:var(--blue)">${cost.toFixed(2)}</div>
           <div class="stat-label">${this._config.currency} Cost</div>
-          <div class="stat-trend trend-down">↓ 3% vs prev</div>
+          <div class="stat-trend" style="font-size:11px;color:var(--bento-text-muted)">@ ${this._config.energy_price} ${this._config.currency}/kWh</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:var(--green)">${sensors.length}</div>
@@ -746,7 +746,7 @@ canvas {
 
 }
 
-customElements.define('ha-smart-reports', HASmartReports);
+if (!customElements.get('ha-smart-reports')) { customElements.define('ha-smart-reports', HASmartReports); };
 
 window.customCards = window.customCards || [];
 window.customCards.push({
