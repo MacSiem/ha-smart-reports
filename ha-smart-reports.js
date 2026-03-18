@@ -378,6 +378,24 @@ canvas {
         }
         .btn-export:hover { background: var(--hover); }
         .btn-export.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+          .reports-card { padding: 12px; }
+          .card-header { flex-direction: column; gap: 8px; }
+          .card-header h2 { font-size: 16px; }
+          .report-grid { grid-template-columns: 1fr !important; }
+          .report-section { padding: 12px; }
+          table { font-size: 12px; }
+          td, th { padding: 6px 8px; }
+          .tab-bar { flex-wrap: wrap; }
+          .tab { font-size: 12px; padding: 6px 10px; }
+          .chart-container { height: 200px !important; }
+        }
+        @media (max-width: 480px) {
+          .tab { font-size: 11px; padding: 5px 8px; }
+          .report-grid { gap: 8px; }
+        }
       </style>
       <ha-card>
         <div class="reports-card">
