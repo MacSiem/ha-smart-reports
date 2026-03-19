@@ -423,6 +423,7 @@ canvas {
       </ha-card>
     `;
     this._attachEvents();
+    this._updateData();
   }
 
   _attachEvents() {
