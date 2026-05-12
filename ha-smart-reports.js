@@ -3,6 +3,9 @@
  * Energy reports, automation statistics, and system health overview
  */
 
+// HTML escape helper — wrap any user-derived string before interpolation into innerHTML.
+const _esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 class HASmartReports extends HTMLElement {
   constructor() {
     super();
@@ -76,7 +79,6 @@ class HASmartReports extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
 /* ===== BENTO LIGHT MODE DESIGN SYSTEM ===== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :host {
   --bento-primary: #3B82F6;
@@ -512,7 +514,7 @@ canvas {
           <div class="stat-label">Energy Sensors</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--red)">${sensors.length > 0 ? sensors[0].name.split(' ').slice(0, 2).join(' ') : '-'}</div>
+          <div class="stat-value" style="color:var(--red)">${sensors.length > 0 ? _esc(sensors[0].name.split(' ').slice(0, 2).join(' ')) : '-'}</div>
           <div class="stat-label">Top Consumer</div>
         </div>
       </div>
@@ -521,7 +523,7 @@ canvas {
         <div class="bar-chart">
           ${sensors.map((s, i) => `
             <div class="bar-row">
-              <span class="bar-label" title="${s.id}">${s.name.split(' ').slice(0, 2).join(' ')}</span>
+              <span class="bar-label" title="${_esc(s.id)}">${_esc(s.name.split(' ').slice(0, 2).join(' '))}</span>
               <div class="bar-container">
                 <div class="bar-fill" style="width:${(s.value / maxVal * 100)}%;background:${colors[i] || '#ccc'}">
                   ${s.value > maxVal * 0.15 ? s.value.toFixed(1) : ''}
@@ -581,7 +583,7 @@ canvas {
         <div class="auto-list">
           ${automations.slice(0, 10).map(a => `
             <div class="auto-item">
-              <span class="auto-name">${a.name}</span>
+              <span class="auto-name">${_esc(a.name)}</span>
               <span class="auto-status">${this._timeAgo(a.last_triggered)}</span>
               <span class="auto-count" style="color:${a.state === 'on' ? 'var(--green)' : 'var(--red)'}">
                 ${a.state}

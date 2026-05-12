@@ -1,36 +1,46 @@
 # 📈 Smart Reports
 
-Generate intelligent reports about your Home Assistant system
+Lovelace card with energy reports, automation statistics and system health overview for Home Assistant.
+
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Part of the [HA Tools](https://github.com/MacSiem/ha-tools-panel) collection for Home Assistant.
-
-## Installation
-
-### HACS (recommended)
-1. Open HACS in Home Assistant
-2. Go to Frontend > Explore & Download Repositories
-3. Search for "Smart Reports"
-4. Install and restart Home Assistant
-
-### Manual
-1. Download `ha-smart-reports.js` from this repository
-2. Copy to `/config/www/community/ha-smart-reports/`
-3. Add as a Lovelace resource
 
 ## Screenshot
 
 ![Screenshot](screenshot.png)
 
+## Installation
+
+### HACS (custom repository)
+
+1. Open HACS in Home Assistant.
+2. Go to **Frontend** → ⋮ → **Custom repositories**.
+3. Add `https://github.com/MacSiem/ha-smart-reports` with category **Lovelace**.
+4. Install **Smart Reports** and restart Home Assistant.
+
+### Manual
+
+1. Download `ha-smart-reports.js` from the [latest release](https://github.com/MacSiem/ha-smart-reports/releases).
+2. Copy to `/config/www/community/ha-smart-reports/`.
+3. Add as a Lovelace resource: `/local/community/ha-smart-reports/ha-smart-reports.js` (type: `module`).
+
+## Usage
+
+```yaml
+type: custom:ha-smart-reports
+```
+
+## Privacy
+
+- No telemetry, no analytics, no tracking.
+- No external network calls, no CDN-hosted assets (system fonts only).
+- All report data is rendered from your Home Assistant state — nothing leaves your instance.
+
 ## Changelog
 
-### v2.3 (2026-03-17)
-- Bento Light Mode UI redesign (Inter font, blue accent #3B82F6)
-- Throttled hass updates (5s) to prevent UI lag
-- Stable pagination and data persistence
-- Fixed dual-script loading (customElements.define guard)
-- CSS custom properties for theming (--bento-primary, --bento-bg, etc.)
-- Improved readability and layout consistency
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

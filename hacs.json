@@ -1,5 +1,7 @@
 {
-    "name":  "Smart Reports",
-    "filename":  "ha-smart-reports.js",
-    "render_readme":  true
+  "name": "Smart Reports",
+  "filename": "ha-smart-reports.js",
+  "render_readme": true,
+  "content_in_root": true,
+  "homeassistant": "2024.1.0"
 }
