@@ -21,6 +21,9 @@ class HASmartReports extends HTMLElement {
     this._config = {};
     this._activeTab = 'energy';
     this._period = '7d';
+    this._scaffoldRendered = false;
+    this._refs = { panes: {} };
+    this._dataCache = null;
   }
 
   set hass(hass) {
@@ -29,8 +32,8 @@ class HASmartReports extends HTMLElement {
     const now = Date.now();
     if (!this._firstHassRender) {
       this._firstHassRender = true;
-      this._updateData();
       this._render();
+      this._updateData();
       this._lastRenderTime = now;
       return;
     }
@@ -39,15 +42,13 @@ class HASmartReports extends HTMLElement {
         this._renderScheduled = true;
         setTimeout(() => {
           this._renderScheduled = false;
-      this._updateData();
-          this._render();
+          this._updateData();
           this._lastRenderTime = Date.now();
-        }, 5000 - (now - (this._lastRenderTime || 0)));
+        }, Math.max(0, 10000 - (now - (this._lastRenderTime || 0))));
       }
       return;
     }
-      this._updateData();
-    this._render();
+    this._updateData();
     this._lastRenderTime = now;
   }
 
@@ -70,11 +71,25 @@ class HASmartReports extends HTMLElement {
     return { title: 'Smart Reports', energy_entity: 'sensor.energy_total', currency: 'PLN' };
   }
 
-  _render() {
+  _getTabs() {
     const tabs = [];
     if (this._config.show_energy) tabs.push({ id: 'energy', label: 'Energy', icon: '⚡' });
     if (this._config.show_automations) tabs.push({ id: 'automations', label: 'Automations', icon: '🤖' });
     if (this._config.show_system) tabs.push({ id: 'system', label: 'System', icon: '🖥️' });
+    return tabs;
+  }
+
+  _render() {
+    if (this._scaffoldRendered) {
+      this._syncTabs();
+      this._patchActiveTab();
+      return;
+    }
+
+    const tabs = this._getTabs();
+    if (!tabs.some(t => t.id === this._activeTab)) {
+      this._activeTab = tabs[0]?.id || 'energy';
+    }
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -422,7 +437,7 @@ canvas {
       <ha-card>
         <div class="reports-card">
           <div class="card-header">
-            <h2>${this._config.title}</h2>
+            <h2>${_esc(this._config.title)}</h2>
             <select class="period-select" id="periodSelect">
               <option value="1d">Today</option>
               <option value="7d" selected>Last 7 days</option>
@@ -444,23 +459,23 @@ canvas {
         </div>
       </ha-card>
     `;
+    this._scaffoldRendered = true;
     this._attachEvents();
-    this._updateData();
   }
 
   _attachEvents() {
     this.shadowRoot.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
+        if (this._activeTab === tab.dataset.tab) return;
         this._activeTab = tab.dataset.tab;
-        this.shadowRoot.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        this._updateData();
+        this._syncTabs();
+        this._patchActiveTab();
       });
     });
 
     this.shadowRoot.getElementById('periodSelect').addEventListener('change', (e) => {
       this._period = e.target.value;
-      this._updateData();
+      this._patchActiveTab();
     });
 
     this.shadowRoot.getElementById('exportCsvBtn').addEventListener('click', () => this._exportReport('csv'));
@@ -468,149 +483,307 @@ canvas {
   }
 
   _updateData() {
-    const content = this.shadowRoot.getElementById('tabContent');
-    if (!content || !this._hass) return;
+    if (!this._hass) return;
+    if (!this._scaffoldRendered) this._render();
+    this._dataCache = this._buildDataCache();
+    this._patchActiveTab();
+  }
+
+  _buildDataCache() {
+    const states = this._hass?.states || {};
+    const now = Date.now();
+    const energyCandidates = [];
+    const automations = [];
+    const domains = {};
+    let totalEntities = 0;
+    let unavailable = 0;
+    let unknown = 0;
+    let active = 0;
+    let disabled = 0;
+    let recentCount = 0;
+
+    Object.entries(states).forEach(([id, s]) => {
+      totalEntities += 1;
+      const attrs = s.attributes || {};
+      const state = s.state;
+      const domain = id.split('.')[0];
+      domains[domain] = (domains[domain] || 0) + 1;
+
+      if (state === 'unavailable') unavailable += 1;
+      if (state === 'unknown') unknown += 1;
+
+      if (id.includes('energy') || id.includes('power') || id.includes('consumption')) {
+        const value = Number.parseFloat(state);
+        if (!Number.isNaN(value)) {
+          energyCandidates.push({
+            id,
+            name: attrs.friendly_name || id,
+            value,
+            unit: attrs.unit_of_measurement || '',
+            device_class: attrs.device_class
+          });
+        }
+      }
+
+      if (id.startsWith('automation.')) {
+        const lastTriggered = attrs.last_triggered;
+        if (state === 'on') active += 1;
+        if (state === 'off') disabled += 1;
+        if (lastTriggered && now - new Date(lastTriggered) < 86400000) recentCount += 1;
+        automations.push({
+          id,
+          name: attrs.friendly_name || id,
+          state,
+          last_triggered: lastTriggered,
+          current_running: attrs.current || 0
+        });
+      }
+    });
+
+    const sensors = energyCandidates
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+    const totalEnergy = sensors.reduce((sum, s) => sum + (s.unit.includes('kWh') ? s.value : 0), 0);
+    const maxVal = sensors.length > 0 ? Math.max(1, ...sensors.map(s => s.value)) : 1;
+
+    automations.sort((a, b) => {
+      if (!a.last_triggered) return 1;
+      if (!b.last_triggered) return -1;
+      return new Date(b.last_triggered) - new Date(a.last_triggered);
+    });
+
+    const topDomains = Object.entries(domains)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+
+    return {
+      energy: {
+        sensors,
+        totalEnergy,
+        cost: totalEnergy * this._config.energy_price,
+        kwhCount: sensors.filter(s => s.unit.includes('kWh')).length,
+        maxVal
+      },
+      automations: {
+        items: automations,
+        total: automations.length,
+        active,
+        disabled,
+        recentCount
+      },
+      system: {
+        totalEntities,
+        domainCount: Object.keys(domains).length,
+        unavailable,
+        unknown,
+        topDomains,
+        maxDomain: topDomains.length > 0 ? topDomains[0][1] : 1
+      }
+    };
+  }
+
+  _syncTabs() {
+    this.shadowRoot.querySelectorAll('.tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === this._activeTab);
+    });
+    this.shadowRoot.querySelectorAll('.tab-content').forEach(pane => {
+      const active = pane.dataset.pane === this._activeTab;
+      pane.classList.toggle('active', active);
+      pane.style.display = active ? 'block' : 'none';
+    });
+  }
+
+  _patchActiveTab() {
+    if (!this._dataCache || !this._scaffoldRendered) return;
+    const pane = this._ensureTabPane(this._activeTab);
+    if (!pane) return;
+    this._syncTabs();
 
     switch (this._activeTab) {
-      case 'energy': this._renderEnergy(content); break;
-      case 'automations': this._renderAutomations(content); break;
-      case 'system': this._renderSystem(content); break;
+      case 'energy': this._patchEnergy(); break;
+      case 'automations': this._patchAutomations(); break;
+      case 'system': this._patchSystem(); break;
     }
   }
 
-  _renderEnergy(container) {
-    const sensors = Object.entries(this._hass.states)
-      .filter(([id]) => id.includes('energy') || id.includes('power') || id.includes('consumption'))
-      .filter(([, s]) => !isNaN(parseFloat(s.state)))
-      .map(([id, s]) => ({
-        id, name: s.attributes.friendly_name || id,
-        value: parseFloat(s.state),
-        unit: s.attributes.unit_of_measurement || '',
-        device_class: s.attributes.device_class
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+  _ensureTabPane(tabName) {
+    const content = this.shadowRoot.getElementById('tabContent');
+    if (!content) return null;
+    if (this._refs.panes[tabName]) return this._refs.panes[tabName];
 
-    const totalEnergy = sensors.reduce((sum, s) => sum + (s.unit.includes('kWh') ? s.value : 0), 0);
-    const cost = totalEnergy * this._config.energy_price;
+    const pane = document.createElement('div');
+    pane.className = 'tab-content';
+    pane.dataset.pane = tabName;
+    pane.style.display = 'none';
+    content.appendChild(pane);
+    this._refs.panes[tabName] = pane;
 
-    const maxVal = sensors.length > 0 ? Math.max(...sensors.map(s => s.value)) : 1;
+    switch (tabName) {
+      case 'energy': this._renderEnergyScaffold(pane); break;
+      case 'automations': this._renderAutomationsScaffold(pane); break;
+      case 'system': this._renderSystemScaffold(pane); break;
+    }
+    return pane;
+  }
+
+  _setText(node, value) {
+    if (node && node.textContent !== String(value)) node.textContent = String(value);
+  }
+
+  _shortName(name) {
+    return String(name || '-').split(' ').slice(0, 2).join(' ');
+  }
+
+  _renderEnergyScaffold(container) {
     const colors = ['#4caf50', '#66bb6a', '#81c784', '#a5d6a7', '#c8e6c9', '#e8f5e9', '#fff9c4', '#ffcc80', '#ffab91', '#ef9a9a'];
-
     container.innerHTML = `
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--orange)">${totalEnergy.toFixed(1)}</div>
+          <div class="stat-value" style="color:var(--orange)" data-ref="energyTotal"></div>
           <div class="stat-label">kWh Total</div>
-          <div class="stat-trend" style="font-size:11px;color:var(--bento-text-muted)">${sensors.filter(s => s.unit.includes('kWh')).length} sensor\u00F3w kWh</div>
+          <div class="stat-trend" style="font-size:11px;color:var(--bento-text-muted)" data-ref="energyKwhCount"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--blue)">${cost.toFixed(2)}</div>
-          <div class="stat-label">${this._config.currency} Cost</div>
-          <div class="stat-trend" style="font-size:11px;color:var(--bento-text-muted)">@ ${this._config.energy_price} ${this._config.currency}/kWh</div>
+          <div class="stat-value" style="color:var(--blue)" data-ref="energyCost"></div>
+          <div class="stat-label" data-ref="energyCostLabel"></div>
+          <div class="stat-trend" style="font-size:11px;color:var(--bento-text-muted)" data-ref="energyRate"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--green)">${sensors.length}</div>
+          <div class="stat-value" style="color:var(--green)" data-ref="energySensorCount"></div>
           <div class="stat-label">Energy Sensors</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--red)">${sensors.length > 0 ? _esc(sensors[0].name.split(' ').slice(0, 2).join(' ')) : '-'}</div>
+          <div class="stat-value" style="color:var(--red)" data-ref="energyTopConsumer"></div>
           <div class="stat-label">Top Consumer</div>
         </div>
       </div>
       <div class="section">
         <div class="section-title">⚡ Energy by Sensor</div>
         <div class="bar-chart">
-          ${sensors.map((s, i) => `
-            <div class="bar-row">
-              <span class="bar-label" title="${_esc(s.id)}">${_esc(s.name.split(' ').slice(0, 2).join(' '))}</span>
+          ${colors.map((color, i) => `
+            <div class="bar-row" data-energy-row="${i}" style="display:none">
+              <span class="bar-label"></span>
               <div class="bar-container">
-                <div class="bar-fill" style="width:${(s.value / maxVal * 100)}%;background:${colors[i] || '#ccc'}">
-                  ${s.value > maxVal * 0.15 ? s.value.toFixed(1) : ''}
-                </div>
+                <div class="bar-fill" style="width:0%;background:${color}"></div>
               </div>
-              <span class="bar-value">${s.value.toFixed(1)} ${s.unit}</span>
+              <span class="bar-value"></span>
             </div>
           `).join('')}
         </div>
       </div>
     `;
+    this._refs.energy = {
+      total: container.querySelector('[data-ref="energyTotal"]'),
+      kwhCount: container.querySelector('[data-ref="energyKwhCount"]'),
+      cost: container.querySelector('[data-ref="energyCost"]'),
+      costLabel: container.querySelector('[data-ref="energyCostLabel"]'),
+      rate: container.querySelector('[data-ref="energyRate"]'),
+      sensorCount: container.querySelector('[data-ref="energySensorCount"]'),
+      topConsumer: container.querySelector('[data-ref="energyTopConsumer"]'),
+      rows: [...container.querySelectorAll('[data-energy-row]')].map(row => ({
+        row,
+        label: row.querySelector('.bar-label'),
+        fill: row.querySelector('.bar-fill'),
+        value: row.querySelector('.bar-value')
+      }))
+    };
   }
 
-  _renderAutomations(container) {
-    const automations = Object.entries(this._hass.states)
-      .filter(([id]) => id.startsWith('automation.'))
-      .map(([id, s]) => ({
-        id, name: s.attributes.friendly_name || id,
-        state: s.state,
-        last_triggered: s.attributes.last_triggered,
-        current_running: s.attributes.current || 0
-      }))
-      .sort((a, b) => {
-        if (!a.last_triggered) return 1;
-        if (!b.last_triggered) return -1;
-        return new Date(b.last_triggered) - new Date(a.last_triggered);
-      });
+  _patchEnergy() {
+    const refs = this._refs.energy;
+    const data = this._dataCache.energy;
+    if (!refs || !data) return;
 
-    const active = automations.filter(a => a.state === 'on').length;
-    const disabled = automations.filter(a => a.state === 'off').length;
-    const recentCount = automations.filter(a => {
-      if (!a.last_triggered) return false;
-      return (Date.now() - new Date(a.last_triggered)) < 86400000;
-    }).length;
+    this._setText(refs.total, data.totalEnergy.toFixed(1));
+    this._setText(refs.kwhCount, `${data.kwhCount} sensor\u00F3w kWh`);
+    this._setText(refs.cost, data.cost.toFixed(2));
+    this._setText(refs.costLabel, `${this._config.currency} Cost`);
+    this._setText(refs.rate, `@ ${this._config.energy_price} ${this._config.currency}/kWh`);
+    this._setText(refs.sensorCount, data.sensors.length);
+    this._setText(refs.topConsumer, data.sensors.length > 0 ? this._shortName(data.sensors[0].name) : '-');
 
+    refs.rows.forEach((ref, i) => {
+      const sensor = data.sensors[i];
+      ref.row.style.display = sensor ? '' : 'none';
+      if (!sensor) return;
+      const width = sensor.value / data.maxVal * 100;
+      this._setText(ref.label, this._shortName(sensor.name));
+      ref.label.title = sensor.id;
+      ref.fill.style.width = `${width}%`;
+      this._setText(ref.fill, sensor.value > data.maxVal * 0.15 ? sensor.value.toFixed(1) : '');
+      this._setText(ref.value, `${sensor.value.toFixed(1)} ${sensor.unit}`);
+    });
+  }
+
+  _renderAutomationsScaffold(container) {
     container.innerHTML = `
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--blue)">${automations.length}</div>
+          <div class="stat-value" style="color:var(--blue)" data-ref="automationTotal"></div>
           <div class="stat-label">Total Automations</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--green)">${active}</div>
+          <div class="stat-value" style="color:var(--green)" data-ref="automationActive"></div>
           <div class="stat-label">Active</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--red)">${disabled}</div>
+          <div class="stat-value" style="color:var(--red)" data-ref="automationDisabled"></div>
           <div class="stat-label">Disabled</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--orange)">${recentCount}</div>
+          <div class="stat-value" style="color:var(--orange)" data-ref="automationRecent"></div>
           <div class="stat-label">Triggered Today</div>
         </div>
       </div>
       <div class="section">
         <div class="section-title">🤖 Recent Activity</div>
         <div class="auto-list">
-          ${automations.slice(0, 10).map(a => `
-            <div class="auto-item">
-              <span class="auto-name">${_esc(a.name)}</span>
-              <span class="auto-status">${this._timeAgo(a.last_triggered)}</span>
-              <span class="auto-count" style="color:${a.state === 'on' ? 'var(--green)' : 'var(--red)'}">
-                ${a.state}
-              </span>
+          ${Array.from({ length: 10 }, (_, i) => `
+            <div class="auto-item" data-automation-row="${i}" style="display:none">
+              <span class="auto-name"></span>
+              <span class="auto-status"></span>
+              <span class="auto-count"></span>
             </div>
           `).join('')}
         </div>
       </div>
     `;
+    this._refs.automations = {
+      total: container.querySelector('[data-ref="automationTotal"]'),
+      active: container.querySelector('[data-ref="automationActive"]'),
+      disabled: container.querySelector('[data-ref="automationDisabled"]'),
+      recent: container.querySelector('[data-ref="automationRecent"]'),
+      rows: [...container.querySelectorAll('[data-automation-row]')].map(row => ({
+        row,
+        name: row.querySelector('.auto-name'),
+        status: row.querySelector('.auto-status'),
+        count: row.querySelector('.auto-count')
+      }))
+    };
   }
 
-  _renderSystem(container) {
-    const allEntities = Object.keys(this._hass.states);
-    const domains = {};
-    allEntities.forEach(id => {
-      const d = id.split('.')[0];
-      domains[d] = (domains[d] || 0) + 1;
+  _patchAutomations() {
+    const refs = this._refs.automations;
+    const data = this._dataCache.automations;
+    if (!refs || !data) return;
+
+    this._setText(refs.total, data.total);
+    this._setText(refs.active, data.active);
+    this._setText(refs.disabled, data.disabled);
+    this._setText(refs.recent, data.recentCount);
+
+    refs.rows.forEach((ref, i) => {
+      const automation = data.items[i];
+      ref.row.style.display = automation ? '' : 'none';
+      if (!automation) return;
+      this._setText(ref.name, automation.name);
+      this._setText(ref.status, this._timeAgo(automation.last_triggered));
+      this._setText(ref.count, automation.state);
+      ref.count.style.color = automation.state === 'on' ? 'var(--green)' : 'var(--red)';
     });
+  }
 
-    const topDomains = Object.entries(domains)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
-    const maxDomain = topDomains.length > 0 ? topDomains[0][1] : 1;
-
-    const unavailable = allEntities.filter(id => this._hass.states[id].state === 'unavailable').length;
-    const unknown = allEntities.filter(id => this._hass.states[id].state === 'unknown').length;
-
+  _renderSystemScaffold(container) {
     const domainColors = {
       sensor: '#4caf50', binary_sensor: '#8bc34a', light: '#ffc107',
       switch: '#2196f3', automation: '#ff9800', climate: '#00bcd4',
@@ -621,43 +794,105 @@ canvas {
     container.innerHTML = `
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--blue)">${allEntities.length}</div>
+          <div class="stat-value" style="color:var(--blue)" data-ref="systemTotal"></div>
           <div class="stat-label">Total Entities</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--green)">${Object.keys(domains).length}</div>
+          <div class="stat-value" style="color:var(--green)" data-ref="systemDomains"></div>
           <div class="stat-label">Domains</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:${unavailable > 0 ? 'var(--red)' : 'var(--green)'}">${unavailable}</div>
+          <div class="stat-value" data-ref="systemUnavailable"></div>
           <div class="stat-label">Unavailable</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:${unknown > 0 ? 'var(--orange)' : 'var(--green)'}">${unknown}</div>
+          <div class="stat-value" data-ref="systemUnknown"></div>
           <div class="stat-label">Unknown</div>
         </div>
       </div>
       <div class="section">
         <div class="section-title">🖥️ Entities by Domain</div>
         <div class="bar-chart">
-          ${topDomains.map(([d, count]) => `
-            <div class="bar-row">
-              <span class="bar-label">${d}</span>
+          ${Array.from({ length: 8 }, (_, i) => `
+            <div class="bar-row" data-system-domain-row="${i}" style="display:none">
+              <span class="bar-label"></span>
               <div class="bar-container">
-                <div class="bar-fill" style="width:${(count / maxDomain * 100)}%;background:${domainColors[d] || '#9e9e9e'}">
-                  ${count > maxDomain * 0.15 ? count : ''}
-                </div>
+                <div class="bar-fill" style="width:0%;background:#9e9e9e"></div>
               </div>
-              <span class="bar-value">${count}</span>
+              <span class="bar-value"></span>
             </div>
           `).join('')}
         </div>
       </div>
       <div class="section">
         <div class="section-title">🏥 Health Check</div>
-        ${this._renderHealthItems(unavailable, unknown, allEntities.length)}
+        ${['Entity Availability', 'Known States', 'Total Entities', 'Unavailable', 'Unknown'].map((name, i) => `
+          <div class="health-item" data-system-health-row="${i}">
+            <span class="health-dot"></span>
+            <span class="health-name">${name}</span>
+            <span class="health-value"></span>
+          </div>
+        `).join('')}
       </div>
     `;
+    this._refs.system = {
+      total: container.querySelector('[data-ref="systemTotal"]'),
+      domains: container.querySelector('[data-ref="systemDomains"]'),
+      unavailable: container.querySelector('[data-ref="systemUnavailable"]'),
+      unknown: container.querySelector('[data-ref="systemUnknown"]'),
+      domainColors,
+      domainRows: [...container.querySelectorAll('[data-system-domain-row]')].map(row => ({
+        row,
+        label: row.querySelector('.bar-label'),
+        fill: row.querySelector('.bar-fill'),
+        value: row.querySelector('.bar-value')
+      })),
+      healthRows: [...container.querySelectorAll('[data-system-health-row]')].map(row => ({
+        dot: row.querySelector('.health-dot'),
+        value: row.querySelector('.health-value')
+      }))
+    };
+  }
+
+  _patchSystem() {
+    const refs = this._refs.system;
+    const data = this._dataCache.system;
+    if (!refs || !data) return;
+
+    this._setText(refs.total, data.totalEntities);
+    this._setText(refs.domains, data.domainCount);
+    this._setText(refs.unavailable, data.unavailable);
+    this._setText(refs.unknown, data.unknown);
+    refs.unavailable.style.color = data.unavailable > 0 ? 'var(--red)' : 'var(--green)';
+    refs.unknown.style.color = data.unknown > 0 ? 'var(--orange)' : 'var(--green)';
+
+    refs.domainRows.forEach((ref, i) => {
+      const domain = data.topDomains[i];
+      ref.row.style.display = domain ? '' : 'none';
+      if (!domain) return;
+      const [name, count] = domain;
+      const width = count / data.maxDomain * 100;
+      this._setText(ref.label, name);
+      ref.fill.style.width = `${width}%`;
+      ref.fill.style.background = refs.domainColors[name] || '#9e9e9e';
+      this._setText(ref.fill, count > data.maxDomain * 0.15 ? count : '');
+      this._setText(ref.value, count);
+    });
+
+    const total = Math.max(data.totalEntities, 1);
+    const health = [
+      { value: `${((data.totalEntities - data.unavailable) / total * 100).toFixed(1)}%`, ok: data.unavailable < total * 0.05 },
+      { value: `${((data.totalEntities - data.unknown) / total * 100).toFixed(1)}%`, ok: data.unknown < total * 0.05 },
+      { value: data.totalEntities, ok: true },
+      { value: data.unavailable, ok: data.unavailable === 0 },
+      { value: data.unknown, ok: data.unknown === 0 }
+    ];
+
+    refs.healthRows.forEach((ref, i) => {
+      const item = health[i];
+      this._setText(ref.value, item.value);
+      ref.dot.style.background = item.ok ? 'var(--green)' : 'var(--orange)';
+    });
   }
 
   _renderHealthItems(unavailable, unknown, total) {
