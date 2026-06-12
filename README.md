@@ -31,11 +31,25 @@ Part of the [HA Tools](https://github.com/MacSiem/ha-tools-panel) collection for
 type: custom:ha-smart-reports
 ```
 
+## Bundled Log Email Card
+
+This release also bundles **Log Email Summary** as `custom:ha-log-email`.
+It shows recent Home Assistant errors and warnings, builds an email digest preview, supports manual send, export/history, live error polling, and schedule management.
+
+```yaml
+type: custom:ha-log-email
+title: Log Email Summary
+email_recipient: your@email.com
+```
+
+When the **HA Tools Email** integration v2.0.0 is installed, the card progressively uses its websocket API for SMTP status, default recipient, server-side schedules, and backend `send_now` log digests. If those websocket commands are unavailable, the card falls back to legacy `ha_tools_email` services, optional `notify.*` delivery, and browser-local schedule settings.
+
 ## Privacy
 
 - No telemetry, no analytics, no tracking.
 - No external network calls, no CDN-hosted assets (system fonts only).
-- All report data is rendered from your Home Assistant state — nothing leaves your instance.
+- Smart Reports data is rendered from your Home Assistant state.
+- Log Email sends data only through your configured Home Assistant email/notify service when you explicitly send or enable a schedule.
 
 ## Changelog
 
