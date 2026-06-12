@@ -18,7 +18,16 @@ class HASmartReports extends HTMLElement {
     this._currentPage = {};
     this._pageSize = 15;
     this._hass = null;
-    this._config = {};
+    // Default config so the card works in panel/sidebar mode where setConfig() is never called.
+    this._config = {
+      title: 'Smart Reports',
+      energy_entity: null,
+      show_energy: true,
+      show_automations: true,
+      show_system: true,
+      currency: 'PLN',
+      energy_price: 0.65
+    };
     this._activeTab = 'energy';
     this._period = '7d';
     this._scaffoldRendered = false;
@@ -29,30 +38,49 @@ class HASmartReports extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!hass) return;
-    const now = Date.now();
-    if (!this._firstHassRender) {
-      this._firstHassRender = true;
-      this._render();
+    try {
+      const now = Date.now();
+      if (!this._firstHassRender) {
+        this._firstHassRender = true;
+        this._render();
+        this._updateData();
+        this._lastRenderTime = now;
+        return;
+      }
+      if (now - (this._lastRenderTime || 0) < 10000) {
+        if (!this._renderScheduled) {
+          this._renderScheduled = true;
+          setTimeout(() => {
+            this._renderScheduled = false;
+            try {
+              this._updateData();
+              this._lastRenderTime = Date.now();
+            } catch (e) { this._renderError(e); }
+          }, Math.max(0, 10000 - (now - (this._lastRenderTime || 0))));
+        }
+        return;
+      }
       this._updateData();
       this._lastRenderTime = now;
-      return;
+    } catch (e) {
+      this._renderError(e);
     }
-    if (now - (this._lastRenderTime || 0) < 10000) {
-      if (!this._renderScheduled) {
-        this._renderScheduled = true;
-        setTimeout(() => {
-          this._renderScheduled = false;
-          this._updateData();
-          this._lastRenderTime = Date.now();
-        }, Math.max(0, 10000 - (now - (this._lastRenderTime || 0))));
-      }
-      return;
+  }
+
+  _renderError(e) {
+    console.error('[ha-smart-reports] render error:', e);
+    const msg = (e && e.message) ? e.message : String(e);
+    if (this.shadowRoot) {
+      this.shadowRoot.innerHTML =
+        '<div style="padding:16px;font-family:system-ui,sans-serif;color:#b91c1c;">' +
+        '<strong>Smart Reports — render error.</strong><br>' +
+        msg.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) +
+        '</div>';
     }
-    this._updateData();
-    this._lastRenderTime = now;
   }
 
   setConfig(config) {
+    config = config || {};
     this._config = {
       title: config.title || 'Smart Reports',
       energy_entity: config.energy_entity || null,
@@ -66,6 +94,7 @@ class HASmartReports extends HTMLElement {
   }
 
   getCardSize() { return 5; }
+  getGridOptions() { return { rows: 5, columns: 12, min_rows: 3, min_columns: 6 }; }
 
   static getStubConfig() {
     return { title: 'Smart Reports', energy_entity: 'sensor.energy_total', currency: 'PLN' };
@@ -1033,7 +1062,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c  HA-SMART-REPORTS  %c v1.0.0 ',
+  '%c  HA-SMART-REPORTS  %c v3.2.0 ',
   'background: #4caf50; color: #fff; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #e8f5e9; color: #4caf50; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
