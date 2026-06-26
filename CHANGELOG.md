@@ -2,6 +2,11 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [3.4.0] - 2026-06-26
+
+### Changed
+- Standalone repository now ships only the Smart Reports viewer card. The bundled `ha-log-email` card was removed; use the dedicated `ha-log-email` / `ha-energy-email` cards with the **HA Tools Email** integration for emailed reports.
+
 ## [3.3.0] - 2026-06-12
 
 ### Added
