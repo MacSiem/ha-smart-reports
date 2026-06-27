@@ -2,10 +2,17 @@
 
 All notable changes to **Smart Reports** are documented here.
 
-## [3.4.0] - 2026-06-26
+## [3.4.0] - 2026-06-27
 
 ### Changed
 - Standalone repository now ships only the Smart Reports viewer card. The bundled `ha-log-email` card was removed; use the dedicated `ha-log-email` / `ha-energy-email` cards with the **HA Tools Email** integration for emailed reports.
+- Theme: dark/light now follows the active Home Assistant theme (luminance of `--card-background-color`) instead of the OS color-scheme preference, matching the rest of the HA Tools cards.
+
+### Added
+- `validate` CI workflow (node --check, theming invariant, focus-visible a11y) and a `:focus-visible` outline for keyboard navigation.
+
+### Fixed
+- The energy summary badge was hardcoded in Polish ("N sensorów kWh"); it now renders in English ("N kWh sensor(s)").
 
 ## [3.3.0] - 2026-06-12
 

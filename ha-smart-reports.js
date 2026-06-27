@@ -38,6 +38,18 @@ class HASmartReports extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // HA-theme dark detection via luminance of --card-background-color (follows the HA theme, not the OS color preference)
+    try {
+      var _bg = (getComputedStyle(this).getPropertyValue('--card-background-color') || getComputedStyle(this).getPropertyValue('--primary-background-color') || '').trim();
+      var _d = false;
+      if (_bg) {
+        var _h, _r, _g, _b, _m;
+        if (_bg.charAt(0) === '#') { _h = _bg.slice(1); if (_h.length === 3) _h = _h.replace(/(.)/g, '$1$1'); _r = parseInt(_h.slice(0,2),16); _g = parseInt(_h.slice(2,4),16); _b = parseInt(_h.slice(4,6),16); }
+        else { _m = _bg.match(/[\d.]+/g); if (_m) { _r = +_m[0]; _g = +_m[1]; _b = +_m[2]; } }
+        if (_r != null) _d = (0.2126*_r + 0.7152*_g + 0.0722*_b) / 255 < 0.5;
+      } else if (hass && hass.themes) { _d = !!hass.themes.darkMode; }
+      this.classList.toggle('bento-dark', _d);
+    } catch (e) {}
     if (!hass) return;
     try {
       const now = Date.now();
@@ -150,17 +162,20 @@ class HASmartReports extends HTMLElement {
   --bento-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :host {
-    --bento-bg: #1a1a2e;
-    --bento-card: #16213e;
-    --bento-text: #e2e8f0;
-    --bento-text-secondary: #94a3b8;
-    --bento-border: #334155;
-    --bento-success: #34d399;
-    --bento-warning: #fbbf24;
-    --bento-error: #f87171;
-  }
+:host(:focus-visible), button:focus-visible, a:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--bento-primary, #3B82F6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+:host(.bento-dark) {
+  --bento-bg: #1a1a2e;
+  --bento-card: #16213e;
+  --bento-text: #e2e8f0;
+  --bento-text-secondary: #94a3b8;
+  --bento-border: #334155;
+  --bento-success: #34d399;
+  --bento-warning: #fbbf24;
+  --bento-error: #f87171;
 }
 :host-context([data-themes]) {
   --bento-bg: var(--lovelace-background, var(--primary-background-color, #F8FAFC));
@@ -725,7 +740,7 @@ canvas {
     if (!refs || !data) return;
 
     this._setText(refs.total, data.totalEnergy.toFixed(1));
-    this._setText(refs.kwhCount, `${data.kwhCount} sensor\u00F3w kWh`);
+    this._setText(refs.kwhCount, `${data.kwhCount} kWh sensor(s)`);
     this._setText(refs.cost, data.cost.toFixed(2));
     this._setText(refs.costLabel, `${this._config.currency} Cost`);
     this._setText(refs.rate, `@ ${this._config.energy_price} ${this._config.currency}/kWh`);
