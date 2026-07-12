@@ -1,5 +1,7 @@
 # Smart Reports
 
+![Preview](banner.png)
+
 Lovelace card with an at-a-glance energy, automation and system-health report
 for Home Assistant — three tabs, computed from your current entity states,
 with CSV/JSON export. Zero configuration: add the card and it works.
