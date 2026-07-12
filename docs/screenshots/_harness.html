@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SR screenshot harness</title>
+<style>
+  html, body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body.light { background: #f4f5f7; }
+  body.light ha-smart-reports { --card-background-color: #ffffff; --primary-background-color: #f4f5f7; }
+  body.dark { background: #111318; }
+  body.dark ha-smart-reports { --card-background-color: #1c1e26; --primary-background-color: #111318; }
+  ha-smart-reports { display: block; width: 480px; }
+</style>
+</head>
+<body>
+<ha-smart-reports id="card"></ha-smart-reports>
+<script>
+  try { localStorage.setItem('ha-intro-dismissed-ha-smart-reports', '1'); } catch (e) {}
+</script>
+<script src="../../ha-smart-reports.js"></script>
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+  document.body.className = theme;
+  const now = Date.now(); const h = 3600000; const min = 60000;
+
+  const mk = (id, name, state, attrs, lastChanged) => ({
+    entity_id: id, state,
+    attributes: Object.assign({ friendly_name: name }, attrs || {}),
+    last_changed: new Date(now - (lastChanged || h)).toISOString(),
+    last_updated: new Date(now - (lastChanged || h)).toISOString(),
+  });
+
+  const mkAuto = (id, name, state, lastTriggeredMs) => mk(
+    'automation.' + id, name, state,
+    { last_triggered: lastTriggeredMs != null ? new Date(now - lastTriggeredMs).toISOString() : null, current: 0, mode: 'single' },
+    2 * h
+  );
+
+  // Energy/power/consumption sensors — the card auto-detects these purely by
+  // entity-id substring match (energy|power|consumption), not by a configured entity.
+  const energySensors = [
+    mk('sensor.energy_total', 'Total Energy', '342.7', { unit_of_measurement: 'kWh', device_class: 'energy', state_class: 'total_increasing' }, 5 * min),
+    mk('sensor.solar_energy_produced', 'Solar Energy Produced', '128.4', { unit_of_measurement: 'kWh', device_class: 'energy', state_class: 'total_increasing' }, 5 * min),
+    mk('sensor.kitchen_energy_daily', 'Kitchen Daily Energy', '12.3', { unit_of_measurement: 'kWh', device_class: 'energy' }, 10 * min),
+    mk('sensor.heat_pump_energy_monthly', 'Heat Pump Monthly Energy', '210.5', { unit_of_measurement: 'kWh', device_class: 'energy' }, 8 * min),
+    mk('sensor.fridge_energy_today', 'Fridge Energy Today', '3.1', { unit_of_measurement: 'kWh', device_class: 'energy' }, 12 * min),
+    mk('sensor.ac_power_consumption', 'AC Power Consumption', '2450', { unit_of_measurement: 'W', device_class: 'power' }, 2 * min),
+    mk('sensor.ev_charger_power', 'EV Charger Power', '7200', { unit_of_measurement: 'W', device_class: 'power' }, 3 * min),
+    mk('sensor.washing_machine_power', 'Washing Machine Power', '850', { unit_of_measurement: 'W', device_class: 'power' }, 7 * min),
+    mk('sensor.garage_power_usage', 'Garage Power Usage', '340', { unit_of_measurement: 'W', device_class: 'power' }, 9 * min),
+    mk('sensor.office_power', 'Office Power', '610', { unit_of_measurement: 'W', device_class: 'power' }, 4 * min),
+  ];
+
+  // Other sensors (do NOT match energy/power/consumption — kept out of the energy tab)
+  const otherSensors = [
+    mk('sensor.living_room_temperature', 'Living Room Temperature', '21.4', { unit_of_measurement: '°C', device_class: 'temperature' }, 6 * min),
+    mk('sensor.living_room_humidity', 'Living Room Humidity', '48', { unit_of_measurement: '%', device_class: 'humidity' }, 6 * min),
+    mk('sensor.outdoor_temperature', 'Outdoor Temperature', '14.2', { unit_of_measurement: '°C', device_class: 'temperature' }, 20 * min),
+    mk('sensor.attic_temperature', 'Attic Temperature', 'unavailable', { unit_of_measurement: '°C', device_class: 'temperature' }, 3 * h),
+  ];
+
+  const automations = [
+    mkAuto('morning_routine', 'Morning routine', 'on', 2 * h),
+    mkAuto('night_security', 'Night security check', 'on', 25 * min),
+    mkAuto('hvac_schedule', 'HVAC schedule', 'on', 9 * h),
+    mkAuto('guest_mode', 'Guest mode', 'off', null),
+    mkAuto('low_battery_alert', 'Low battery alert', 'on', 26 * h),
+    mkAuto('presence_lighting', 'Presence lighting', 'on', 5 * h),
+    mkAuto('energy_saver', 'Energy saver', 'on', 20 * h),
+    mkAuto('garage_autoclose', 'Garage auto-close', 'on', 40 * h),
+    mkAuto('weekly_report', 'Weekly report digest', 'on', 100 * h),
+    mkAuto('leak_detection', 'Leak detection', 'on', 96 * h),
+    mkAuto('vacation_mode', 'Vacation mode', 'off', null),
+    mkAuto('morning_blinds', 'Morning blinds open', 'on', 1 * h),
+  ];
+
+  const misc = [
+    mk('light.living_room', 'Living Room Lights', 'on', {}, 25 * min),
+    mk('light.kitchen', 'Kitchen Lights', 'off', {}, 3 * h),
+    mk('light.bedroom_lamp', 'Bedroom Lamp', 'on', {}, 40 * min),
+    mk('light.hallway', 'Hallway Light', 'on', {}, 15 * min),
+    mk('light.office', 'Office Light', 'off', {}, 6 * h),
+    mk('light.garage', 'Garage Light', 'off', {}, 10 * h),
+    mk('switch.coffee_maker', 'Coffee Maker', 'off', { device_class: 'outlet' }, 5 * h),
+    mk('switch.garden_sprinkler', 'Garden Sprinkler', 'off', { device_class: 'switch' }, 22 * h),
+    mk('switch.humidifier', 'Humidifier', 'on', {}, 2 * h),
+    mk('switch.fan', 'Bedroom Fan', 'on', {}, 1 * h),
+    mk('switch.water_heater_boost', 'Water Heater Boost', 'on', {}, 4 * h),
+    mk('binary_sensor.front_door', 'Front Door', 'off', { device_class: 'door' }, 90 * min),
+    mk('binary_sensor.hallway_motion', 'Hallway Motion', 'on', { device_class: 'motion' }, 90 * 1000),
+    mk('binary_sensor.kitchen_window', 'Kitchen Window', 'off', { device_class: 'window' }, 8 * h),
+    mk('binary_sensor.basement_leak', 'Basement Leak', 'unknown', { device_class: 'moisture' }, 12 * h),
+    mk('binary_sensor.attic_smoke', 'Attic Smoke', 'unavailable', { device_class: 'smoke' }, 12 * h),
+    mk('climate.living_room_thermostat', 'Living Room Thermostat', 'heat', { current_temperature: 21, temperature: 22 }, 6 * min),
+    mk('climate.bedroom_thermostat', 'Bedroom Thermostat', 'off', { current_temperature: 19 }, 3 * h),
+    mk('climate.office_thermostat', 'Office Thermostat', 'cool', { current_temperature: 23, temperature: 21 }, 40 * min),
+    mk('cover.garage_door', 'Garage Door', 'closed', {}, 10 * h),
+    mk('cover.living_room_blinds', 'Living Room Blinds', 'open', {}, 15 * min),
+    mk('cover.bedroom_blinds', 'Bedroom Blinds', 'closed', {}, 8 * h),
+    mk('person.maciej', 'Maciej', 'home', {}, 45 * min),
+    mk('person.guest', 'Guest', 'not_home', {}, 20 * h),
+    mk('input_boolean.vacation_mode', 'Vacation Mode', 'off', {}, 20 * h),
+    mk('input_boolean.guest_mode', 'Guest Mode', 'off', {}, 20 * h),
+    mk('script.morning_routine_script', 'Morning Routine Script', 'off', {}, 2 * h),
+    mk('script.evening_routine_script', 'Evening Routine Script', 'off', {}, 10 * h),
+    mk('media_player.living_room_speaker', 'Living Room Speaker', 'playing', {}, 5 * min),
+    mk('media_player.bedroom_speaker', 'Bedroom Speaker', 'idle', {}, 6 * h),
+  ];
+
+  const states = {};
+  [...energySensors, ...otherSensors, ...automations, ...misc].forEach(e => { states[e.entity_id] = e; });
+
+  const hass = {
+    language: 'en',
+    themes: { darkMode: theme === 'dark' },
+    states,
+    services: {},
+    connection: { subscribeEvents: () => Promise.resolve(() => {}) },
+    callWS: async () => ({}),
+    callApi: async () => ({}),
+    callService: async () => ({}),
+  };
+
+  const card = document.getElementById('card');
+  card.setConfig({ type: 'custom:ha-smart-reports', title: 'Smart Reports', currency: 'USD', energy_price: 0.15 });
+  card.hass = hass;
+  setTimeout(() => { card.hass = Object.assign({}, hass); }, 400);
+
+  // Optional ?tab=energy|automations|system — click the requested tab after render.
+  const tab = params.get('tab');
+  if (tab === 'automations' || tab === 'system') {
+    setTimeout(() => {
+      try {
+        const btn = card.shadowRoot.querySelector('.tab[data-tab="' + tab + '"]');
+        if (btn) btn.click();
+      } catch (e) {}
+    }, 450);
+  }
+
+  const scrub = () => { try {
+    if (!card.shadowRoot) return;
+    card.shadowRoot.querySelectorAll('#tip-banner, [class*="banner"], .donate-section, [class*="donate"], [class*="support"]').forEach(n => {
+      // Remove the whole padded container, not just the inner node, to avoid
+      // leftover empty white fragments in screenshots.
+      const p = n.parentElement && n.parentElement.children.length === 1 ? n.parentElement : n;
+      p.remove();
+    });
+    card.shadowRoot.querySelectorAll('div,section').forEach(n => {
+      const t = n.textContent || '';
+      if (n.children.length && t.length < 700 && /Support HA Tools Development/.test(t)) n.remove();
+    });
+    // Some cards append overlay/toast/banner containers directly to body —
+    // remove any body-level strays so screenshots show only the card.
+    document.querySelectorAll('body > *:not(#card):not(script):not(style)').forEach(n => n.remove());
+    // Outside HA there is no real <ha-card>; its default white background
+    // peeks out behind .reports-card — neutralize it for screenshots.
+    if (!card.shadowRoot.getElementById('harness-hacard-fix')) {
+      const st = document.createElement('style');
+      st.id = 'harness-hacard-fix';
+      st.textContent = 'ha-card { background: transparent !important; box-shadow: none !important; border: none !important; }';
+      card.shadowRoot.appendChild(st);
+    }
+  } catch (e) {} };
+  setInterval(scrub, 150);
+  setTimeout(() => { scrub(); document.title = 'SR-READY'; }, 1500);
+})();
+</script>
+</body>
+</html>
