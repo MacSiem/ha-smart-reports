@@ -94,6 +94,18 @@ show_automations: true
 show_system: true
 ```
 
+### Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `title` | string | `Smart Reports` | Heading shown at the top of the card. |
+| `energy_price` | number | `0.65` | Price per kWh used for the estimated energy cost. |
+| `currency` | string | `PLN` | Currency label shown with energy-cost values. |
+| `show_energy` | boolean | `true` | Show the Energy tab. |
+| `show_automations` | boolean | `true` | Show the Automations tab. |
+| `show_system` | boolean | `true` | Show the System tab. |
+| `energy_entity` | string | none | Compatibility-only visual-editor stub; the card auto-discovers energy sensors and does not read this value. |
+
 ## FAQ
 
 **Do I have to configure anything?**
