@@ -2,62 +2,128 @@
 
 ![Preview](banner.png)
 
-Lovelace card with an at-a-glance energy, automation and system-health report
-for Home Assistant — three tabs, computed from your current entity states,
-with CSV/JSON export. Zero configuration: add the card and it works.
+Smart Reports is a Lovelace card with three focused views:
+
+- historical energy and cost reporting from Home Assistant Recorder statistics;
+- automation status and recent activity from `automation.*` entities;
+- entity/domain health from the current Home Assistant state registry.
 
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![Version](https://img.shields.io/github/v/release/MacSiem/ha-smart-reports)](https://github.com/MacSiem/ha-smart-reports/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Part of the [HA Tools](https://github.com/MacSiem) ecosystem.
 
-## How it works
+## Energy data model
 
-**Short version: it works automatically.** The card needs no configuration —
-add it and it reads your current Home Assistant states directly.
+The Energy tab never estimates history from current entity states and never
+discovers sensors by matching words in entity IDs. It reads Recorder
+`change` statistics for an exact local-calendar window in
+`hass.config.time_zone`.
 
-1. **Energy sensors, auto-detected.** Any entity whose id contains `energy`,
-   `power` or `consumption` is picked up automatically, ranked by value, and
-   shown as a bar chart with an estimated cost (`energy_price` × total kWh).
-2. **Automation stats from state.** Every `automation.*` entity's state and
-   `last_triggered` attribute is read to show total / active / disabled /
-   triggered-today counts and a recent-activity list.
-3. **System health from your entity registry.** Total entities, domain
-   breakdown and `unavailable`/`unknown` counts come straight from
-   `hass.states` — no separate health-check integration required.
-4. **Export what's on screen.** The Export CSV / Export JSON buttons dump the
-   current three-tab summary (energy, automations, system) to a downloaded
-   file, generated client-side in your browser.
+The default source mode is `dashboard`:
 
-> **The period selector (Today / 7 days / 30 days) is a label, not a filter.**
-> Smart Reports reads live states only — it does not call the history or
-> statistics APIs. Changing the period does not change any number on screen;
-> it only tags the exported report with that period string. Treat every tab
-> as a snapshot of *right now*, not a historical trend.
+1. `energy/get_prefs` supplies the grid-import, cost and device statistic IDs
+   already configured in Home Assistant Energy.
+   Current device entries use their `name` as the display label. If any grid
+   source has no direct `stat_cost`, `energy/info` is queried only to fill
+   those missing mappings; a direct cost source is never replaced.
+2. Grid/root sources alone form the headline household total.
+3. Device sources appear only in the breakdown. A source with
+   `included_in_stat` is nested under its parent and is not ranked as a second
+   top-level consumer.
 
-> **The visual-editor stub isn't a required field.** Home Assistant's card
-> picker preloads a stub config (`energy_entity: sensor.energy_total`) so the
-> live preview isn't empty. The card never reads `energy_entity` — it
-> auto-discovers energy sensors by entity-id pattern, so you can delete that
-> line from your dashboard YAML with no effect.
+Use `explicit` mode when the report should use a different declared set of
+statistics. Total, device and cost roles are intentionally separate:
 
-### What is automatic vs. manual
+```yaml
+type: custom:ha-smart-reports
+energy_source_mode: explicit
+energy_total_statistics:
+  - sensor.grid_import_energy
+energy_device_statistics:
+  - statistic_id: sensor.heat_pump_energy
+    label: Heat pump
+  - statistic_id: sensor.heat_pump_indoor_energy
+    label: Indoor unit
+    included_in_stat: sensor.heat_pump_energy
+energy_cost_statistics:
+  - sensor.grid_import_cost
+```
 
-| Automatic | Manual (optional) |
-|---|---|
-| Discovering energy/power/consumption sensors | Setting `energy_price` / `currency` for the cost estimate |
-| Automation active/disabled/triggered-today counts | Hiding a tab (`show_energy` / `show_automations` / `show_system`) |
-| Domain breakdown + unavailable/unknown health check | Exporting the current snapshot (CSV/JSON button click) |
-| Light/dark theme (follows your HA theme) | — |
+The legacy `energy_entity` option remains a compatibility alias for one
+explicit total statistic when `energy_total_statistics` is empty. It does not
+enable discovery or a live-state fallback.
+
+### Accuracy and unavailable data
+
+- Recorder metadata must declare a sum-capable energy statistic. Power and
+  unknown/no-sum sources are rejected. `unit_class: energy` is required when
+  present; exact `Wh`/`kWh`/`MWh` is the compatibility fallback only when the
+  metadata has no unit class.
+- Exact `Wh`, `kWh` and `MWh` units are normalized to kWh. String numerics,
+  non-finite values, negative import changes, gaps and overlaps are not
+  silently repaired.
+- Today, 7-day and 30-day periods start at local midnight. DST days may be 23
+  or 25 hours.
+- If a required source is incomplete, invalid or has no samples, combined
+  totals and cost are withheld instead of being shown as zero.
+- The card distinguishes loading, not configured, unsupported, permission
+  denied, request error, no data, partial data and ready states.
+
+### Cost provenance
+
+Configured cost statistics take precedence and are labeled **Actual cost**.
+Their metadata unit must exactly match Home Assistant's configured currency
+(`hass.config.currency`); volume, power, energy, mixed and foreign-currency
+statistics are withheld.
+If no cost statistics are configured, an estimate is available only when both
+an explicit finite non-negative `energy_price` and a `currency` are supplied:
+
+```yaml
+type: custom:ha-smart-reports
+energy_source_mode: dashboard
+energy_price: 0.42
+currency: PLN
+```
+
+There is no default tariff. A zero rate is valid and remains zero.
+
+## Automations and System
+
+The Automations tab keeps the live operational overview: total, active,
+disabled, triggered-today counts and the ten most recent triggers. The System
+tab shows entity/domain counts, unavailable/unknown states and availability
+percentages. These two tabs are current-state summaries; the Energy period
+selector does not change them.
+
+## Export
+
+Energy exports are generated locally in the browser:
+
+- JSON uses `schema_version: 2` and includes period range, timezone, overall
+  status, source mode, warnings, per-source total/cost evidence and device
+  relationships.
+- CSV is flat (one aggregate/source/device metric per row), retains source
+  status/provenance/reason, contains no nested JSON and neutralizes
+  formula-leading labels before download.
+
+Export is disabled while a request is loading or failed, so an older period
+cannot be downloaded as if it were current.
 
 ## Screenshots
 
-| Light | Dark |
-|---|---|
-| ![Energy report, light theme](docs/screenshots/card-report-light.png) | ![Energy report, dark theme](docs/screenshots/card-report-dark.png) |
+The previews below use a deterministic, fully synthetic Recorder fixture. They
+contain no production entity names, account data, addresses, network details,
+tokens or household history.
 
-*Default view: the Energy tab, showing the auto-detected sensor ranking and
-estimated cost. Automations and System are one click away. Dark mode follows
-your Home Assistant theme automatically.*
+| Light | Dark | Narrow |
+|---|---|---|
+| ![Smart Reports light theme with synthetic Recorder data](docs/screenshots/card-report-light.png) | ![Smart Reports dark theme with synthetic Recorder data](docs/screenshots/card-report-dark.png) | ![Smart Reports narrow layout with synthetic Recorder data](docs/screenshots/card-report-narrow.png) |
+
+[`docs/screenshots/manifest.json`](docs/screenshots/manifest.json) binds every
+image to the exact `ha-smart-reports.js` SHA-256, fixed clock, locale, timezone
+and browser build. The local screenshot gate renders every variant twice,
+requires byte-identical PNG output, blocks non-loopback requests, rejects PNG
+metadata, checks horizontal overflow and runs OCR privacy checks.
 
 ## Installation
 
@@ -65,16 +131,15 @@ your Home Assistant theme automatically.*
 
 1. Open HACS → Frontend (Dashboard) → ⋮ → **Custom repositories**.
 2. Add `https://github.com/MacSiem/ha-smart-reports` with category
-   **Dashboard** (Lovelace plugin).
-3. Install **Smart Reports** and reload your browser.
+   **Dashboard**.
+3. Install **Smart Reports** and reload the browser.
 
 ### Manual
 
-1. Download `ha-smart-reports.js` from the
-   [latest release](https://github.com/MacSiem/ha-smart-reports/releases).
-2. Copy to `/config/www/community/ha-smart-reports/`.
-3. Add as a Lovelace resource:
-   `/local/community/ha-smart-reports/ha-smart-reports.js` (type: `module`).
+1. Download `ha-smart-reports.js` from the latest release.
+2. Copy it to `/config/www/community/ha-smart-reports/`.
+3. Add `/local/community/ha-smart-reports/ha-smart-reports.js` as a Lovelace
+   module resource.
 
 ## Quick start
 
@@ -82,57 +147,46 @@ your Home Assistant theme automatically.*
 type: custom:ha-smart-reports
 ```
 
-That's it — no options are required. All config keys are optional:
-
-```yaml
-type: custom:ha-smart-reports
-title: Smart Reports
-energy_price: 0.65
-currency: PLN
-show_energy: true
-show_automations: true
-show_system: true
-```
+This uses the Home Assistant Energy Dashboard configuration. If the Energy
+Dashboard has no grid-import statistic, the card shows a configuration state
+and links to `/config/energy`; it does not guess a sensor.
 
 ### Options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `title` | string | `Smart Reports` | Heading shown at the top of the card. |
-| `energy_price` | number | `0.65` | Price per kWh used for the estimated energy cost. |
-| `currency` | string | `PLN` | Currency label shown with energy-cost values. |
+| `title` | string | `Smart Reports` | Card heading. |
+| `energy_source_mode` | `dashboard` or `explicit` | `dashboard` | Exact source-selection policy. |
+| `energy_total_statistics` | list | empty | Explicit root total statistic IDs. |
+| `energy_device_statistics` | list | empty | Explicit device objects/IDs; objects may include `label` and `included_in_stat`. |
+| `energy_cost_statistics` | list | empty | Explicit actual-cost statistic IDs. |
+| `energy_entity` | string | none | Legacy one-total compatibility alias in explicit mode. |
+| `energy_price` | number ≥ 0 | none | Explicit flat estimate rate per kWh. |
+| `currency` | string | none | Required with `energy_price`. |
 | `show_energy` | boolean | `true` | Show the Energy tab. |
 | `show_automations` | boolean | `true` | Show the Automations tab. |
 | `show_system` | boolean | `true` | Show the System tab. |
-| `energy_entity` | string | none | Compatibility-only visual-editor stub; the card auto-discovers energy sensors and does not read this value. |
 
-## FAQ
+The visual editor safely exposes Title and Currency. Tab selection is local
+to each card instance. If all three `show_*` flags are false, the card shows a
+configuration message and performs no Home Assistant data requests.
 
-**Do I have to configure anything?**
-No. Add the card and it reads your existing entities — energy sensors,
-automations and the entity registry — automatically.
+## Privacy and limitations
 
-**What is `energy_entity` in the stub config for?**
-Nothing, functionally. It's a placeholder Home Assistant's visual editor
-preloads so the card preview isn't blank; the card doesn't read that key. It
-auto-detects energy sensors by matching `energy`/`power`/`consumption` in the
-entity id, regardless of what (if anything) `energy_entity` is set to.
+The card uses Home Assistant's same-origin WebSocket API and the state object
+already provided to Lovelace. It has no telemetry, analytics, remote fonts or
+CDN dependency. Support links open only when clicked and use `noopener` and
+`noreferrer`.
 
-**Can I see historical reports, e.g. energy use last month?**
-Not yet. Every tab is computed from the current `hass.states` snapshot only —
-there's no call to Home Assistant's history or statistics APIs. The
-Today/7‑days/30‑days selector only labels the exported file; it doesn't
-change what's shown or exported.
+JSON/CSV exports are built locally and are not uploaded by the card. They can
+contain the configured statistic IDs, display labels, report window, warnings
+and measured values, so review an export before sharing it outside your Home
+Assistant environment. The card never stores credentials, SMTP settings or
+Home Assistant access tokens.
 
-**Does it send scheduled or emailed reports?**
-No — Smart Reports is a dashboard viewer only. For scheduled/emailed digests,
-install the **HA Tools Email** integration plus the dedicated `ha-log-email` /
-`ha-energy-email` cards (separate HACS repositories).
-
-**Does this send data anywhere?**
-No. There are no external network calls, no telemetry, no CDN-hosted assets —
-everything is rendered locally in your browser from your own Home Assistant
-instance's state.
+Recorder retention and source metadata determine how much historical energy
+data is available. Smart Reports is an on-demand dashboard/export card; it
+does not schedule or email reports.
 
 ## Changelog
 

@@ -1,0 +1,16 @@
+{
+  "energy_sources": [
+    {
+      "type": "grid",
+      "stat_energy_from": "sensor.grid_import",
+      "stat_energy_to": "sensor.grid_export",
+      "stat_cost": "sensor.grid_import_cost"
+    }
+  ],
+  "device_consumption": [
+    { "stat_consumption": "sensor.hvac_total" },
+    { "stat_consumption": "sensor.hvac_indoor", "included_in_stat": "sensor.hvac_total" },
+    { "stat_consumption": "sensor.dishwasher" }
+  ],
+  "device_consumption_water": []
+}

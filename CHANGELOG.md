@@ -2,6 +2,29 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [4.0.0] - 2026-09-01
+
+### Changed
+- Energy reports now use exact Home Assistant Energy Dashboard or explicit Recorder statistic IDs; live-state substring discovery and the fabricated default tariff were removed.
+- Today, 7-day and 30-day reports now use local-calendar Recorder `change` windows with explicit partial/no-data/error states and DST-safe boundaries.
+- Headline totals now include root total sources only; device and `included_in_stat` relationships are kept in a separate nested breakdown.
+- Cost now reports actual configured cost statistics first, otherwise an explicitly configured flat-rate estimate, with provenance shown in the UI and exports.
+- JSON export now uses schema version 2; CSV is flat and neutralizes formula-leading labels.
+- Schema-v2 JSON and CSV now retain per-source status, provenance, reasons and warnings; partial results show the same evidence in the UI.
+- Dashboard parsing now supports current Energy preference names and fills only missing grid cost mappings without replacing direct cost sources.
+- The visible period context now uses readable local-calendar dates while preserving the exact Recorder start/end timestamps as element metadata and export fields.
+
+### Fixed
+- Added latest-request-wins generation guards, a single coalescing timer, disconnect cleanup, reattach safety and per-instance isolation.
+- Dynamic statistic labels are rendered with DOM text APIs.
+- Energy/cost metadata is role-aware, cost currency must match Home Assistant, invalid total relationships and out-of-window buckets fail closed, and tab state is instance-local.
+- Restored safe visual-editor fields for Title and Currency; disabling all sections now produces a request-free configuration state.
+- A statistic reused in more than one role is still fetched once, but now keeps separate, complete total/device/cost summaries in the UI and exports.
+
+### Testing
+- Added pinned jsdom behavior suites for source selection, units, DST, gaps, cost, lifecycle, safe rendering and export.
+- Added source-bound light, dark and narrow screenshot gates with fixed synthetic data, offline rendering, byte-determinism, overflow checks, PNG metadata rejection and OCR privacy checks.
+
 ## [3.4.0] - 2026-06-27
 
 ### Changed

@@ -1,0 +1,12 @@
+{
+  "reset_aware": [
+    { "start": 0, "end": 3600000, "change": 0.7, "sum": 500.0 },
+    { "start": 3600000, "end": 7200000, "change": 0.4, "sum": 0.2 }
+  ],
+  "literal_totals": {
+    "sensor.grid_import": 10,
+    "sensor.hvac_total": 6,
+    "sensor.hvac_indoor": 2,
+    "sensor.dishwasher": 1
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "schema_version": 2,
+  "source": {
+    "path": "ha-smart-reports.js",
+    "sha256": "ccc4a958307c45b95a1934170b9a99eb9fb6502e69b780906ce621bc56ef0e68"
+  },
+  "fixture": {
+    "seed": "sr-demo-v1",
+    "clock": "2026-08-31T10:00:00.000Z",
+    "locale": "en-US",
+    "timezone": "Europe/Warsaw"
+  },
+  "renderer": {
+    "name": "Google Chrome",
+    "version": "152.0.7977.65",
+    "executable_sha256": "d7c482410d72ac0b4e834d16f97d0f884c55bc302a47a7bb2a01d189b449f9a5"
+  },
+  "captures": [
+    {
+      "file": "card-report-light.png",
+      "theme": "light",
+      "viewport": "desktop",
+      "pixel_width": 480,
+      "pixel_height": 704,
+      "source_sha256": "ccc4a958307c45b95a1934170b9a99eb9fb6502e69b780906ce621bc56ef0e68",
+      "image_sha256": "443e6fba29a9a7b49976a7bde3934239ad2d6ec5920dd0f94fce3b7b58829fa1",
+      "render_sha256_samples": [
+        "443e6fba29a9a7b49976a7bde3934239ad2d6ec5920dd0f94fce3b7b58829fa1",
+        "443e6fba29a9a7b49976a7bde3934239ad2d6ec5920dd0f94fce3b7b58829fa1"
+      ],
+      "layout": {
+        "horizontal_overflow": false
+      },
+      "runtime": {
+        "locale": "en-US",
+        "timezone": "Europe/Warsaw",
+        "loading": false
+      }
+    },
+    {
+      "file": "card-report-dark.png",
+      "theme": "dark",
+      "viewport": "desktop",
+      "pixel_width": 480,
+      "pixel_height": 704,
+      "source_sha256": "ccc4a958307c45b95a1934170b9a99eb9fb6502e69b780906ce621bc56ef0e68",
+      "image_sha256": "667deca44c698453f845ffc52a1af9cda1af543916d153136984f324d0bfdadf",
+      "render_sha256_samples": [
+        "667deca44c698453f845ffc52a1af9cda1af543916d153136984f324d0bfdadf",
+        "667deca44c698453f845ffc52a1af9cda1af543916d153136984f324d0bfdadf"
+      ],
+      "layout": {
+        "horizontal_overflow": false
+      },
+      "runtime": {
+        "locale": "en-US",
+        "timezone": "Europe/Warsaw",
+        "loading": false
+      }
+    },
+    {
+      "file": "card-report-narrow.png",
+      "theme": "light",
+      "viewport": "narrow",
+      "pixel_width": 360,
+      "pixel_height": 808,
+      "source_sha256": "ccc4a958307c45b95a1934170b9a99eb9fb6502e69b780906ce621bc56ef0e68",
+      "image_sha256": "be857a36fcfa7a205de6a9e94a8bed7bed477d8b11d6ee5905d5e40de2eee5cc",
+      "render_sha256_samples": [
+        "be857a36fcfa7a205de6a9e94a8bed7bed477d8b11d6ee5905d5e40de2eee5cc",
+        "be857a36fcfa7a205de6a9e94a8bed7bed477d8b11d6ee5905d5e40de2eee5cc"
+      ],
+      "layout": {
+        "horizontal_overflow": false
+      },
+      "runtime": {
+        "locale": "en-US",
+        "timezone": "Europe/Warsaw",
+        "loading": false
+      }
+    }
+  ]
+}
