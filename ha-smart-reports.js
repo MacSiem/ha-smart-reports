@@ -115,6 +115,7 @@
     set hass(hass) {
       this._hass = hass;
       this._syncTheme();
+      this._syncSupport();
       if (this._connected && hass) this._scheduleRefresh(false);
     }
 
@@ -131,6 +132,7 @@
         show_energy: next.show_energy !== false,
         show_automations: next.show_automations !== false,
         show_system: next.show_system !== false,
+        show_support: next.show_support !== false,
         energy_source_mode: next.energy_source_mode === 'explicit' ? 'explicit' : 'dashboard',
         energy_total_statistics: Array.isArray(next.energy_total_statistics) ? next.energy_total_statistics : [],
         energy_device_statistics: Array.isArray(next.energy_device_statistics) ? next.energy_device_statistics : [],
@@ -142,6 +144,7 @@
         currency,
       };
       if (this._scaffoldRendered) {
+        this._syncSupport();
         this._invalidateEnergyRequest();
         this._syncTabs();
         this._scheduleRefresh(true);
@@ -174,9 +177,14 @@
             <div class="toolbar-actions"><button class="action" type="button" id="exportCsvBtn" disabled>Export CSV</button><button class="action primary" type="button" id="exportJsonBtn" disabled>Export JSON</button></div>
           </div>
           <main class="pane" id="content"></main>
-          <footer class="donate-section" data-source="own-card"><span>Support HA Tools</span><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">Buy me a coffee</a><a href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">PayPal</a></footer>
+          <footer class="donate-section" data-source="own-card" style="padding:8px 12px"><span>Support HA Tools</span><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">Buy me a coffee</a><a href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">PayPal</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;border:0;background:none;color:inherit">×</button></footer>
         </ha-card>`;
       this._scaffoldRendered = true;
+      this.shadowRoot.querySelector('.support-dismiss').addEventListener('click', () => {
+        try { localStorage.setItem('ha-smart-reports-support-dismissed', '1'); } catch (_) {}
+        this._syncSupport();
+      });
+      this._syncSupport();
       this.shadowRoot.getElementById('periodSelect').value = this._period;
       this.shadowRoot.getElementById('periodSelect').addEventListener('change', (event) => {
         const period = VALID_PERIODS.has(event.target.value) ? event.target.value : '7d';
@@ -192,6 +200,13 @@
 
     _syncTheme() {
       if (this._hass) this.classList.toggle('bento-dark', Boolean(this._hass.themes && this._hass.themes.darkMode));
+    }
+
+    _syncSupport() {
+      if (!this._scaffoldRendered) return;
+      let dismissed = false;
+      try { dismissed = localStorage.getItem('ha-smart-reports-support-dismissed') === '1'; } catch (_) {}
+      this.shadowRoot.querySelector('.donate-section[data-source="own-card"]').hidden = !this._hass?.user?.is_admin || this._config.show_support === false || dismissed;
     }
 
     _availableTabs() {
