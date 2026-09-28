@@ -28,7 +28,7 @@ test('public card, metadata and editor contracts remain registered exactly once'
   assert.equal(card.getCardSize(), 5);
   assert.deepEqual(
     JSON.parse(JSON.stringify(card.getGridOptions())),
-    { rows: 5, columns: 12, min_rows: 3, min_columns: 6 },
+    { columns: 12, min_rows: 3, min_columns: 6 },
   );
 
   const editor = Card.getConfigElement();
