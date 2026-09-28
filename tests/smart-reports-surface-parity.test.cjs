@@ -100,7 +100,6 @@ test('support footer remains single, card-owned and safe across rerenders', asyn
     const links = [...footers[0].querySelectorAll('a')];
     assert.deepEqual(links.map((link) => link.href), [
       'https://buymeacoffee.com/macsiem',
-      'https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W',
     ]);
     for (const link of links) {
       assert.equal(link.target, '_blank');
