@@ -2,6 +2,11 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [4.0.1] - 2026-09-29
+
+- Keep the report card at its natural height in Home Assistant Sections, including empty states and longer evidence text.
+- Replace the prominent support panel with one optional, dismissible link visible only to administrators.
+
 ## [4.0.0] - 2026-09-01
 
 ### Changed

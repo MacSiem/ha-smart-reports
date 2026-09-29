@@ -1,7 +1,7 @@
 /**
  * Home Assistant Smart Reports Card
  * Recorder-backed energy reports, automation statistics, and system overview.
- * Version: 4.0.0
+ * Version: 4.0.1
  */
 
 (function registerHASmartReports() {
@@ -9,7 +9,7 @@
 
   if (customElements.get('ha-smart-reports')) return;
 
-  const VERSION = '4.0.0';
+  const VERSION = '4.0.1';
   const VALID_PERIODS = new Set(['1d', '7d', '30d']);
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
