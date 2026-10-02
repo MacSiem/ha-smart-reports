@@ -2,7 +2,7 @@
   "schema_version": 2,
   "source": {
     "path": "ha-smart-reports.js",
-    "sha256": "77dc8b7995ec47347f1d741f1766b350b6499a8f6a8758c5fcb409a6815f6b12"
+    "sha256": "c07828d46c4832d63bec804b1a35e86fe1dadc848988b8df09470fdae61f1c9c"
   },
   "fixture": {
     "seed": "sr-demo-v1",
@@ -22,7 +22,7 @@
       "viewport": "desktop",
       "pixel_width": 480,
       "pixel_height": 704,
-      "source_sha256": "77dc8b7995ec47347f1d741f1766b350b6499a8f6a8758c5fcb409a6815f6b12",
+      "source_sha256": "c07828d46c4832d63bec804b1a35e86fe1dadc848988b8df09470fdae61f1c9c",
       "image_sha256": "a2ee9507dd2abc974078fbaa9eed140968d7f113c52e8c227d8c20643994a960",
       "render_sha256_samples": [
         "a2ee9507dd2abc974078fbaa9eed140968d7f113c52e8c227d8c20643994a960",
@@ -43,7 +43,7 @@
       "viewport": "desktop",
       "pixel_width": 480,
       "pixel_height": 704,
-      "source_sha256": "77dc8b7995ec47347f1d741f1766b350b6499a8f6a8758c5fcb409a6815f6b12",
+      "source_sha256": "c07828d46c4832d63bec804b1a35e86fe1dadc848988b8df09470fdae61f1c9c",
       "image_sha256": "8bddc7320b82b411818f39a6c93d2eaa318a86cd9763f86da4ddc2aaaa5c085e",
       "render_sha256_samples": [
         "8bddc7320b82b411818f39a6c93d2eaa318a86cd9763f86da4ddc2aaaa5c085e",
@@ -64,7 +64,7 @@
       "viewport": "narrow",
       "pixel_width": 360,
       "pixel_height": 808,
-      "source_sha256": "77dc8b7995ec47347f1d741f1766b350b6499a8f6a8758c5fcb409a6815f6b12",
+      "source_sha256": "c07828d46c4832d63bec804b1a35e86fe1dadc848988b8df09470fdae61f1c9c",
       "image_sha256": "96e330105f36956d58417d4bcb09e654416622f544a428bf8133116b3a48c863",
       "render_sha256_samples": [
         "96e330105f36956d58417d4bcb09e654416622f544a428bf8133116b3a48c863",
