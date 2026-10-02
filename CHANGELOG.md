@@ -2,6 +2,11 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [Unreleased]
+
+- Stop treating missing first/last Recorder buckets or a bucket crossing the requested boundary as a complete period total.
+- End calendar reports at the last completed UTC hour, retain that exact cutoff in exports, and show no data before Today's first completed hour.
+
 ## [4.0.1] - 2026-09-29
 
 - Keep the report card at its natural height in Home Assistant Sections, including empty states and longer evidence text.

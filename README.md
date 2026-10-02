@@ -64,6 +64,8 @@ enable discovery or a live-state fallback.
   silently repaired.
 - Today, 7-day and 30-day periods start at local midnight. DST days may be 23
   or 25 hours.
+- The report ends at the last completed UTC hour shown in its range and exports.
+  Missing boundary buckets remain partial; Today has no data until its first completed hour.
 - If a required source is incomplete, invalid or has no samples, combined
   totals and cost are withheld instead of being shown as zero.
 - The card distinguishes loading, not configured, unsupported, permission

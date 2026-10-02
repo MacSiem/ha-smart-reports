@@ -340,7 +340,8 @@
       const local = this._partsInZone(now, timeZone);
       const daysBack = safeKey === '1d' ? 0 : (safeKey === '30d' ? 29 : 6);
       const startDate = this._addCalendarDays(local, -daysBack);
-      return { key: safeKey, start: this._zonedDateTimeToUtc({ ...startDate, hour: 0, minute: 0, second: 0 }, timeZone), end: now, time_zone: timeZone };
+      const end = new Date(Math.floor(now.getTime() / 3600000) * 3600000);
+      return { key: safeKey, start: this._zonedDateTimeToUtc({ ...startDate, hour: 0, minute: 0, second: 0 }, timeZone), end, time_zone: timeZone };
     }
 
     _periodDescriptor() {
@@ -456,7 +457,8 @@
         if (effectiveBuckets[index].start - effectiveBuckets[index - 1].end > 1000) return { status: 'partial', value: null, unit: normalizedUnit };
       }
       if (startMs !== null && endMs !== null) {
-        if (effectiveBuckets[0].start - startMs > 3601000 || endMs - effectiveBuckets[effectiveBuckets.length - 1].end > 3601000) return { status: 'partial', value: null, unit: normalizedUnit, reason: 'incomplete_coverage' };
+        // A boundary gap or a straddling bucket cannot represent the requested total.
+        if (Math.abs(effectiveBuckets[0].start - startMs) > 1000 || Math.abs(endMs - effectiveBuckets[effectiveBuckets.length - 1].end) > 1000) return { status: 'partial', value: null, unit: normalizedUnit, reason: 'incomplete_coverage' };
       }
       let value = effectiveBuckets.reduce((sum, bucket) => sum + bucket.change, 0);
       if (role !== 'cost') {
@@ -532,7 +534,7 @@
         const ids = selection.ordered.map((source) => source.statistic_id);
         const metadataResponse = await this._hass.callWS({ type: 'recorder/get_statistics_metadata', statistic_ids: ids });
         if (!this._isCurrentEnergyRequest(generation)) return;
-        const statisticsResponse = await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: period.start, end_time: period.end, statistic_ids: ids, period: 'hour', types: ['change'] });
+        const statisticsResponse = new Date(period.end) <= new Date(period.start) ? {} : await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: period.start, end_time: period.end, statistic_ids: ids, period: 'hour', types: ['change'] });
         if (!this._isCurrentEnergyRequest(generation)) return;
         const metadataById = this._metadataMap(metadataResponse); const statisticsById = statisticsResponse && typeof statisticsResponse === 'object' ? statisticsResponse : {};
         const window = { start: new Date(period.start), end: new Date(period.end) };
