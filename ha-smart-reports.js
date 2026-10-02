@@ -340,8 +340,9 @@
       const local = this._partsInZone(now, timeZone);
       const daysBack = safeKey === '1d' ? 0 : (safeKey === '30d' ? 29 : 6);
       const startDate = this._addCalendarDays(local, -daysBack);
-      const end = new Date(Math.floor(now.getTime() / 3600000) * 3600000);
-      return { key: safeKey, start: this._zonedDateTimeToUtc({ ...startDate, hour: 0, minute: 0, second: 0 }, timeZone), end, time_zone: timeZone };
+      const start = this._zonedDateTimeToUtc({ ...startDate, hour: 0, minute: 0, second: 0 }, timeZone);
+      const end = new Date(Math.max(start.getTime(), Math.floor(now.getTime() / 3600000) * 3600000));
+      return { key: safeKey, start, end, time_zone: timeZone };
     }
 
     _periodDescriptor() {
