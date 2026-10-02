@@ -4,6 +4,8 @@ All notable changes to **Smart Reports** are documented here.
 
 ## [Unreleased]
 
+- Keep status colors readable on the rendered Home Assistant card background, including dark custom themes whose dark mode flag is false and theme changes after reconnecting.
+
 - Stop treating missing first/last Recorder buckets or a bucket crossing the requested boundary as a complete period total.
 - End calendar reports at the last completed UTC hour, retain that exact cutoff in exports, and show no data before Today's first completed hour.
 
