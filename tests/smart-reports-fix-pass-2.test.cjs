@@ -332,12 +332,12 @@ for (const [name, boundaryBucket, effectiveBucket] of [
   dom.window.close();
 });
 
-test('N-04 filters touching buckets before validating gaps in effective data', () => {
+test('N-04 ignores a touching bucket but withholds a period missing its first half hour', () => {
   const { dom, result } = summarizeBoundary([
     { start: 0, end: 3600000, change: 99 },
     { start: 5400000, end: 7200000, change: 1 },
   ]);
-  assert.deepEqual({ status: result.status, value: result.value }, { status: 'ready', value: 1 });
+  assert.deepEqual({ status: result.status, value: result.value }, { status: 'partial', value: null });
   dom.window.close();
 });
 
