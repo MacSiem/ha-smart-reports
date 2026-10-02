@@ -61,3 +61,23 @@ test('today before its first completed hour has no data and does not request a p
     assert.equal(hass.calls.some((call) => call.type === 'recorder/statistics_during_period'), false);
   } finally { card.remove(); dom.window.close(); }
 });
+
+test('today has an empty, forward calendar range before its first complete UTC hour in Kathmandu', async () => {
+  const hass = makeHass({ timeZone: 'Asia/Kathmandu', metadataById: { 'sensor.grid': metadata('kWh') } });
+  const { card, dom } = await mountCard({ hass, config: {
+    energy_source_mode: 'explicit', energy_total_statistics: ['sensor.grid'], energy_price: 0.5, currency: 'PLN',
+  } });
+  try {
+    card._period = '1d';
+    card._now = () => new Date('2026-08-29T18:20:00Z'); // Local 00:05, midnight was 18:15 UTC.
+    hass.calls.length = 0;
+    card._invalidateEnergyRequest();
+    await card._loadEnergy();
+    assert.equal(card._energyViewState.period.start, '2026-08-29T18:15:00.000Z');
+    assert.equal(card._energyViewState.period.end, '2026-08-29T18:15:00.000Z');
+    assert.equal(card._energyViewState.status, 'no_data');
+    assert.equal(card._energyViewState.total.value, null);
+    assert.equal(card._energyViewState.cost.value, null);
+    assert.equal(hass.calls.some((call) => call.type === 'recorder/statistics_during_period'), false);
+  } finally { card.remove(); dom.window.close(); }
+});
