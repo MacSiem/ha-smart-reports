@@ -410,3 +410,20 @@ for (const scenario of [
     card.remove(); dom.window.close();
   });
 }
+
+test('Automations renders absent last-trigger timestamps as Never and preserves a real epoch timestamp', async () => {
+  const triggers = [null, undefined, '', 'invalid date', 0];
+  const states = Object.fromEntries(triggers.map((trigger, index) => [`automation.absent_${index}`, {
+    state: 'off', attributes: { friendly_name: `Absent timestamp QA ${index}`, last_triggered: trigger },
+  }]));
+  const hass = makeHass({ states });
+  const { card, dom } = await mountCard({ hass, config: { show_energy: false } });
+  const rows = [...card.shadowRoot.querySelectorAll('.row')].map((row) => row.textContent);
+  for (let index = 0; index < 4; index++) {
+    assert.ok(rows.includes(`Absent timestamp QA ${index}Never · off`), `absent timestamp ${index} must not become a 1970 trigger`);
+  }
+  const actualEpochDays = Math.floor(FIXED_NOW.getTime() / 86400000);
+  assert.ok(rows.includes(`Absent timestamp QA 4${actualEpochDays}d · off`), 'a genuine numeric epoch timestamp must retain its real age');
+  assert.equal(hass.calls.length, 0);
+  card.remove(); dom.window.close();
+});
