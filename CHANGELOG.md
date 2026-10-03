@@ -4,6 +4,8 @@ All notable changes to **Smart Reports** are documented here.
 
 ## [Unreleased]
 
+- Count automation triggers since midnight in Home Assistant's configured time zone, including long DST days, and exclude future timestamps.
+
 - Keep status colors readable on the rendered Home Assistant card background, including dark custom themes whose dark mode flag is false and theme changes after reconnecting.
 
 - Stop treating missing first/last Recorder buckets or a bucket crossing the requested boundary as a complete period total.

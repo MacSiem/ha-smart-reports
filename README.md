@@ -92,8 +92,10 @@ There is no default tariff. A zero rate is valid and remains zero.
 ## Automations and System
 
 The Automations tab keeps the live operational overview: total, active,
-disabled, triggered-today counts and the ten most recent triggers. The System
-tab shows entity/domain counts, unavailable/unknown states and availability
+disabled, triggered-today counts and the ten most recent triggers. The
+**Triggered today** count starts at midnight in Home Assistant's configured
+time zone and excludes future timestamps; it is not a rolling 24-hour count.
+The System tab shows entity/domain counts, unavailable/unknown states and availability
 percentages. These two tabs are current-state summaries; the Energy period
 selector does not change them.
 

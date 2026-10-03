@@ -684,11 +684,13 @@
         return left.label.localeCompare(right.label);
       });
       const now = asDate(this._now()) || new Date();
+      const timeZone = this._timeZone();
+      const todayStart = this._zonedDayBounds(this._partsInZone(now, timeZone), timeZone).start;
       const active = automations.filter((automation) => automation.state === 'on').length;
       const disabled = automations.filter((automation) => automation.state === 'off').length;
       const triggeredToday = automations.filter((automation) => {
         const triggered = asDate(automation.last_triggered);
-        return triggered && now - triggered < 86400000;
+        return triggered && triggered >= todayStart && triggered <= now;
       }).length;
       const summary = document.createElement('div'); summary.className = 'summary'; summary.append(this._metric('Total automations', String(automations.length)), this._metric('Active', String(active)), this._metric('Disabled', String(disabled)), this._metric('Triggered today', String(triggeredToday))); container.appendChild(summary);
       const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = 'Recent activity'; container.appendChild(heading); const list = document.createElement('div'); list.className = 'list';
