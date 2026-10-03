@@ -347,7 +347,7 @@ test('gap withholds aggregate', async () => {
   card.remove(); dom.window.close();
 });
 
-test('edge coverage within one hour remains complete', () => {
+test('missing half-hour boundaries cannot represent the complete two-hour period', () => {
   const { dom, card } = freshCard();
   const result = summarize(card, 'kWh', [], {
     start: '2026-08-30T00:00:00.000Z',
@@ -358,7 +358,7 @@ test('edge coverage within one hour remains complete', () => {
       change: 1,
     }],
   });
-  assert.deepEqual({ status: result.status, value: result.value }, { status: 'ready', value: 1 });
+  assert.deepEqual({ status: result.status, value: result.value }, { status: 'partial', value: null });
   dom.window.close();
 });
 
