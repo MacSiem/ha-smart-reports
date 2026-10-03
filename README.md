@@ -92,9 +92,11 @@ There is no default tariff. A zero rate is valid and remains zero.
 ## Automations and System
 
 The Automations tab keeps the live operational overview: total, active,
-disabled, triggered-today counts and the ten most recent triggers. The
-**Triggered today** count starts at midnight in Home Assistant's configured
-time zone and excludes future timestamps; it is not a rolling 24-hour count.
+disabled, triggered-today counts and up to ten automation entries ordered by
+last trigger. A missing or invalid last-trigger timestamp is shown as **Never**.
+**Triggered today** counts automations whose last trigger is between midnight
+in Home Assistant's configured time zone and now, excluding future timestamps;
+it does not count every trigger event or use a rolling 24-hour window.
 The System tab shows entity/domain counts, unavailable/unknown states and availability
 percentages. These two tabs are current-state summaries; the Energy period
 selector does not change them.
@@ -170,6 +172,7 @@ and links to `/config/energy`; it does not guess a sensor.
 | `show_energy` | boolean | `true` | Show the Energy tab. |
 | `show_automations` | boolean | `true` | Show the Automations tab. |
 | `show_system` | boolean | `true` | Show the System tab. |
+| `show_support` | boolean | `true` | Show the optional support link to administrators unless dismissed. |
 
 The visual editor safely exposes Title and Currency. Tab selection is local
 to each card instance. If all three `show_*` flags are false, the card shows a
@@ -201,7 +204,10 @@ See [CHANGELOG.md](CHANGELOG.md).
 - [Buy Me a Coffee](https://buymeacoffee.com/macsiem)
 - [PayPal](https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W)
 
-The optional in-card support link is shown only to administrators. Dismiss it in the card or set `show_support: false` in the card configuration.
+The optional in-card support link is shown only to administrators. Dismiss it
+in the card or set `show_support: false` in the card configuration. Dismissal
+is stored in browser local storage and shared by Smart Reports cards on the
+same Home Assistant origin when storage is available.
 
 ## License
 
