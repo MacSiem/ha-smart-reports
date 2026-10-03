@@ -392,6 +392,20 @@ for (const scenario of [
       metric.querySelector('.metric-label').textContent, metric.querySelector('.metric-value').textContent,
     ]));
     assert.deepEqual(metrics, { 'Total automations': '6', Active: '5', Disabled: '1', 'Triggered today': '2' });
+    // Test each boundary alone: an incorrectly excluded old trigger and an
+    // incorrectly included future trigger must not cancel in the total.
+    for (const [index, trigger] of triggers.entries()) {
+      const isolated = makeHass({ states: { 'automation.boundary': {
+        state: 'on', attributes: { last_triggered: trigger },
+      } }, timeZone: scenario.zone });
+      card._refreshThrottleMs = 0;
+      card.hass = isolated;
+      await delay(10);
+      const todayMetric = [...card.shadowRoot.querySelectorAll('.metric')].find((metric) =>
+        metric.querySelector('.metric-label').textContent === 'Triggered today');
+      assert.equal(todayMetric.querySelector('.metric-value').textContent, index < 2 ? '1' : '0', `isolated trigger ${index}: ${trigger}`);
+      assert.equal(isolated.calls.length, 0);
+    }
     assert.equal(hass.calls.length, 0, 'the live automation summary must remain request-free');
     card.remove(); dom.window.close();
   });
