@@ -4,6 +4,8 @@ All notable changes to **Smart Reports** are documented here.
 
 ## [Unreleased]
 
+- Show an automation with no last-trigger timestamp as Never instead of displaying an age from the Unix epoch.
+
 - Count automation triggers since midnight in Home Assistant's configured time zone, including long DST days, and exclude future timestamps.
 
 - Keep status colors readable on the rendered Home Assistant card background, including dark custom themes whose dark mode flag is false and theme changes after reconnecting.

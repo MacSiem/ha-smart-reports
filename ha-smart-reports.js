@@ -663,6 +663,7 @@
     }
 
     _timeAgo(value) {
+      if (value == null) return 'Never';
       const date = asDate(value);
       if (!date) return 'Never';
       const now = asDate(this._now()) || new Date();
