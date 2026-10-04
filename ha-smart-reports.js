@@ -539,6 +539,12 @@
       const prefs = await this._hass.callWS({ type: 'energy/get_prefs' });
       if (!this._isCurrentEnergyRequest(generation)) return null;
       const totals = []; const costs = []; const devices = []; const costCoverage = new Map();
+      const costParents = new Map();
+      const linkCost = (cost, total) => {
+        if (!cost) return;
+        if (!costParents.has(cost.statistic_id)) costParents.set(cost.statistic_id, new Set());
+        costParents.get(cost.statistic_id).add(total.statistic_id);
+      };
       const add = (target, value, role) => {
         const normalized = normalizeConfiguredSource(value, role, 'energy_dashboard');
         if (normalized) target.push(normalized);
@@ -548,6 +554,7 @@
         const total = add(totals, totalValue, 'total');
         if (!total) return;
         const cost = add(costs, costValue, 'cost');
+        linkCost(cost, total);
         costCoverage.set(total.statistic_id, Boolean(cost) || costCoverage.get(total.statistic_id) === true);
       };
       const energySources = prefs && Array.isArray(prefs.energy_sources) ? prefs.energy_sources : [];
@@ -576,6 +583,7 @@
             if (costCoverage.get(total.statistic_id) === true) continue;
             const exact = mapping[total.statistic_id];
             const mapped = add(discovered, exact && (exact.statistic_id || exact.entity_id || exact), 'cost');
+            linkCost(mapped, total);
             costCoverage.set(total.statistic_id, Boolean(mapped));
           }
           uniqueCosts = uniqueById(discovered);
@@ -587,7 +595,8 @@
       const uniqueDevices = uniqueById(devices);
       const hasAnyMappedCost = [...costCoverage.values()].some(Boolean);
       const costConfigurationIncomplete = hasAnyMappedCost && [...costCoverage.values()].some((covered) => !covered);
-      return { source_mode: 'energy_dashboard', totals: uniqueTotals, devices: uniqueDevices, costs: uniqueCosts, cost_configuration_incomplete: costConfigurationIncomplete, warnings: [], ordered: uniqueById([...uniqueTotals, ...uniqueCosts, ...uniqueDevices]) };
+      const linkedCosts = uniqueCosts.map(cost => ({ ...cost, energy_statistic_ids: Array.from(costParents.get(cost.statistic_id) || []) }));
+      return { source_mode: 'energy_dashboard', totals: uniqueTotals, devices: uniqueDevices, costs: linkedCosts, cost_configuration_incomplete: costConfigurationIncomplete, warnings: [], ordered: uniqueById([...uniqueTotals, ...linkedCosts, ...uniqueDevices]) };
     }
 
     _explicitSources() {
@@ -751,7 +760,8 @@
           const entity = this._hass.states && this._hass.states[source.statistic_id];
           const friendlyName = entity && entity.attributes && entity.attributes.friendly_name;
           const metadataName = metadataById[source.statistic_id] && metadataById[source.statistic_id].name;
-          const label = [source.label, friendlyName, metadataName].find(value => typeof value === 'string' && value.trim());
+          const relatedNames = (source.energy_statistic_ids || []).map(id => this._hass.states?.[id]?.attributes?.friendly_name || metadataById[id]?.name || id);
+          const label = [source.label, friendlyName, metadataName, relatedNames.length ? relatedNames.join(' / ') : null].find(value => typeof value === 'string' && value.trim());
           return { ...source, ...summaryByRole.get(`${source.role}:${source.statistic_id}`), label: label || source.statistic_id };
         };
         const totalSources = selection.totals.map(materialize);
