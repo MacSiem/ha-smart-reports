@@ -2,7 +2,7 @@
   "schema_version": 2,
   "source": {
     "path": "ha-smart-reports.js",
-    "sha256": "48e2e89e04cf4b5d5c4056d6e70c7921ff2e9f0851b741a10fc94de3ce997c51"
+    "sha256": "6b5742def90584928638b7706ebb80ea596ec95f036b6fb6a5e9837360feadd0"
   },
   "fixture": {
     "seed": "sr-demo-v1",
@@ -21,12 +21,12 @@
       "theme": "light",
       "viewport": "desktop",
       "pixel_width": 480,
-      "pixel_height": 704,
-      "source_sha256": "48e2e89e04cf4b5d5c4056d6e70c7921ff2e9f0851b741a10fc94de3ce997c51",
-      "image_sha256": "a2ee9507dd2abc974078fbaa9eed140968d7f113c52e8c227d8c20643994a960",
+      "pixel_height": 1203,
+      "source_sha256": "6b5742def90584928638b7706ebb80ea596ec95f036b6fb6a5e9837360feadd0",
+      "image_sha256": "c340515d0e967d5cd57a59551eca457cbb1c5f65b0ebedc7f7babcb312989008",
       "render_sha256_samples": [
-        "a2ee9507dd2abc974078fbaa9eed140968d7f113c52e8c227d8c20643994a960",
-        "a2ee9507dd2abc974078fbaa9eed140968d7f113c52e8c227d8c20643994a960"
+        "c340515d0e967d5cd57a59551eca457cbb1c5f65b0ebedc7f7babcb312989008",
+        "c340515d0e967d5cd57a59551eca457cbb1c5f65b0ebedc7f7babcb312989008"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -42,12 +42,12 @@
       "theme": "dark",
       "viewport": "desktop",
       "pixel_width": 480,
-      "pixel_height": 704,
-      "source_sha256": "48e2e89e04cf4b5d5c4056d6e70c7921ff2e9f0851b741a10fc94de3ce997c51",
-      "image_sha256": "b395fce24a52a28d29b93206b7716f7150f1bafb9442ce5c9f536d9c239d4a73",
+      "pixel_height": 1203,
+      "source_sha256": "6b5742def90584928638b7706ebb80ea596ec95f036b6fb6a5e9837360feadd0",
+      "image_sha256": "f500854ef6e7e9b7197244a58fde097c48bbbd879741c798b52aac48b70c4b6a",
       "render_sha256_samples": [
-        "b395fce24a52a28d29b93206b7716f7150f1bafb9442ce5c9f536d9c239d4a73",
-        "b395fce24a52a28d29b93206b7716f7150f1bafb9442ce5c9f536d9c239d4a73"
+        "f500854ef6e7e9b7197244a58fde097c48bbbd879741c798b52aac48b70c4b6a",
+        "f500854ef6e7e9b7197244a58fde097c48bbbd879741c798b52aac48b70c4b6a"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -63,12 +63,12 @@
       "theme": "light",
       "viewport": "narrow",
       "pixel_width": 360,
-      "pixel_height": 808,
-      "source_sha256": "48e2e89e04cf4b5d5c4056d6e70c7921ff2e9f0851b741a10fc94de3ce997c51",
-      "image_sha256": "96e330105f36956d58417d4bcb09e654416622f544a428bf8133116b3a48c863",
+      "pixel_height": 1420,
+      "source_sha256": "6b5742def90584928638b7706ebb80ea596ec95f036b6fb6a5e9837360feadd0",
+      "image_sha256": "121e2e452510e6519ed326e40680d980767e4f033a4740976f8fc8a49650db58",
       "render_sha256_samples": [
-        "96e330105f36956d58417d4bcb09e654416622f544a428bf8133116b3a48c863",
-        "96e330105f36956d58417d4bcb09e654416622f544a428bf8133116b3a48c863"
+        "121e2e452510e6519ed326e40680d980767e4f033a4740976f8fc8a49650db58",
+        "121e2e452510e6519ed326e40680d980767e4f033a4740976f8fc8a49650db58"
       ],
       "layout": {
         "horizontal_overflow": false
