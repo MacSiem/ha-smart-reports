@@ -105,3 +105,71 @@ test('report exposes exact local hours and separate cost coverage in visible tex
     assert.match(card._buildCsv(report),/recorded_cost/);
   }finally{card.remove();dom.window.close();}
 });
+
+test('daily history preserves a DST day and leaves a missing source as partial', () => {
+  const dom = loadRuntime();
+  try {
+    const card = dom.window.document.createElement('ha-smart-reports');
+    const period = { start: '2026-03-28T23:00:00Z', end: '2026-03-29T22:00:00Z', time_zone: 'Europe/Warsaw' };
+    const buckets = Array.from({ length: 23 }, (_, i) => ({ start: Date.parse(period.start) + i * 3600000, end: Date.parse(period.start) + (i + 1) * 3600000, change: 1 }));
+    const sources = [{ statistic_id: 'sensor.a', status: 'ready' }, { statistic_id: 'sensor.b', status: 'no_data' }];
+    const daily = card._dailyEnergySeries(period, sources, { 'sensor.a': buckets }, { 'sensor.a': metadata(), 'sensor.b': metadata() });
+    assert.equal(daily.length, 1);
+    assert.equal(daily[0].recorded_value, 23);
+    assert.equal(daily[0].value, null);
+    assert.equal(daily[0].status, 'partial');
+    assert.equal(daily[0].observed_source_hours, 23);
+    assert.equal(daily[0].expected_source_hours, 46);
+  } finally { dom.window.close(); }
+});
+
+test('report views use the same recorded snapshot without requesting more statistics', async () => {
+  const hass = makeHass({ metadataById: { 'sensor.grid_import': metadata() }, deferred: {
+    'recorder/statistics_during_period': m => Promise.resolve({ 'sensor.grid_import': calendarSeries(m.start_time, m.end_time, [4]) }),
+  } });
+  const { card, dom } = await mountCard({ hass, config: explicitConfig() });
+  try {
+    let requests = 0;
+    hass.callWS = () => { requests++; throw new Error('view changes must use the loaded snapshot'); };
+    const find = text => [...card.shadowRoot.querySelectorAll('button')].find(b => b.textContent === text);
+    find('Costs').click();
+    assert.equal(card.shadowRoot.querySelector('[aria-label="Energy report views"] [aria-selected="true"]').textContent, 'Costs');
+    find('Devices').click();
+    find('Summary').click();
+    assert.equal(requests, 0);
+    assert.equal(card._buildExportDocument().energy.total.value, 4);
+  } finally { card.remove(); dom.window.close(); }
+});
+
+test('empty Today retains the local window and explains the first completed hour', async () => {
+  const hass = makeHass({ metadataById: { 'sensor.grid_import': metadata() }, statisticsById: {} });
+  const { card, dom } = await mountCard({ hass, config: explicitConfig() });
+  try {
+    card._period = '1d';
+    await card._loadEnergy();
+    assert.equal(card._energyViewState.status, 'no_data');
+    assert.ok(card.shadowRoot.querySelector('.report-context'));
+    assert.match(card.shadowRoot.textContent, /completed hour|recorder samples/);
+    assert.equal(card._buildExportDocument().energy.total.value, null);
+  } finally { card.remove(); dom.window.close(); }
+});
+
+test('native editor exposes explicit sources while preserving existing advanced references', () => {
+  const dom = loadRuntime();
+  try {
+    const editor = dom.window.document.createElement('ha-smart-reports-editor');
+    editor.setConfig({ type: 'custom:ha-smart-reports', energy_source_mode: 'explicit', energy_total_statistics: [{ statistic_id: 'sensor.grid', label: 'Main circuit' }] });
+    const select = editor.shadowRoot.querySelector('select');
+    assert.ok(select);
+    assert.equal(select.value, 'explicit');
+    const sources = editor.shadowRoot.querySelector('textarea');
+    assert.ok(sources);
+    assert.equal(sources.value, 'sensor.grid');
+    assert.equal(editor._config.energy_total_statistics[0].label, 'Main circuit');
+    let result;
+    editor.addEventListener('config-changed', event => { result = event.detail.config; });
+    sources.value = 'sensor.grid\nsensor.other';
+    sources.dispatchEvent(new dom.window.Event('change'));
+    assert.deepEqual(Array.from(result.energy_total_statistics, x => typeof x === 'string' ? x : x.statistic_id), ['sensor.grid', 'sensor.other']);
+  } finally { dom.window.close(); }
+});
