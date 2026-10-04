@@ -87,7 +87,7 @@ values while loading; errors never export stale data.
   or 25 hours.
 - The report ends at the last completed UTC hour shown in its range and exports.
   Missing boundary buckets remain partial; Today has no data until its first completed hour.
-- If a required source is incomplete, invalid or has no samples, combined
+- If a required source is incomplete, invalid or has no samples,
   the complete energy total is withheld instead of being shown as zero.
   **Recorded consumption** separately shows only validated samples that exist,
   with source counts and coverage. It is not a complete household total.
@@ -202,8 +202,8 @@ and links to `/config/energy`; it does not guess a sensor.
 | `show_system` | boolean | `true` | Show the System tab. |
 | `show_support` | boolean | `true` | Show the optional support link to administrators unless dismissed. |
 
-The visual editor safely exposes Title and Currency. Tab selection is local
-to each card instance. If all three `show_*` flags are false, the card shows a
+The visual editor exposes Title, Currency, source mode and separate total,
+device and cost statistic IDs. Tab selection is local to each card instance. If all three `show_*` flags are false, the card shows a
 configuration message and performs no Home Assistant data requests.
 
 ## Privacy and limitations
