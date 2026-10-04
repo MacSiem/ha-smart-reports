@@ -53,6 +53,11 @@
     "cost": "koszt",
     "Exact recorder window": "Dokładny zakres rejestratora",
     "Grid import": "Pobór z sieci",
+    "Recorded consumption": "Zarejestrowane zużycie",
+    "Recorded cost": "Zarejestrowany koszt",
+    "Sources with data": "Źródła z danymi",
+    "Complete sources": "Źródła z pełną historią",
+    "Recorded values cover available samples only; gaps are not zero.": "Zarejestrowane wartości obejmują tylko dostępne próbki; braki nie oznaczają zera.",
     "Actual cost": "Rzeczywisty koszt",
     "Estimated cost": "Szacowany koszt",
     "Cost unavailable": "Koszt niedostępny",
@@ -584,6 +589,23 @@
     }
 
     _summarizeSeries(series, metadata, window, role, expectedCurrency) {
+      const complete = this._summarizeCompleteSeries(series, metadata, window, role, expectedCurrency);
+      const result = { ...complete, recorded_value: null, coverage: null };
+      if (!['ready', 'partial', 'no_data'].includes(complete.status)) return result;
+      const start = numericTime(window && window.start); const end = numericTime(window && window.end);
+      if (start === null || end === null || end < start) return result;
+      const buckets = (Array.isArray(series) ? series : []).map(bucket => ({ start: numericTime(bucket.start), end: numericTime(bucket.end), change: bucket.change })).sort((a, b) => a.start - b.start);
+      if (buckets.some((bucket, index) => bucket.start === null || bucket.end === null || bucket.end <= bucket.start || (index > 0 && bucket.start < buckets[index - 1].end) || (bucket.change != null && (typeof bucket.change !== 'number' || !Number.isFinite(bucket.change) || (role !== 'cost' && bucket.change < 0))))) return result;
+      const observed = buckets.filter(bucket => bucket.start >= start && bucket.end <= end && typeof bucket.change === 'number');
+      let value = observed.reduce((sum, bucket) => sum + bucket.change, 0);
+      const unit = this._metadataUnit(metadata);
+      if (role !== 'cost') value *= unit === 'Wh' ? 0.001 : (unit === 'MWh' ? 1000 : 1);
+      result.recorded_value = observed.length > 0 && Number.isFinite(value) ? value : null;
+      result.coverage = { observed_hours: observed.reduce((hours, bucket) => hours + (bucket.end - bucket.start) / 3600000, 0), expected_hours: (end - start) / 3600000, first_sample: observed.length ? new Date(observed[0].start).toISOString() : null, last_sample: observed.length ? new Date(observed[observed.length - 1].end).toISOString() : null };
+      return result;
+    }
+
+    _summarizeCompleteSeries(series, metadata, window, role, expectedCurrency) {
       const unit = this._metadataUnit(metadata);
       if (!metadata || metadata.has_sum !== true) return { status: 'unsupported', value: null, unit };
       const unitClass = metadata.unit_class == null ? null : String(metadata.unit_class);
@@ -677,7 +699,9 @@
       const generation = ++this._energyRequestGeneration;
       const period = this._periodDescriptor();
       const mode = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'energy_dashboard';
-      this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
+      const previous = this._energyViewState;
+      const sameWindow = previous && ['ready', 'partial', 'no_data'].includes(previous.status) && previous.source_mode === mode && previous.period && previous.period.key === period.key && previous.period.start === period.start && previous.period.end === period.end && previous.period.time_zone === period.time_zone;
+      if (!sameWindow) this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
       try {
         const selection = mode === 'explicit' ? this._explicitSources() : await this._dashboardSources(generation);
         if (!selection || !this._isCurrentEnergyRequest(generation)) return;
@@ -695,7 +719,13 @@
         const expectedCurrency = this._hass && this._hass.config && this._hass.config.currency;
         const roleReferences = [...selection.totals, ...selection.costs, ...selection.devices];
         const summaryByRole = new Map(roleReferences.map((source) => [`${source.role}:${source.statistic_id}`, this._summarizeSeries(statisticsById[source.statistic_id], metadataById[source.statistic_id], window, source.role, expectedCurrency)]));
-        const materialize = (source) => ({ ...source, ...summaryByRole.get(`${source.role}:${source.statistic_id}`), label: source.label || source.statistic_id });
+        const materialize = (source) => {
+          const entity = this._hass.states && this._hass.states[source.statistic_id];
+          const friendlyName = entity && entity.attributes && entity.attributes.friendly_name;
+          const metadataName = metadataById[source.statistic_id] && metadataById[source.statistic_id].name;
+          const label = [source.label, friendlyName, metadataName].find(value => typeof value === 'string' && value.trim());
+          return { ...source, ...summaryByRole.get(`${source.role}:${source.statistic_id}`), label: label || source.statistic_id };
+        };
         const totalSources = selection.totals.map(materialize);
         const costSources = selection.costs.map(materialize);
         const deviceSources = selection.devices.map(materialize);
@@ -716,13 +746,25 @@
         const deviceDataStatus = deviceSources.some((source) => source.status !== 'ready') ? 'partial' : 'ready';
         const warnings = [...(selection.warnings || [])];
         if (deviceModel.relationship_status !== 'valid') warnings.push(deviceModel.relationship_status);
-        this._setEnergyViewState({ status, period, source_mode: selection.source_mode, total: completeTotal, cost, devices: deviceModel.rows, total_sources: totalSources, cost_sources: costSources, device_data_status: deviceDataStatus, device_relationship_status: deviceModel.relationship_status, top_ranking_available: deviceModel.top_ranking_available, warnings });
+        const recordedTotal = this._recordedSubtotal(totalSources, 'kWh');
+        const recordedCost = this._recordedSubtotal(costSources, expectedCurrency);
+        this._setEnergyViewState({ status, period, source_mode: selection.source_mode, total: completeTotal, cost, recorded_total: recordedTotal, recorded_cost: recordedCost, devices: deviceModel.rows, total_sources: totalSources, cost_sources: costSources, device_data_status: deviceDataStatus, device_relationship_status: deviceModel.relationship_status, top_ranking_available: deviceModel.top_ranking_available, warnings });
       } catch (error) {
         if (this._isCurrentEnergyRequest(generation)) this._setEnergyViewState(this._errorState(error, period));
       }
     }
 
-    _setEnergyViewState(state) { this._energyViewState = state; if (this._scaffoldRendered && this._activeTab === 'energy') this._renderEnergyState(); }
+    _recordedSubtotal(sources, unit) {
+      const measured = sources.filter(source => source.unit === unit && typeof source.recorded_value === 'number' && Number.isFinite(source.recorded_value));
+      const value = measured.reduce((sum, source) => sum + source.recorded_value, 0);
+      return { value: measured.length > 0 && Number.isFinite(value) ? value : null, unit: unit || null, status: sources.length > 0 && sources.every(source => source.status === 'ready') ? 'ready' : 'partial', sources_with_data: measured.length, complete_sources: sources.filter(source => source.status === 'ready').length, configured_sources: sources.length, source_statistic_ids: measured.map(source => source.statistic_id) };
+    }
+
+    _setEnergyViewState(state) {
+      if (JSON.stringify(state) === JSON.stringify(this._energyViewState)) return;
+      this._energyViewState = state;
+      if (this._scaffoldRendered && this._activeTab === 'energy') this._renderEnergyState();
+    }
 
     _stateBlock(title, detail, className, role) {
       const block = document.createElement('section'); block.className = `state ${className || ''}`.trim(); if (role) block.setAttribute('role', role);
@@ -761,10 +803,16 @@
       context.title = `${this._t('Exact recorder window')}: ${period.start || '—'} → ${period.end || '—'}`;
       container.appendChild(context);
       const summary = document.createElement('section'); summary.className = 'summary';
-      summary.appendChild(this._metric('Grid import', `${this._formatNumber(state.total.value, 1)} ${state.total.unit || 'kWh'}`));
+      const recordedTotal = state.recorded_total || {};
+      const recordedCost = state.recorded_cost || {};
+      summary.appendChild(this._metric(state.status === 'partial' ? 'Recorded consumption' : 'Grid import', `${this._formatNumber(state.status === 'partial' ? recordedTotal.value : state.total.value, 2)} ${state.total.unit || 'kWh'}`));
       const costLabel = state.cost && state.cost.method === 'cost_statistics' ? 'Actual cost' : (state.cost && state.cost.method === 'flat_rate_estimate' ? 'Estimated cost' : 'Cost unavailable');
       const costValue = state.cost && typeof state.cost.value === 'number' ? `${this._formatNumber(state.cost.value, 2)} ${state.cost.currency || ''}`.trim() : '—';
-      summary.appendChild(this._metric(costLabel, costValue)); container.appendChild(summary);
+      summary.appendChild(this._metric(state.cost && state.cost.value == null && recordedCost.value != null ? 'Recorded cost' : costLabel, state.cost && state.cost.value == null && recordedCost.value != null ? `${this._formatNumber(recordedCost.value, 2)} ${recordedCost.unit || ''}` : costValue));
+      summary.appendChild(this._metric('Sources with data', `${recordedTotal.sources_with_data || 0} / ${(state.total_sources || []).length}`));
+      summary.appendChild(this._metric('Complete sources', `${recordedTotal.complete_sources || 0} / ${(state.total_sources || []).length}`));
+      container.appendChild(summary);
+      if (state.status === 'partial' || recordedCost.status === 'partial') { const note = document.createElement('p'); note.className = 'muted section'; note.textContent = this._t('Recorded values cover available samples only; gaps are not zero.'); container.appendChild(note); }
       const deviceSection = document.createElement('section'); deviceSection.className = 'section'; const deviceHeading = document.createElement('h3'); deviceHeading.textContent = this._t(state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown')); deviceSection.appendChild(deviceHeading);
       const list = document.createElement('div'); list.className = 'list';
       for (const device of state.devices || []) {
@@ -874,6 +922,8 @@
           status: state.status || 'error',
           total: { label: 'Grid import', value: typeof total.value === 'number' && Number.isFinite(total.value) ? total.value : null, unit: total.unit || 'kWh', source_statistic_ids: Array.isArray(total.source_statistic_ids) ? [...total.source_statistic_ids] : [] },
           cost: { value: typeof cost.value === 'number' && Number.isFinite(cost.value) ? cost.value : null, currency: cost.currency || null, method: cost.method || 'unavailable', rate: typeof cost.rate === 'number' && Number.isFinite(cost.rate) ? cost.rate : null, source_statistic_ids: Array.isArray(cost.source_statistic_ids) ? [...cost.source_statistic_ids] : [], reason: cost.reason || null },
+          recorded_total: state.recorded_total || null,
+          recorded_cost: state.recorded_cost || null,
           total_sources: (state.total_sources || []).map((source) => this._exportSource(source)),
           cost_sources: (state.cost_sources || []).map((source) => this._exportSource(source)),
           devices: (state.devices || []).map((device) => ({ statistic_id: device.statistic_id, label: device.label || device.statistic_id, value: typeof device.value === 'number' && Number.isFinite(device.value) ? device.value : null, unit: device.unit || 'kWh', status: device.status || 'invalid', provenance: device.provenance || 'unknown', included_in_stat: device.included_in_stat || null })),
@@ -883,7 +933,7 @@
     }
 
     _exportSource(source) {
-      return { statistic_id: source.statistic_id, label: source.label || source.statistic_id, role: source.role, value: typeof source.value === 'number' && Number.isFinite(source.value) ? source.value : null, unit: source.unit || null, status: source.status || 'invalid', provenance: source.provenance || 'unknown', included_in_stat: source.included_in_stat || null, reason: source.reason || null };
+      return { statistic_id: source.statistic_id, label: source.label || source.statistic_id, role: source.role, value: typeof source.value === 'number' && Number.isFinite(source.value) ? source.value : null, recorded_value: typeof source.recorded_value === 'number' && Number.isFinite(source.recorded_value) ? source.recorded_value : null, coverage: source.coverage || null, unit: source.unit || null, status: source.status || 'invalid', provenance: source.provenance || 'unknown', included_in_stat: source.included_in_stat || null, reason: source.reason || null };
     }
 
     _csvCell(value) {
@@ -898,6 +948,10 @@
       const base = [report.schema_version, report.generated_at, report.period.key, report.period.start, report.period.end, report.period.time_zone]; const rows = [header];
       rows.push([...base, 'energy', 'total', report.energy.total.source_statistic_ids.join('|'), report.energy.total.label, report.energy.total.value, report.energy.total.unit, report.energy.status, report.source_mode, '', '']);
       rows.push([...base, 'energy', 'cost', report.energy.cost.source_statistic_ids.join('|'), report.energy.cost.method, report.energy.cost.value, report.energy.cost.currency, report.energy.cost.value == null ? (report.energy.cost.reason || 'unavailable') : 'ready', report.energy.cost.method, '', report.energy.cost.reason]);
+      for (const metric of ['recorded_total', 'recorded_cost']) {
+        const value = report.energy[metric];
+        if (value && value.status === 'partial' && value.value != null) rows.push([...base, 'energy', metric, value.source_statistic_ids.join('|'), metric, value.value, value.unit, 'partial', 'recorder_available_samples', '', 'incomplete_coverage']);
+      }
       for (const source of report.energy.total_sources || []) rows.push([...base, 'energy', 'total_source', source.statistic_id, source.label, source.value, source.unit, source.status, source.provenance, source.included_in_stat, source.reason]);
       for (const source of report.energy.cost_sources || []) rows.push([...base, 'energy', 'cost_source', source.statistic_id, source.label, source.value, source.unit, source.status, source.provenance, source.included_in_stat, source.reason]);
       for (const device of report.energy.devices) rows.push([...base, 'energy', 'device', device.statistic_id, device.label, device.value, device.unit, device.status, device.provenance, device.included_in_stat, '']);
