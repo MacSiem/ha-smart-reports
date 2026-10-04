@@ -54,7 +54,7 @@ for (const [status, text] of [
   ['permission_denied', 'cannot read the selected statistics'],
   ['error', 'Couldn’t load energy statistics'],
   ['no_data', 'No recorded energy change'],
-  ['partial', 'Partial data'],
+  ['partial', 'Partial history'],
   ['ready', 'Grid import'],
 ]) {
   test(`renders ${status} energy state`, async () => {
@@ -77,11 +77,11 @@ for (const [status, text] of [
 
 test('zero is rendered differently from no_data', async () => {
   const { card, dom } = await mountCard({ hass: successHass(0), config: explicitConfig() });
-  assert.match(card.shadowRoot.textContent, /0\.0\s*kWh/);
+  assert.match(card.shadowRoot.textContent, /0\.00\s*kWh/);
   assert.doesNotMatch(card.shadowRoot.textContent, /No recorded energy change/i);
   card._setEnergyViewState({ status: 'no_data', period: fixedPeriod, total: { value: null }, cost: { value: null }, devices: [], warnings: [] });
   assert.match(card.shadowRoot.textContent, /No recorded energy change/i);
-  assert.doesNotMatch(card.shadowRoot.textContent, /0\.0\s*kWh/);
+  assert.doesNotMatch(card.shadowRoot.textContent, /0\.00\s*kWh/);
   card.remove(); dom.window.close();
 });
 

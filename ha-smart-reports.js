@@ -766,7 +766,7 @@
           : { status, value: null, unit: 'kWh', source_statistic_ids: totalSources.map((source) => source.statistic_id) };
         let cost = this._calculateCost(completeTotal, costSources, this._config);
         if (selection.cost_configuration_incomplete) cost = { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: costSources.map((source) => source.statistic_id), reason: 'partial_cost' };
-        if (status !== 'ready' && cost.method !== 'cost_statistics') {
+        if (status !== 'ready') {
           const reason = status === 'no_data' ? 'no_data' : (status === 'unsupported' ? 'unsupported_source' : 'partial_energy');
           cost = { ...cost, value: null, method: 'unavailable', reason };
         }

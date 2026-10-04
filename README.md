@@ -91,8 +91,8 @@ values while loading; errors never export stale data.
   the complete energy total is withheld instead of being shown as zero.
   **Recorded consumption** separately shows only validated samples that exist,
   with source counts and coverage. It is not a complete household total.
-  Independently complete cost statistics remain available; incomplete cost
-  samples appear separately as **Recorded cost** with their own range.
+  Cost samples appear separately as **Recorded cost** with their own range,
+  including when the combined complete report cost is unavailable.
 - The card distinguishes loading, not configured, unsupported, permission
   denied, request error, no data, partial data and ready states.
 

@@ -84,10 +84,10 @@ test('F02 partial UI, JSON v2 and CSV retain per-source evidence and safe hostil
   const document = JSON.parse(JSON.stringify(card._buildExportDocument(FIXED_NOW)));
   assert.deepEqual(document.energy.warnings, []);
   assert.deepEqual(document.energy.total_sources, [{
-    statistic_id: 'sensor.grid', label: hostile, role: 'total', value: 4, unit: 'kWh', status: 'ready', provenance: 'explicit', included_in_stat: null, reason: null,
+    statistic_id: 'sensor.grid', label: hostile, role: 'total', value: 4, recorded_value: 4, coverage: { observed_hours: 158, expected_hours: 158, first_sample: '2026-08-23T22:00:00.000Z', last_sample: '2026-08-30T12:00:00.000Z' }, unit: 'kWh', status: 'ready', provenance: 'explicit', included_in_stat: null, reason: null,
   }]);
   assert.deepEqual(document.energy.cost_sources, [{
-    statistic_id: 'sensor.cost', label: '=COST', role: 'cost', value: null, unit: 'PLN', status: 'partial', provenance: 'explicit', included_in_stat: null, reason: 'missing_change',
+    statistic_id: 'sensor.cost', label: '=COST', role: 'cost', value: null, recorded_value: null, coverage: { observed_hours: 0, expected_hours: 158, first_sample: null, last_sample: null }, unit: 'PLN', status: 'partial', provenance: 'explicit', included_in_stat: null, reason: 'missing_change',
   }]);
   const csv = card._buildCsv(document);
   assert.match(csv, /energy,cost,sensor\.cost,unavailable,,,partial_cost,unavailable,,partial_cost/);

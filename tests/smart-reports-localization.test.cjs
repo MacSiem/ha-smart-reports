@@ -33,7 +33,7 @@ for (const language of ['pl', 'pl-PL', 'en']) {
       assert.deepEqual(Array.from(card.shadowRoot.getElementById('periodSelect').options, node => node.textContent), pl ? ['Dzisiaj', '7 dni', '30 dni'] : ['Today', '7 days', '30 days']);
       assert.equal(card.shadowRoot.getElementById('exportCsvBtn').textContent, pl ? 'Eksport CSV' : 'Export CSV');
       assert.equal(card.shadowRoot.getElementById('tabs').getAttribute('aria-label'), pl ? 'Sekcje raportu' : 'Report sections');
-      assert.deepEqual(labelTexts(card), pl ? ['Pobór z sieci', 'Koszt niedostępny'] : ['Grid import', 'Cost unavailable']);
+      assert.deepEqual(labelTexts(card), pl ? ['Pobór z sieci', 'Koszt niedostępny', 'Źródła z danymi', 'Źródła z pełną historią'] : ['Grid import', 'Cost unavailable', 'Sources with data', 'Complete sources']);
       assert.match(card.shadowRoot.querySelector('.report-context').textContent, pl ? /Okres: 7 dni.*Strefa czasowa:.*Źródła:/ : /Period: 7 days.*Time zone:.*Sources:/);
       card._selectTab('automations');
       assert.deepEqual(labelTexts(card), pl ? ['Wszystkie automatyzacje', 'Aktywne', 'Wyłączone', 'Uruchomione dzisiaj'] : ['Total automations', 'Active', 'Disabled', 'Triggered today']);
@@ -120,7 +120,7 @@ test('automation empty view, known warning codes, and settings follow HA languag
     assert.match(card.shadowRoot.getElementById('content').textContent, /included_in_stat jest dozwolone tylko dla źródeł urządzeń: sensor.UserEnergy/);
     const editor = dom.window.document.createElement('ha-smart-reports-editor');
     editor.setConfig({ title: 'User Energy', currency: 'PLN' }); editor.hass = hass;
-    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Tytuł', 'Waluta']);
+    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Tytuł', 'Waluta', 'Tryb źródeł', 'Identyfikatory statystyk zużycia', 'Identyfikatory statystyk urządzeń', 'Identyfikatory statystyk kosztów']);
     assert.equal(editor.shadowRoot.getElementById('cf_title').value, 'User Energy');
     let changed;
     editor.addEventListener('config-changed', event => { changed = event.detail.config; });
@@ -128,7 +128,7 @@ test('automation empty view, known warning codes, and settings follow HA languag
     editor.shadowRoot.getElementById('cf_title').dispatchEvent(new dom.window.Event('input'));
     assert.equal(changed.title, 'Edited title'); assert.equal(changed.currency, 'PLN');
     hass.language = 'en'; editor.hass = hass;
-    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Title', 'Currency']);
+    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Title', 'Currency', 'Source mode', 'Total statistic IDs', 'Device statistic IDs', 'Cost statistic IDs']);
     assert.equal(editor.shadowRoot.getElementById('cf_title').value, 'Edited title');
   } finally { dom.window.close(); }
 });

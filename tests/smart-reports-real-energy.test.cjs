@@ -186,8 +186,9 @@ test('complete recorded cost remains available when energy history is partial', 
   try {
     assert.equal(card._energyViewState.status, 'partial');
     assert.equal(card._energyViewState.total.value, null);
-    assert.equal(card._energyViewState.cost.value, 0.25);
-    assert.equal(card._energyViewState.cost.method, 'cost_statistics');
-    assert.match(card.shadowRoot.textContent, /Actual cost/);
+    assert.equal(card._energyViewState.cost.value, null);
+    assert.equal(card._energyViewState.recorded_cost.value, 0.25);
+    assert.equal(card._energyViewState.recorded_cost.status, 'ready');
+    assert.match(card.shadowRoot.textContent, /Recorded cost/);
   } finally { card.remove(); dom.window.close(); }
 });

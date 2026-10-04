@@ -33,6 +33,13 @@ function valuesResponse(values) {
   };
 }
 
+// Schema2 consumers may ignore additive recorded-history fields.
+function completeReportFields(report) {
+  const { recorded_total, recorded_cost, daily, ...energy } = report.energy;
+  const legacySource = ({ recorded_value, coverage, ...source }) => source;
+  return { ...report, energy: { ...energy, total_sources: energy.total_sources.map(legacySource), cost_sources: energy.cost_sources.map(legacySource), devices: energy.devices.map(legacySource) } };
+}
+
 function costCsvRow(card, documentValue) {
   return card._buildCsv(documentValue).split('\n').find((line) => line.includes(',energy,cost,'));
 }
@@ -68,7 +75,7 @@ test('N-01 no_data total with ready actual cost withholds combined cost in UI JS
     reason: 'no_data',
   });
   const documentValue = JSON.parse(JSON.stringify(card._buildExportDocument(FIXED_NOW)));
-  assert.deepEqual(documentValue, {
+  assert.deepEqual(completeReportFields(documentValue), {
     schema_version: 2,
     generated_at: '2026-08-30T12:00:00.000Z',
     period: FIXED_PERIOD,
@@ -116,7 +123,7 @@ test('N-01 unsupported total with ready actual cost never exposes combined cost'
     reason: 'unsupported_source',
   });
   const documentValue = JSON.parse(JSON.stringify(card._buildExportDocument(FIXED_NOW)));
-  assert.deepEqual(documentValue, {
+  assert.deepEqual(completeReportFields(documentValue), {
     schema_version: 2,
     generated_at: '2026-08-30T12:00:00.000Z',
     period: FIXED_PERIOD,
@@ -189,7 +196,7 @@ test('N-01 measured zero total and zero actual cost remain ready zero', async ()
     { value: 0, currency: 'PLN', method: 'cost_statistics', rate: null, source_statistic_ids: ['sensor.cost'], reason: null },
   );
   const documentValue = JSON.parse(JSON.stringify(card._buildExportDocument(FIXED_NOW)));
-  assert.deepEqual(documentValue, {
+  assert.deepEqual(completeReportFields(documentValue), {
     schema_version: 2,
     generated_at: '2026-08-30T12:00:00.000Z',
     period: FIXED_PERIOD,
@@ -400,7 +407,7 @@ test('N-05 ready UI exposes exact period range timezone and total/cost source co
   assert.ok(context, 'expected a visible report context line');
   assert.equal(
     context.textContent,
-    'Period: 7 days · Aug 24, 2026 – Aug 30, 2026 · Time zone: Europe/Warsaw · Sources: 1 total, 1 cost',
+    'Period: 7 days · Aug 24, 2026, 12:00 AM – Aug 30, 2026, 2:00 PM · Time zone: Europe/Warsaw · Sources: 1 total, 1 cost',
   );
   assert.equal(context.dataset.periodStart, '2026-08-23T22:00:00.000Z');
   assert.equal(context.dataset.periodEnd, '2026-08-30T12:00:00.000Z');
@@ -430,7 +437,7 @@ test('N-05 partial UI exposes exact period range timezone and total/cost source 
   assert.ok(context, 'expected a visible report context line');
   assert.equal(
     context.textContent,
-    'Period: 7 days · Aug 24, 2026 – Aug 30, 2026 · Time zone: Europe/Warsaw · Sources: 2 total, 1 cost',
+    'Period: 7 days · Aug 24, 2026, 12:00 AM – Aug 30, 2026, 2:00 PM · Time zone: Europe/Warsaw · Sources: 2 total, 1 cost',
   );
   assert.equal(context.dataset.periodStart, '2026-08-23T22:00:00.000Z');
   assert.equal(context.dataset.periodEnd, '2026-08-30T12:00:00.000Z');
