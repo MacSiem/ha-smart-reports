@@ -173,3 +173,21 @@ test('native editor exposes explicit sources while preserving existing advanced 
     assert.deepEqual(Array.from(result.energy_total_statistics, x => typeof x === 'string' ? x : x.statistic_id), ['sensor.grid', 'sensor.other']);
   } finally { dom.window.close(); }
 });
+
+
+test('complete recorded cost remains available when energy history is partial', async () => {
+  const hass = makeHass({ metadataById: { 'sensor.grid_import': metadata(), 'sensor.cost': metadata('PLN') }, deferred: {
+    'recorder/statistics_during_period': m => Promise.resolve({
+      'sensor.grid_import': calendarSeries(m.start_time, m.end_time, [4]).slice(-1).map(b => ({ ...b, change: 2 })),
+      'sensor.cost': calendarSeries(m.start_time, m.end_time, [0.25]),
+    }),
+  } });
+  const { card, dom } = await mountCard({ hass, config: explicitConfig({ energy_cost_statistics: ['sensor.cost'] }) });
+  try {
+    assert.equal(card._energyViewState.status, 'partial');
+    assert.equal(card._energyViewState.total.value, null);
+    assert.equal(card._energyViewState.cost.value, 0.25);
+    assert.equal(card._energyViewState.cost.method, 'cost_statistics');
+    assert.match(card.shadowRoot.textContent, /Actual cost/);
+  } finally { card.remove(); dom.window.close(); }
+});
