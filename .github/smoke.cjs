@@ -84,6 +84,21 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms));
       if (!el.shadowRoot) problem = 'no shadowRoot';
       else if (len < 50) problem = 'empty render (len=' + len + ')';
       else if (asyncErr) problem = 'async error: ' + asyncErr;
+      if (!problem && t.tag === 'ha-smart-reports') {
+        const footer = el.shadowRoot.querySelector('.donate-section[data-source="own-card"]');
+        if (!footer || footer.hidden) problem = 'admin support link missing';
+        else {
+          el.setConfig({ type: 'custom:' + t.tag, show_support: false });
+          if (!footer.hidden) problem = 'show_support false did not hide link';
+          el.setConfig({ type: 'custom:' + t.tag });
+          const guestHass = mockHass(); guestHass.user.is_admin = false;
+          el.hass = guestHass;
+          if (!footer.hidden) problem = 'guest saw support link';
+          el.hass = mockHass();
+          footer.querySelector('.support-dismiss')?.click();
+          if (!footer.hidden || window.localStorage.getItem('ha-smart-reports-support-dismissed') !== '1') problem = 'support dismissal was not persisted';
+        }
+      }
       window.close();
     } catch (e) { problem = (e && e.message) ? e.message : String(e); }
     if (problem) fail.push(`${t.tag}  (${path.basename(t.file)})  -> ${problem}`); else pass++;

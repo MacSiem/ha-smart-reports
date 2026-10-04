@@ -1,7 +1,7 @@
 /**
  * Home Assistant Smart Reports Card
  * Recorder-backed energy reports, automation statistics, and system overview.
- * Version: 4.0.0
+ * Version: 4.0.1
  */
 
 (function registerHASmartReports() {
@@ -9,9 +9,116 @@
 
   if (customElements.get('ha-smart-reports')) return;
 
-  const VERSION = '4.0.0';
+  const VERSION = '4.0.1';
   const VALID_PERIODS = new Set(['1d', '7d', '30d']);
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
+
+  const PL = Object.freeze({
+    "Recorder-backed": "Na podstawie danych rejestratora",
+    "Report sections": "Sekcje raportu",
+    "Energy": "Energia",
+    "Automations": "Automatyzacje",
+    "System": "System",
+    "Period": "Okres",
+    "Energy report period": "Okres raportu energii",
+    "Today": "Dzisiaj",
+    "7 days": "7 dni",
+    "30 days": "30 dni",
+    "Export CSV": "Eksport CSV",
+    "Export JSON": "Eksport JSON",
+    "Optional support for HA Tools": "Dobrowolne wsparcie HA Tools",
+    "Dismiss support link": "Ukryj odnośnik wsparcia",
+    "Enable at least one report section.": "Włącz co najmniej jedną sekcję raportu.",
+    "Turn on Energy, Automations, or System in the card configuration.": "Włącz Energię, Automatyzacje lub System w konfiguracji karty.",
+    "Loading recorder statistics…": "Wczytywanie statystyk rejestratora…",
+    "This report uses recorded changes for the selected local-calendar period.": "Raport wykorzystuje zarejestrowane zmiany z wybranego okresu według lokalnego kalendarza.",
+    "Configure Energy Dashboard or select explicit statistics.": "Skonfiguruj panel energii lub wybierz statystyki.",
+    "Smart Reports does not discover sensors by substring and does not use live entity states.": "Smart Reports nie wyszukuje czujników po fragmencie nazwy i nie korzysta z bieżących stanów encji.",
+    "Open Energy configuration": "Otwórz konfigurację energii",
+    "Recorder statistics are unavailable on this Home Assistant instance.": "Statystyki rejestratora są niedostępne w tej instancji Home Assistant.",
+    "Check recorder support and the selected statistic metadata.": "Sprawdź obsługę rejestratora i metadane wybranych statystyk.",
+    "Your account cannot read the selected statistics.": "Twoje konto nie może odczytać wybranych statystyk.",
+    "Use an account with recorder statistics access.": "Użyj konta z dostępem do statystyk rejestratora.",
+    "Couldn’t load energy statistics.": "Nie udało się wczytać statystyk energii.",
+    "The previous period is not shown as current data.": "Dane z poprzedniego okresu nie są wyświetlane jako bieżące.",
+    "Technical details": "Szczegóły techniczne",
+    "Retry": "Ponów",
+    "No recorded energy change in this period.": "Brak zarejestrowanych zmian energii w tym okresie.",
+    "Measured zero is rendered separately; this state means no recorder samples were available.": "Zmierzone zero jest wyświetlane osobno; ten stan oznacza brak próbek rejestratora.",
+    "Partial data — totals and cost are withheld.": "Dane częściowe — suma i koszt nie są wyświetlane.",
+    "At least one required statistic was missing, invalid, incomplete, or used an incompatible currency.": "Co najmniej jedna wymagana statystyka była brakująca, nieprawidłowa, niepełna lub używała niezgodnej waluty.",
+    "Time zone": "Strefa czasowa",
+    "Sources": "Źródła",
+    "total": "suma",
+    "cost": "koszt",
+    "Exact recorder window": "Dokładny zakres rejestratora",
+    "Grid import": "Pobór z sieci",
+    "Actual cost": "Rzeczywisty koszt",
+    "Estimated cost": "Szacowany koszt",
+    "Cost unavailable": "Koszt niedostępny",
+    "Device breakdown unavailable": "Zestawienie urządzeń niedostępne",
+    "Reported devices — partial": "Urządzenia w raporcie — dane częściowe",
+    "Device breakdown": "Zestawienie urządzeń",
+    "No device statistics are configured.": "Nie skonfigurowano statystyk urządzeń.",
+    "Source evidence": "Dane źródłowe",
+    "day_suffix": " dn.",
+    "Never": "Nigdy",
+    "now": "teraz",
+    "Total automations": "Wszystkie automatyzacje",
+    "Active": "Aktywne",
+    "Disabled": "Wyłączone",
+    "Triggered today": "Uruchomione dzisiaj",
+    "Recent activity": "Ostatnia aktywność",
+    "No automation entities are available.": "Brak dostępnych encji automatyzacji.",
+    "System overview": "Przegląd systemu",
+    "Entities": "Encje",
+    "Unavailable": "Niedostępne",
+    "Unknown": "Nieznane",
+    "Domains": "Domeny",
+    "Health check": "Stan systemu",
+    "Entity availability": "Dostępność encji",
+    "Known states": "Znane stany",
+    "Total entities": "Wszystkie encje",
+    "Title": "Tytuł",
+    "Currency": "Waluta",
+    "on": "włączona",
+    "off": "wyłączona",
+    "unknown": "nieznany",
+    "unavailable": "niedostępny",
+    "ready": "gotowe",
+    "partial": "częściowe",
+    "no_data": "brak danych",
+    "invalid": "nieprawidłowe",
+    "unsupported_unit": "nieobsługiwana jednostka",
+    "missing_statistics": "brak statystyk",
+    "incomplete_period": "niepełny okres",
+    "missing_metadata": "brak metadanych",
+    "missing_rate": "brak stawki",
+    "unsupported": "nieobsługiwane",
+    "incompatible_energy_metadata": "niezgodne metadane energii",
+    "incompatible_currency_metadata": "niezgodne metadane waluty",
+    "invalid_bucket": "nieprawidłowy przedział",
+    "outside_requested_window": "poza wybranym zakresem",
+    "missing_change": "brak danych zmiany",
+    "incomplete_coverage": "niepełne pokrycie okresu",
+    "invalid_relationship": "nieprawidłowe powiązanie urządzeń",
+    "nested_parent_missing": "brak nadrzędnego źródła urządzenia",
+    "currency_mismatch": "niezgodna waluta",
+    "partial_cost": "niepełne dane kosztu",
+    "missing_currency": "brak waluty",
+    "energy_data_unavailable": "dane energii niedostępne",
+    "included_in_stat is only valid for device sources: ": "included_in_stat jest dozwolone tylko dla źródeł urządzeń: "
+});
+
+  function languageOf(hass) {
+    return (hass && hass.locale && hass.locale.language) || (hass && hass.language) || navigator.language || 'en';
+  }
+
+  function translate(hass, text) {
+    const language = languageOf(hass);
+    if (/^pl(?:[-_]|$)/i.test(language) && Object.prototype.hasOwnProperty.call(PL, text)) return PL[text];
+    return text === 'day_suffix' ? 'd' : text;
+  }
 
   function uniqueById(items) {
     const seen = new Set();
@@ -101,6 +208,7 @@
     connectedCallback() {
       this._connected = true;
       this._renderScaffold();
+      this._syncTheme();
       this._syncTabs();
       if (this._hass) this._scheduleRefresh(true);
     }
@@ -113,8 +221,16 @@
     }
 
     set hass(hass) {
+      const language = languageOf(hass);
+      const languageChanged = language !== this._language;
+      this._language = language;
       this._hass = hass;
       this._syncTheme();
+      this._syncSupport();
+      if (languageChanged && this._scaffoldRendered) {
+        this._syncLabels();
+        this._syncTabs();
+      }
       if (this._connected && hass) this._scheduleRefresh(false);
     }
 
@@ -131,6 +247,7 @@
         show_energy: next.show_energy !== false,
         show_automations: next.show_automations !== false,
         show_system: next.show_system !== false,
+        show_support: next.show_support !== false,
         energy_source_mode: next.energy_source_mode === 'explicit' ? 'explicit' : 'dashboard',
         energy_total_statistics: Array.isArray(next.energy_total_statistics) ? next.energy_total_statistics : [],
         energy_device_statistics: Array.isArray(next.energy_device_statistics) ? next.energy_device_statistics : [],
@@ -142,6 +259,7 @@
         currency,
       };
       if (this._scaffoldRendered) {
+        this._syncSupport();
         this._invalidateEnergyRequest();
         this._syncTabs();
         this._scheduleRefresh(true);
@@ -150,7 +268,7 @@
 
     getCardSize() { return 5; }
 
-    getGridOptions() { return { rows: 5, columns: 12, min_rows: 3, min_columns: 6 }; }
+    getGridOptions() { return { columns: 12, min_rows: 3, min_columns: 6 }; }
 
     static getStubConfig() { return { title: 'Smart Reports', energy_source_mode: 'dashboard' }; }
 
@@ -161,22 +279,28 @@
       this.shadowRoot.innerHTML = `
         <style>
           :host{--sr-primary:var(--primary-color,#3b82f6);--sr-card:var(--card-background-color,var(--ha-card-background,#fff));--sr-text:var(--primary-text-color,#172033);--sr-muted:var(--secondary-text-color,#667085);--sr-border:var(--divider-color,#d9e0ea);--sr-good:#15803d;--sr-warn:#b45309;--sr-bad:#b42318;display:block;color:var(--sr-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}.card{background:var(--sr-card);border:1px solid var(--sr-border);border-radius:16px;overflow:hidden}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}h2,h3,p{margin:0}h2{font-size:20px}h3{font-size:15px}.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--sr-border);overflow-x:auto}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--sr-muted);padding:10px 12px}.tab.active{color:var(--sr-primary);border-bottom-color:var(--sr-primary);font-weight:650}.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 0}.toolbar-actions{display:flex;flex-wrap:wrap;gap:8px}.control,.action{min-height:38px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);padding:8px 11px}.action.primary{background:var(--sr-primary);border-color:var(--sr-primary);color:#fff}.action:disabled{cursor:not-allowed;opacity:.45}.pane{padding:20px;min-height:220px}.state{display:grid;gap:12px;place-items:start;padding:22px;border:1px solid var(--sr-border);border-radius:12px}.state[role="status"]{border-left:4px solid var(--sr-primary)}.state.partial{border-left-color:var(--sr-warn)}.state.error{border-left-color:var(--sr-bad)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{border:1px solid var(--sr-border);border-radius:12px;padding:14px}.metric-label,.muted{color:var(--sr-muted);font-size:12px}.metric-value{margin-top:5px;font-size:23px;font-weight:720}.section{margin-top:18px}.list{display:grid;gap:8px;margin-top:10px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--sr-border);padding:9px 2px}.row.child{padding-left:24px}.row-name{overflow-wrap:anywhere}.status-ready{color:var(--sr-good)}.warning{color:var(--sr-warn)}.fixed-link{color:var(--sr-primary)}.donate-section{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;border-top:1px solid var(--sr-border);padding:13px 18px;color:var(--sr-muted);font-size:12px}.donate-section a{color:var(--sr-primary);text-decoration:none}[hidden]{display:none!important}@media(max-width:520px){.header,.toolbar{align-items:stretch;flex-direction:column}.toolbar-actions{width:100%}.action{flex:1}}
+          :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
         </style>
         <ha-card class="card">
-          <div class="header"><h2 id="title"></h2><span class="muted">Recorder-backed</span></div>
-          <nav class="tabs" id="tabs" aria-label="Report sections">
-            <button class="tab" type="button" data-tab="energy">Energy</button>
-            <button class="tab" type="button" data-tab="automations">Automations</button>
-            <button class="tab" type="button" data-tab="system">System</button>
+          <div class="header"><h2 id="title"></h2><span class="muted" id="recorderLabel">${this._t("Recorder-backed")}</span></div>
+          <nav class="tabs" id="tabs" aria-label="${this._t("Report sections")}">
+            <button class="tab" type="button" data-tab="energy">${this._t("Energy")}</button>
+            <button class="tab" type="button" data-tab="automations">${this._t("Automations")}</button>
+            <button class="tab" type="button" data-tab="system">${this._t("System")}</button>
           </nav>
           <div class="toolbar" id="energyToolbar">
-            <label>Period <select class="control" id="periodSelect" aria-label="Energy report period"><option value="1d">Today</option><option value="7d">7 days</option><option value="30d">30 days</option></select></label>
-            <div class="toolbar-actions"><button class="action" type="button" id="exportCsvBtn" disabled>Export CSV</button><button class="action primary" type="button" id="exportJsonBtn" disabled>Export JSON</button></div>
+            <label><span id="periodLabel">${this._t("Period")}</span> <select class="control" id="periodSelect" aria-label="${this._t("Energy report period")}"><option value="1d">${this._t("Today")}</option><option value="7d">${this._t("7 days")}</option><option value="30d">${this._t("30 days")}</option></select></label>
+            <div class="toolbar-actions"><button class="action" type="button" id="exportCsvBtn" disabled>${this._t("Export CSV")}</button><button class="action primary" type="button" id="exportJsonBtn" disabled>${this._t("Export JSON")}</button></div>
           </div>
           <main class="pane" id="content"></main>
-          <footer class="donate-section" data-source="own-card"><span>Support HA Tools</span><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">Buy me a coffee</a><a href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">PayPal</a></footer>
+          <footer class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">${this._t("Optional support for HA Tools")}</a><button type="button" class="support-dismiss" aria-label="${this._t("Dismiss support link")}" style="margin-left:auto;padding:2px 6px;min-height:0;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></footer>
         </ha-card>`;
       this._scaffoldRendered = true;
+      this.shadowRoot.querySelector('.support-dismiss').addEventListener('click', () => {
+        try { localStorage.setItem('ha-smart-reports-support-dismissed', '1'); } catch (_) {}
+        this._syncSupport();
+      });
+      this._syncSupport();
       this.shadowRoot.getElementById('periodSelect').value = this._period;
       this.shadowRoot.getElementById('periodSelect').addEventListener('change', (event) => {
         const period = VALID_PERIODS.has(event.target.value) ? event.target.value : '7d';
@@ -190,8 +314,52 @@
       this.shadowRoot.getElementById('exportCsvBtn').addEventListener('click', () => this._downloadExport('csv'));
     }
 
+    _t(text) { return translate(this._hass, text); }
+
+    _warningText(text) {
+      const prefix = 'included_in_stat is only valid for device sources: ';
+      return typeof text === 'string' && text.startsWith(prefix)
+        ? this._t(prefix) + text.slice(prefix.length) : this._t(text);
+    }
+
+    _syncLabels() {
+      const root = this.shadowRoot;
+      root.getElementById('recorderLabel').textContent = this._t('Recorder-backed');
+      root.getElementById('tabs').setAttribute('aria-label', this._t('Report sections'));
+      for (const button of root.querySelectorAll('[data-tab]')) {
+        button.textContent = this._t({ energy: 'Energy', automations: 'Automations', system: 'System' }[button.dataset.tab]);
+      }
+      root.getElementById('periodLabel').textContent = this._t('Period');
+      const select = root.getElementById('periodSelect');
+      select.setAttribute('aria-label', this._t('Energy report period'));
+      for (const option of select.options) option.textContent = this._t({ '1d': 'Today', '7d': '7 days', '30d': '30 days' }[option.value]);
+      root.getElementById('exportCsvBtn').textContent = this._t('Export CSV');
+      root.getElementById('exportJsonBtn').textContent = this._t('Export JSON');
+      root.querySelector('.donate-section a').textContent = this._t('Optional support for HA Tools');
+      root.querySelector('.support-dismiss').setAttribute('aria-label', this._t('Dismiss support link'));
+    }
+
     _syncTheme() {
-      if (this._hass) this.classList.toggle('bento-dark', Boolean(this._hass.themes && this._hass.themes.darkMode));
+      let dark = Boolean(this._hass && this._hass.themes && this._hass.themes.darkMode);
+      const surface = this.shadowRoot.querySelector('.card');
+      if (this.isConnected && surface) {
+        // HA custom themes can be dark while themes.darkMode remains false.
+        // Reading the rendered surface also resolves aliases and CSS color syntax.
+        const background = getComputedStyle(surface).backgroundColor;
+        const rgb = background.match(/^rgba?\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\s*\)$/);
+        if (rgb && (rgb[4] === undefined || Number(rgb[4]) === 1)) {
+          const brightness = (0.2126 * Number(rgb[1]) + 0.7152 * Number(rgb[2]) + 0.0722 * Number(rgb[3])) / 255;
+          dark = brightness < 0.5;
+        }
+      }
+      this.classList.toggle('bento-dark', dark);
+    }
+
+    _syncSupport() {
+      if (!this._scaffoldRendered) return;
+      let dismissed = false;
+      try { dismissed = localStorage.getItem('ha-smart-reports-support-dismissed') === '1'; } catch (_) {}
+      this.shadowRoot.querySelector('.donate-section[data-source="own-card"]').hidden = !this._hass?.user?.is_admin || this._config.show_support === false || dismissed;
     }
 
     _availableTabs() {
@@ -325,7 +493,9 @@
       const local = this._partsInZone(now, timeZone);
       const daysBack = safeKey === '1d' ? 0 : (safeKey === '30d' ? 29 : 6);
       const startDate = this._addCalendarDays(local, -daysBack);
-      return { key: safeKey, start: this._zonedDateTimeToUtc({ ...startDate, hour: 0, minute: 0, second: 0 }, timeZone), end: now, time_zone: timeZone };
+      const start = this._zonedDateTimeToUtc({ ...startDate, hour: 0, minute: 0, second: 0 }, timeZone);
+      const end = new Date(Math.max(start.getTime(), Math.floor(now.getTime() / 3600000) * 3600000));
+      return { key: safeKey, start, end, time_zone: timeZone };
     }
 
     _periodDescriptor() {
@@ -441,7 +611,8 @@
         if (effectiveBuckets[index].start - effectiveBuckets[index - 1].end > 1000) return { status: 'partial', value: null, unit: normalizedUnit };
       }
       if (startMs !== null && endMs !== null) {
-        if (effectiveBuckets[0].start - startMs > 3601000 || endMs - effectiveBuckets[effectiveBuckets.length - 1].end > 3601000) return { status: 'partial', value: null, unit: normalizedUnit, reason: 'incomplete_coverage' };
+        // A boundary gap or a straddling bucket cannot represent the requested total.
+        if (Math.abs(effectiveBuckets[0].start - startMs) > 1000 || Math.abs(endMs - effectiveBuckets[effectiveBuckets.length - 1].end) > 1000) return { status: 'partial', value: null, unit: normalizedUnit, reason: 'incomplete_coverage' };
       }
       let value = effectiveBuckets.reduce((sum, bucket) => sum + bucket.change, 0);
       if (role !== 'cost') {
@@ -517,7 +688,7 @@
         const ids = selection.ordered.map((source) => source.statistic_id);
         const metadataResponse = await this._hass.callWS({ type: 'recorder/get_statistics_metadata', statistic_ids: ids });
         if (!this._isCurrentEnergyRequest(generation)) return;
-        const statisticsResponse = await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: period.start, end_time: period.end, statistic_ids: ids, period: 'hour', types: ['change'] });
+        const statisticsResponse = new Date(period.end) <= new Date(period.start) ? {} : await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: period.start, end_time: period.end, statistic_ids: ids, period: 'hour', types: ['change'] });
         if (!this._isCurrentEnergyRequest(generation)) return;
         const metadataById = this._metadataMap(metadataResponse); const statisticsById = statisticsResponse && typeof statisticsResponse === 'object' ? statisticsResponse : {};
         const window = { start: new Date(period.start), end: new Date(period.end) };
@@ -555,8 +726,8 @@
 
     _stateBlock(title, detail, className, role) {
       const block = document.createElement('section'); block.className = `state ${className || ''}`.trim(); if (role) block.setAttribute('role', role);
-      const heading = document.createElement('h3'); heading.textContent = title; block.appendChild(heading);
-      if (detail) { const paragraph = document.createElement('p'); paragraph.className = 'muted'; paragraph.textContent = detail; block.appendChild(paragraph); }
+      const heading = document.createElement('h3'); heading.textContent = this._t(title); block.appendChild(heading);
+      if (detail) { const paragraph = document.createElement('p'); paragraph.className = 'muted'; paragraph.textContent = this._t(detail); block.appendChild(paragraph); }
       return block;
     }
 
@@ -568,77 +739,78 @@
       if (state.status === 'loading' || state.status === 'idle') { container.appendChild(this._stateBlock('Loading recorder statistics…', 'This report uses recorded changes for the selected local-calendar period.', '', 'status')); return; }
       if (state.status === 'not_configured') {
         const block = this._stateBlock('Configure Energy Dashboard or select explicit statistics.', 'Smart Reports does not discover sensors by substring and does not use live entity states.', '', 'status');
-        for (const warningText of state.warnings || []) { const warning = document.createElement('p'); warning.className = 'warning'; warning.textContent = warningText; block.appendChild(warning); }
-        const link = document.createElement('a'); link.className = 'fixed-link'; link.href = '/config/energy'; link.textContent = 'Open Energy configuration'; block.appendChild(link); container.appendChild(block); return;
+        for (const warningText of state.warnings || []) { const warning = document.createElement('p'); warning.className = 'warning'; warning.textContent = this._warningText(warningText); block.appendChild(warning); }
+        const link = document.createElement('a'); link.className = 'fixed-link'; link.href = '/config/energy'; link.textContent = this._t('Open Energy configuration'); block.appendChild(link); container.appendChild(block); return;
       }
       if (state.status === 'unsupported') { container.appendChild(this._stateBlock('Recorder statistics are unavailable on this Home Assistant instance.', 'Check recorder support and the selected statistic metadata.', 'error', 'alert')); return; }
       if (state.status === 'permission_denied') { container.appendChild(this._stateBlock('Your account cannot read the selected statistics.', 'Use an account with recorder statistics access.', 'error', 'alert')); return; }
       if (state.status === 'error') {
         const block = this._stateBlock('Couldn’t load energy statistics.', 'The previous period is not shown as current data.', 'error', 'alert');
-        const details = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = 'Technical details'; const code = document.createElement('code'); code.textContent = state.code == null ? 'unknown_error' : String(state.code); details.append(summary, code); block.appendChild(details);
-        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'action'; retry.textContent = 'Retry'; retry.addEventListener('click', () => this._scheduleRefresh(true), { once: true }); block.appendChild(retry); container.appendChild(block); return;
+        const details = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = this._t('Technical details'); const code = document.createElement('code'); code.textContent = state.code == null ? 'unknown_error' : String(state.code); details.append(summary, code); block.appendChild(details);
+        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'action'; retry.textContent = this._t('Retry'); retry.addEventListener('click', () => this._scheduleRefresh(true), { once: true }); block.appendChild(retry); container.appendChild(block); return;
       }
       if (state.status === 'no_data') { container.appendChild(this._stateBlock('No recorded energy change in this period.', 'Measured zero is rendered separately; this state means no recorder samples were available.', '', 'status')); return; }
       if (state.status === 'partial') container.appendChild(this._stateBlock('Partial data — totals and cost are withheld.', 'At least one required statistic was missing, invalid, incomplete, or used an incompatible currency.', 'partial', 'status'));
       if (!['ready', 'partial'].includes(state.status)) return;
       const period = state.period || {}; const context = document.createElement('p'); context.className = 'muted report-context';
       const timeZone = period.time_zone || this._timeZone();
-      const periodLabel = period.key === '1d' ? 'Today' : (period.key === '30d' ? '30 days' : (period.key === '7d' ? '7 days' : (period.key || '—')));
-      context.textContent = `Period: ${periodLabel} · ${this._formatPeriodDate(period.start, timeZone)} – ${this._formatPeriodDate(period.end, timeZone)} · Time zone: ${timeZone} · Sources: ${(state.total_sources || []).length} total, ${(state.cost_sources || []).length} cost`;
+      const periodLabel = this._t(period.key === '1d' ? 'Today' : (period.key === '30d' ? '30 days' : (period.key === '7d' ? '7 days' : (period.key || '—'))));
+      context.textContent = `${this._t('Period')}: ${periodLabel} · ${this._formatPeriodDate(period.start, timeZone)} – ${this._formatPeriodDate(period.end, timeZone)} · ${this._t('Time zone')}: ${timeZone} · ${this._t('Sources')}: ${(state.total_sources || []).length} ${this._t('total')}, ${(state.cost_sources || []).length} ${this._t('cost')}`;
       context.dataset.periodStart = period.start || '';
       context.dataset.periodEnd = period.end || '';
-      context.title = `Exact recorder window: ${period.start || '—'} → ${period.end || '—'}`;
+      context.title = `${this._t('Exact recorder window')}: ${period.start || '—'} → ${period.end || '—'}`;
       container.appendChild(context);
       const summary = document.createElement('section'); summary.className = 'summary';
       summary.appendChild(this._metric('Grid import', `${this._formatNumber(state.total.value, 1)} ${state.total.unit || 'kWh'}`));
       const costLabel = state.cost && state.cost.method === 'cost_statistics' ? 'Actual cost' : (state.cost && state.cost.method === 'flat_rate_estimate' ? 'Estimated cost' : 'Cost unavailable');
       const costValue = state.cost && typeof state.cost.value === 'number' ? `${this._formatNumber(state.cost.value, 2)} ${state.cost.currency || ''}`.trim() : '—';
       summary.appendChild(this._metric(costLabel, costValue)); container.appendChild(summary);
-      const deviceSection = document.createElement('section'); deviceSection.className = 'section'; const deviceHeading = document.createElement('h3'); deviceHeading.textContent = state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown'); deviceSection.appendChild(deviceHeading);
+      const deviceSection = document.createElement('section'); deviceSection.className = 'section'; const deviceHeading = document.createElement('h3'); deviceHeading.textContent = this._t(state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown')); deviceSection.appendChild(deviceHeading);
       const list = document.createElement('div'); list.className = 'list';
       for (const device of state.devices || []) {
-        const row = document.createElement('div'); row.className = `row${device.depth > 0 ? ' child' : ''}`; const name = document.createElement('span'); name.className = 'row-name'; name.textContent = device.label || device.statistic_id; const value = document.createElement('span'); value.className = device.status === 'ready' ? 'status-ready' : 'warning'; value.textContent = device.status === 'ready' ? `${this._formatNumber(device.value, 1)} ${device.unit || 'kWh'}` : device.status; row.append(name, value); list.appendChild(row);
+        const row = document.createElement('div'); row.className = `row${device.depth > 0 ? ' child' : ''}`; const name = document.createElement('span'); name.className = 'row-name'; name.textContent = device.label || device.statistic_id; const value = document.createElement('span'); value.className = device.status === 'ready' ? 'status-ready' : 'warning'; value.textContent = device.status === 'ready' ? `${this._formatNumber(device.value, 1)} ${device.unit || 'kWh'}` : this._t(device.status); row.append(name, value); list.appendChild(row);
       }
-      if ((state.devices || []).length === 0) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = 'No device statistics are configured.'; list.appendChild(empty); }
+      if ((state.devices || []).length === 0) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = this._t('No device statistics are configured.'); list.appendChild(empty); }
       deviceSection.appendChild(list); container.appendChild(deviceSection);
       const evidence = document.createElement('section'); evidence.className = 'section';
-      const evidenceHeading = document.createElement('h3'); evidenceHeading.textContent = 'Source evidence'; evidence.appendChild(evidenceHeading);
+      const evidenceHeading = document.createElement('h3'); evidenceHeading.textContent = this._t('Source evidence'); evidence.appendChild(evidenceHeading);
       const evidenceList = document.createElement('div'); evidenceList.className = 'list';
       for (const source of [...(state.total_sources || []), ...(state.cost_sources || [])]) {
         const row = document.createElement('div'); row.className = 'row';
         const name = document.createElement('span'); name.className = 'row-name'; const sourceLabel = source.label || source.statistic_id; name.textContent = sourceLabel === source.statistic_id ? source.statistic_id : `${sourceLabel} (${source.statistic_id})`;
-        const detail = document.createElement('span'); detail.className = source.status === 'ready' ? 'status-ready' : 'warning'; detail.textContent = source.reason ? `${source.status}: ${source.reason}` : source.status;
+        const detail = document.createElement('span'); detail.className = source.status === 'ready' ? 'status-ready' : 'warning'; detail.textContent = source.reason ? `${this._t(source.status)}: ${this._t(source.reason)}` : this._t(source.status);
         row.append(name, detail); evidenceList.appendChild(row);
       }
-      for (const warningText of state.warnings || []) { const warning = document.createElement('p'); warning.className = 'warning'; warning.textContent = warningText; evidenceList.appendChild(warning); }
+      for (const warningText of state.warnings || []) { const warning = document.createElement('p'); warning.className = 'warning'; warning.textContent = this._warningText(warningText); evidenceList.appendChild(warning); }
       evidence.appendChild(evidenceList); container.appendChild(evidence);
     }
 
     _metric(labelText, valueText) {
-      const metric = document.createElement('div'); metric.className = 'metric'; const label = document.createElement('div'); label.className = 'metric-label'; label.textContent = labelText; const value = document.createElement('div'); value.className = 'metric-value'; value.textContent = valueText; metric.append(label, value); return metric;
+      const metric = document.createElement('div'); metric.className = 'metric'; const label = document.createElement('div'); label.className = 'metric-label'; label.textContent = this._t(labelText); const value = document.createElement('div'); value.className = 'metric-value'; value.textContent = valueText; metric.append(label, value); return metric;
     }
 
     _formatNumber(value, digits) {
       if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-      try { return new Intl.NumberFormat(this._hass && this._hass.language ? this._hass.language : navigator.language, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value); } catch (_error) { return value.toFixed(digits); }
+      try { return new Intl.NumberFormat(languageOf(this._hass), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value); } catch (_error) { return value.toFixed(digits); }
     }
 
     _formatPeriodDate(value, timeZone) {
       const date = asDate(value);
       if (!date) return '—';
-      const language = this._hass && this._hass.language ? this._hass.language : navigator.language;
+      const language = languageOf(this._hass);
       try { return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeZone }).format(date); } catch (_error) { return date.toISOString().slice(0, 10); }
     }
 
     _timeAgo(value) {
+      if (value == null) return this._t('Never');
       const date = asDate(value);
-      if (!date) return 'Never';
+      if (!date) return this._t('Never');
       const now = asDate(this._now()) || new Date();
       const difference = Math.max(0, now.getTime() - date.getTime());
-      if (difference < 60000) return 'now';
+      if (difference < 60000) return this._t('now');
       if (difference < 3600000) return `${Math.floor(difference / 60000)}m`;
       if (difference < 86400000) return `${Math.floor(difference / 3600000)}h`;
-      return `${Math.floor(difference / 86400000)}d`;
+      return `${Math.floor(difference / 86400000)}${this._t('day_suffix')}`;
     }
 
     _renderAutomations() {
@@ -652,16 +824,18 @@
         return left.label.localeCompare(right.label);
       });
       const now = asDate(this._now()) || new Date();
+      const timeZone = this._timeZone();
+      const todayStart = this._zonedDayBounds(this._partsInZone(now, timeZone), timeZone).start;
       const active = automations.filter((automation) => automation.state === 'on').length;
       const disabled = automations.filter((automation) => automation.state === 'off').length;
       const triggeredToday = automations.filter((automation) => {
         const triggered = asDate(automation.last_triggered);
-        return triggered && now - triggered < 86400000;
+        return triggered && triggered >= todayStart && triggered <= now;
       }).length;
       const summary = document.createElement('div'); summary.className = 'summary'; summary.append(this._metric('Total automations', String(automations.length)), this._metric('Active', String(active)), this._metric('Disabled', String(disabled)), this._metric('Triggered today', String(triggeredToday))); container.appendChild(summary);
-      const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = 'Recent activity'; container.appendChild(heading); const list = document.createElement('div'); list.className = 'list';
-      for (const automation of automations.slice(0, 10)) { const row = document.createElement('div'); row.className = 'row'; const name = document.createElement('span'); name.className = 'row-name'; name.textContent = automation.label; const status = document.createElement('span'); status.textContent = `${this._timeAgo(automation.last_triggered)} · ${automation.state}`; row.append(name, status); list.appendChild(row); }
-      if (automations.length === 0) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = 'No automation entities are available.'; list.appendChild(empty); }
+      const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = this._t('Recent activity'); container.appendChild(heading); const list = document.createElement('div'); list.className = 'list';
+      for (const automation of automations.slice(0, 10)) { const row = document.createElement('div'); row.className = 'row'; const name = document.createElement('span'); name.className = 'row-name'; name.textContent = automation.label; const status = document.createElement('span'); status.textContent = `${this._timeAgo(automation.last_triggered)} · ${this._t(automation.state)}`; row.append(name, status); list.appendChild(row); }
+      if (automations.length === 0) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = this._t('No automation entities are available.'); list.appendChild(empty); }
       container.appendChild(list);
     }
 
@@ -670,12 +844,12 @@
       const container = this.shadowRoot.getElementById('content'); container.replaceChildren(); const states = this._hass && this._hass.states ? this._hass.states : {}; const entries = Object.entries(states);
       const unavailable = entries.filter(([, state]) => state && state.state === 'unavailable').length; const unknown = entries.filter(([, state]) => state && state.state === 'unknown').length; const domains = new Map();
       for (const [entityId] of entries) { const domain = entityId.split('.')[0]; domains.set(domain, (domains.get(domain) || 0) + 1); }
-      const heading = document.createElement('h3'); heading.textContent = 'System overview'; container.appendChild(heading); const summary = document.createElement('div'); summary.className = 'summary section';
+      const heading = document.createElement('h3'); heading.textContent = this._t('System overview'); container.appendChild(heading); const summary = document.createElement('div'); summary.className = 'summary section';
       for (const [label, value] of [['Entities', entries.length], ['Unavailable', unavailable], ['Unknown', unknown], ['Domains', domains.size]]) summary.appendChild(this._metric(label, String(value)));
       container.appendChild(summary); const list = document.createElement('div'); list.className = 'list section';
       for (const [domain, count] of [...domains.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))) { const row = document.createElement('div'); row.className = 'row'; const label = document.createElement('span'); label.textContent = domain; const value = document.createElement('span'); value.textContent = String(count); row.append(label, value); list.appendChild(row); }
       container.appendChild(list);
-      const healthHeading = document.createElement('h3'); healthHeading.className = 'section'; healthHeading.textContent = 'Health check'; container.appendChild(healthHeading);
+      const healthHeading = document.createElement('h3'); healthHeading.className = 'section'; healthHeading.textContent = this._t('Health check'); container.appendChild(healthHeading);
       const health = document.createElement('div'); health.className = 'list'; const divisor = Math.max(entries.length, 1);
       for (const [labelText, valueText] of [
         ['Entity availability', `${(((entries.length - unavailable) / divisor) * 100).toFixed(1)}%`],
@@ -684,7 +858,7 @@
         ['Unavailable', String(unavailable)],
         ['Unknown', String(unknown)],
       ]) {
-        const row = document.createElement('div'); row.className = 'row'; const label = document.createElement('span'); label.textContent = labelText; const value = document.createElement('span'); value.textContent = valueText; row.append(label, value); health.appendChild(row);
+        const row = document.createElement('div'); row.className = 'row'; const label = document.createElement('span'); label.textContent = this._t(labelText); const value = document.createElement('span'); value.textContent = valueText; row.append(label, value); health.appendChild(row);
       }
       container.appendChild(health);
     }
@@ -739,11 +913,16 @@
   class HASmartReportsEditor extends HTMLElement {
     constructor() { super(); this.attachShadow({ mode: 'open' }); this._config = {}; }
     setConfig(config) { this._config = config && typeof config === 'object' ? { ...config } : {}; this._render(); }
-    set hass(hass) { this._hass = hass; }
+    set hass(hass) {
+      const language = languageOf(hass);
+      const changed = language !== this._language;
+      this._language = language; this._hass = hass;
+      if (changed) this._render();
+    }
     _render() {
       this.shadowRoot.replaceChildren();
       const style = document.createElement('style'); style.textContent = ':host{display:grid;gap:12px;padding:12px;color:var(--primary-text-color,#172033);font-family:system-ui,sans-serif}label{display:grid;gap:5px}input{font:inherit;padding:9px;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px;background:var(--card-background-color,#fff);color:inherit}input:focus-visible{outline:2px solid var(--primary-color,#3b82f6);outline-offset:2px}';
-      const field = (id, labelText, key) => { const label = document.createElement('label'); label.textContent = labelText; const input = document.createElement('input'); input.id = id; input.value = typeof this._config[key] === 'string' ? this._config[key] : ''; input.addEventListener('input', () => { this._config = { ...this._config, [key]: input.value }; this._dispatch(); }); label.appendChild(input); return label; };
+      const field = (id, labelText, key) => { const label = document.createElement('label'); label.textContent = translate(this._hass, labelText); const input = document.createElement('input'); input.id = id; input.value = typeof this._config[key] === 'string' ? this._config[key] : ''; input.addEventListener('input', () => { this._config = { ...this._config, [key]: input.value }; this._dispatch(); }); label.appendChild(input); return label; };
       this.shadowRoot.append(style, field('cf_title', 'Title', 'title'), field('cf_currency', 'Currency', 'currency'));
     }
     _dispatch() { this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, bubbles: true, composed: true })); }

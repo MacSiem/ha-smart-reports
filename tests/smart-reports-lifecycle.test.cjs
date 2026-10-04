@@ -364,3 +364,66 @@ test('System preserves domain breakdown and health percentages', async () => {
   assert.match(text, /light\s*1/i);
   card.remove(); dom.window.close();
 });
+
+for (const scenario of [
+  { name: 'Warsaw calendar boundary', zone: 'Europe/Warsaw', now: '2026-08-30T12:00:00.000Z', midnight: '2026-08-29T22:00:00.000Z' },
+  { name: 'Warsaw spring DST day', zone: 'Europe/Warsaw', now: '2026-03-29T21:30:00.000Z', midnight: '2026-03-28T23:00:00.000Z' },
+  { name: 'Warsaw autumn 25-hour day', zone: 'Europe/Warsaw', now: '2026-10-25T22:30:00.000Z', midnight: '2026-10-24T22:00:00.000Z' },
+  { name: 'Kathmandu fractional UTC offset', zone: 'Asia/Kathmandu', now: '2026-08-30T01:00:00.000Z', midnight: '2026-08-29T18:15:00.000Z' },
+]) {
+  test(`Triggered today uses HA local midnight and excludes future timestamps: ${scenario.name}`, async () => {
+    const dom = loadRuntime();
+    const card = dom.window.document.createElement('ha-smart-reports');
+    const timestamp = (value) => new Date(value).toISOString();
+    const now = Date.parse(scenario.now);
+    const start = Date.parse(scenario.midnight);
+    const triggers = [timestamp(start), timestamp(now), timestamp(start - 1), timestamp(now + 1), null, 'invalid date'];
+    const states = Object.fromEntries(triggers.map((trigger, index) => [`automation.calendar_${index}`, {
+      state: index === 4 ? 'off' : 'on',
+      attributes: { friendly_name: `Calendar QA ${index}`, last_triggered: trigger },
+    }]));
+    const hass = makeHass({ states, timeZone: scenario.zone });
+    card._now = () => new Date(now);
+    card.setConfig({ type: 'custom:ha-smart-reports', show_energy: false });
+    dom.window.document.body.appendChild(card);
+    card.hass = hass;
+    await delay(10);
+    const metrics = Object.fromEntries([...card.shadowRoot.querySelectorAll('.metric')].map((metric) => [
+      metric.querySelector('.metric-label').textContent, metric.querySelector('.metric-value').textContent,
+    ]));
+    assert.deepEqual(metrics, { 'Total automations': '6', Active: '5', Disabled: '1', 'Triggered today': '2' });
+    // Test each boundary alone: an incorrectly excluded old trigger and an
+    // incorrectly included future trigger must not cancel in the total.
+    for (const [index, trigger] of triggers.entries()) {
+      const isolated = makeHass({ states: { 'automation.boundary': {
+        state: 'on', attributes: { last_triggered: trigger },
+      } }, timeZone: scenario.zone });
+      card._refreshThrottleMs = 0;
+      card.hass = isolated;
+      await delay(10);
+      const todayMetric = [...card.shadowRoot.querySelectorAll('.metric')].find((metric) =>
+        metric.querySelector('.metric-label').textContent === 'Triggered today');
+      assert.equal(todayMetric.querySelector('.metric-value').textContent, index < 2 ? '1' : '0', `isolated trigger ${index}: ${trigger}`);
+      assert.equal(isolated.calls.length, 0);
+    }
+    assert.equal(hass.calls.length, 0, 'the live automation summary must remain request-free');
+    card.remove(); dom.window.close();
+  });
+}
+
+test('Automations renders absent last-trigger timestamps as Never and preserves a real epoch timestamp', async () => {
+  const triggers = [null, undefined, '', 'invalid date', 0];
+  const states = Object.fromEntries(triggers.map((trigger, index) => [`automation.absent_${index}`, {
+    state: 'off', attributes: { friendly_name: `Absent timestamp QA ${index}`, last_triggered: trigger },
+  }]));
+  const hass = makeHass({ states });
+  const { card, dom } = await mountCard({ hass, config: { show_energy: false } });
+  const rows = [...card.shadowRoot.querySelectorAll('.row')].map((row) => row.textContent);
+  for (let index = 0; index < 4; index++) {
+    assert.ok(rows.includes(`Absent timestamp QA ${index}Never · off`), `absent timestamp ${index} must not become a 1970 trigger`);
+  }
+  const actualEpochDays = Math.floor(FIXED_NOW.getTime() / 86400000);
+  assert.ok(rows.includes(`Absent timestamp QA 4${actualEpochDays}d · off`), 'a genuine numeric epoch timestamp must retain its real age');
+  assert.equal(hass.calls.length, 0);
+  card.remove(); dom.window.close();
+});

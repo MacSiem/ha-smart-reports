@@ -2,6 +2,18 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [4.0.1] - Unreleased
+
+- Translate the report views, status messages and editor into Polish using the Home Assistant profile language; update the selected view on language changes while preserving the report period, data and export schema.
+
+- Show an automation with no last-trigger timestamp as Never instead of displaying an age from the Unix epoch.
+- Count automations whose last trigger is since midnight in Home Assistant's configured time zone, including long DST days, and exclude future timestamps.
+- Keep status colors readable on the rendered Home Assistant card background, including dark custom themes whose dark mode flag is false and theme changes after reconnecting.
+- Stop treating missing first/last Recorder buckets or a bucket crossing the requested boundary as a complete period total.
+- End calendar reports at the last completed UTC hour, retain that exact cutoff in exports, and show no data before Today's first completed hour.
+- Keep the report card at its natural height in Home Assistant Sections, including empty states and longer evidence text.
+- Replace the prominent support panel with one optional, dismissible link visible only to administrators.
+
 ## [4.0.0] - 2026-09-01
 
 ### Changed
@@ -10,7 +22,7 @@ All notable changes to **Smart Reports** are documented here.
 - Headline totals now include root total sources only; device and `included_in_stat` relationships are kept in a separate nested breakdown.
 - Cost now reports actual configured cost statistics first, otherwise an explicitly configured flat-rate estimate, with provenance shown in the UI and exports.
 - JSON export now uses schema version 2; CSV is flat and neutralizes formula-leading labels.
-- Schema-v2 JSON and CSV now retain per-source status, provenance, reasons and warnings; partial results show the same evidence in the UI.
+- Schema-v2 JSON and CSV now retain per-source status, provenance and reasons. JSON also retains report warnings; partial results show the same evidence in the UI.
 - Dashboard parsing now supports current Energy preference names and fills only missing grid cost mappings without replacing direct cost sources.
 - The visible period context now uses readable local-calendar dates while preserving the exact Recorder start/end timestamps as element metadata and export fields.
 
