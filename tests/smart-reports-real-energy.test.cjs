@@ -192,3 +192,21 @@ test('complete recorded cost remains available when energy history is partial', 
     assert.match(card.shadowRoot.textContent, /Recorded cost/);
   } finally { card.remove(); dom.window.close(); }
 });
+
+
+test('generated cost sources use names of the exact mapped Energy sources', async () => {
+  const hass = makeHass({
+    prefs: { energy_sources: [{ type: 'grid', stat_energy_from: 'sensor.grid' }], device_consumption: [] },
+    info: { cost_sensors: { 'sensor.grid': 'sensor.generated_cost' } },
+    states: { 'sensor.grid': { state: '999999', attributes: { friendly_name: 'Dishwasher' } } },
+    metadataById: { 'sensor.grid': metadata(), 'sensor.generated_cost': metadata('PLN') },
+    deferred: { 'recorder/statistics_during_period': m => Promise.resolve({ 'sensor.grid': calendarSeries(m.start_time, m.end_time, [2]), 'sensor.generated_cost': calendarSeries(m.start_time, m.end_time, [0.5]) }) },
+  });
+  const { card, dom } = await mountCard({ hass, config: { energy_source_mode: 'dashboard' } });
+  try {
+    assert.equal(card._energyViewState.cost_sources[0].label, 'Dishwasher');
+    assert.equal(card._energyViewState.cost.value, 0.5);
+    assert.match(card.shadowRoot.querySelector('.cost-coverage').textContent, /Dishwasher/);
+    assert.equal(card._buildExportDocument().energy.cost_sources[0].label, 'Dishwasher');
+  } finally { card.remove(); dom.window.close(); }
+});
