@@ -22,7 +22,7 @@ All notable changes to **Smart Reports** are documented here.
 - Headline totals now include root total sources only; device and `included_in_stat` relationships are kept in a separate nested breakdown.
 - Cost now reports actual configured cost statistics first, otherwise an explicitly configured flat-rate estimate, with provenance shown in the UI and exports.
 - JSON export now uses schema version 2; CSV is flat and neutralizes formula-leading labels.
-- Schema-v2 JSON and CSV now retain per-source status, provenance, reasons and warnings; partial results show the same evidence in the UI.
+- Schema-v2 JSON and CSV now retain per-source status, provenance and reasons. JSON also retains report warnings; partial results show the same evidence in the UI.
 - Dashboard parsing now supports current Energy preference names and fills only missing grid cost mappings without replacing direct cost sources.
 - The visible period context now uses readable local-calendar dates while preserving the exact Recorder start/end timestamps as element metadata and export fields.
 
