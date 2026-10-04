@@ -84,7 +84,7 @@ const states = [
   ['permission_denied', 'Your account cannot read the selected statistics.', 'Twoje konto nie może odczytać wybranych statystyk.'],
   ['error', 'Couldn’t load energy statistics.', 'Nie udało się wczytać statystyk energii.'],
   ['no_data', 'No recorded energy change in this period.', 'Brak zarejestrowanych zmian energii w tym okresie.'],
-  ['partial', 'Partial data — totals and cost are withheld.', 'Dane częściowe — suma i koszt nie są wyświetlane.'],
+  ['partial', 'Partial history — recorded values only.', 'Niepełna historia — tylko zarejestrowane wartości.'],
 ];
 for (const language of ['pl', 'en']) for (const [status, english, polish] of states) {
   test(`${status} state is rendered in ${language} without translating data`, () => {

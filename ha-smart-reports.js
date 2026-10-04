@@ -1,7 +1,7 @@
 /**
  * Home Assistant Smart Reports Card
  * Recorder-backed energy reports, automation statistics, and system overview.
- * Version: 4.0.1
+ * Version: 4.1.0
  */
 
 (function registerHASmartReports() {
@@ -9,7 +9,7 @@
 
   if (customElements.get('ha-smart-reports')) return;
 
-  const VERSION = '4.0.1';
+  const VERSION = '4.1.0';
   const VALID_PERIODS = new Set(['1d', '7d', '30d']);
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
@@ -766,7 +766,7 @@
           : { status, value: null, unit: 'kWh', source_statistic_ids: totalSources.map((source) => source.statistic_id) };
         let cost = this._calculateCost(completeTotal, costSources, this._config);
         if (selection.cost_configuration_incomplete) cost = { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: costSources.map((source) => source.statistic_id), reason: 'partial_cost' };
-        if (status !== 'ready') {
+        if (status !== 'ready' && cost.method !== 'cost_statistics') {
           const reason = status === 'no_data' ? 'no_data' : (status === 'unsupported' ? 'unsupported_source' : 'partial_energy');
           cost = { ...cost, value: null, method: 'unavailable', reason };
         }
@@ -880,7 +880,7 @@
     _recordedSubtotal(sources, unit) {
       const measured = sources.filter(source => source.unit === unit && typeof source.recorded_value === 'number' && Number.isFinite(source.recorded_value));
       const value = measured.reduce((sum, source) => sum + source.recorded_value, 0);
-      return { value: measured.length > 0 && Number.isFinite(value) ? value : null, unit: unit || null, status: sources.length > 0 && sources.every(source => source.status === 'ready') ? 'ready' : 'partial', sources_with_data: measured.length, complete_sources: sources.filter(source => source.status === 'ready').length, configured_sources: sources.length, source_statistic_ids: measured.map(source => source.statistic_id) };
+      return { value: measured.length > 0 && Number.isFinite(value) ? value : null, unit: unit || null, status: sources.length === 0 ? 'no_data' : (sources.every(source => source.status === 'ready') ? 'ready' : 'partial'), sources_with_data: measured.length, complete_sources: sources.filter(source => source.status === 'ready').length, configured_sources: sources.length, source_statistic_ids: measured.map(source => source.statistic_id) };
     }
 
     _setEnergyViewState(state) {
