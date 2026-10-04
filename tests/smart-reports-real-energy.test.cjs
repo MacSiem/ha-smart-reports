@@ -63,3 +63,45 @@ test('invalid or out-of-window samples cannot become a recorded subtotal',()=>{
     }
   }finally{dom.window.close();}
 });
+
+test('a new source selection cannot retain the previous selection during loading', async () => {
+  const hass=makeHass({metadataById:{'sensor.grid_import':metadata()},deferred:{'recorder/statistics_during_period':m=>Promise.resolve({'sensor.grid_import':calendarSeries(m.start_time,m.end_time,[4])})}});
+  const {card,dom}=await mountCard({hass,config:explicitConfig()});
+  try{
+    let resolveMetadata;
+    hass.callWS=()=>new Promise(resolve=>{resolveMetadata=resolve;});
+    card.setConfig(explicitConfig({energy_total_statistics:['sensor.other']}));
+    await delay(10);
+    assert.equal(card._energyViewState.status,'loading');
+    assert.equal(card.shadowRoot.querySelector('.metric-value'),null);
+    resolveMetadata([]);
+  }finally{card.remove();dom.window.close();}
+});
+
+test('device bars compare recorded kWh and expose partial coverage',async()=>{
+  const hass=makeHass({metadataById:{'sensor.grid_import':metadata(),'sensor.device':metadata()},deferred:{'recorder/statistics_during_period':m=>Promise.resolve({
+    'sensor.grid_import':calendarSeries(m.start_time,m.end_time,[4]),
+    'sensor.device':calendarSeries(m.start_time,m.end_time,[2]).slice(0,2),
+  })}});
+  const {card,dom}=await mountCard({hass,config:explicitConfig({energy_device_statistics:[{statistic_id:'sensor.grid_import',label:'Whole circuit'},{statistic_id:'sensor.device',label:'Socket'}]})});
+  try{
+    const chart=card.shadowRoot.querySelector('[aria-label="Recorded energy by device"]');
+    assert.ok(chart);assert.match(chart.textContent,/Whole circuit/);assert.match(chart.textContent,/Socket/);assert.match(chart.textContent,/partial/);
+    assert.deepEqual([...chart.querySelectorAll('[role="meter"]')].map(n=>Number(n.getAttribute('aria-valuenow'))),[4,2]);
+  }finally{card.remove();dom.window.close();}
+});
+
+test('report exposes exact local hours and separate cost coverage in visible text',async()=>{
+  const hass=makeHass({metadataById:{'sensor.grid_import':metadata(),'sensor.cost':metadata('PLN')},deferred:{'recorder/statistics_during_period':m=>Promise.resolve({
+    'sensor.grid_import':calendarSeries(m.start_time,m.end_time,[4]),
+    'sensor.cost':calendarSeries(m.start_time,m.end_time,[0.25]).slice(0,1),
+  })}});
+  const {card,dom}=await mountCard({hass,config:explicitConfig({energy_cost_statistics:['sensor.cost']})});
+  try{
+    assert.match(card.shadowRoot.querySelector('.report-context').textContent,/14:00|2:00/);
+    const coverage=card.shadowRoot.querySelector('.cost-coverage');assert.ok(coverage);
+    assert.match(coverage.textContent,/1.*158.*h/);
+    const report=card._buildExportDocument();assert.equal(report.energy.recorded_cost.value,0.25);assert.equal(report.energy.cost.value,null);
+    assert.match(card._buildCsv(report),/recorded_cost/);
+  }finally{card.remove();dom.window.close();}
+});
