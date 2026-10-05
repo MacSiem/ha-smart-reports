@@ -2,7 +2,17 @@
 
 All notable changes to **Smart Reports** are documented here.
 
-## [4.0.1] - Unreleased
+## [4.1.0] - Unreleased
+
+- Restore useful recorded consumption/cost summaries even with incomplete history, keeping complete totals separate and exposing source coverage.
+- Add Summary, Devices and Costs views, daily energy history, device kWh bars and current system domain bars.
+- Show friendly names, exact local hours and each cost source's own coverage and recorded range.
+- Keep the settled report visible during same-period refresh and preserve its DOM when data is unchanged; clear old values when source selection changes.
+- Expose dashboard/explicit source selection in the visual editor while preserving advanced references.
+- Extend JSON/CSV with recorded values, daily history and coverage; never fabricate a tariff or treat gaps as zero.
+- Keep independently complete recorded costs available when energy history is incomplete.
+
+## [4.0.1] - 2026-10-04
 
 - Translate the report views, status messages and editor into Polish using the Home Assistant profile language; update the selected view on language changes while preserving the report period, data and export schema.
 

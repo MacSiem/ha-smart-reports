@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const screenshotsDir = resolve(root, 'docs/screenshots');
 const sourcePath = resolve(root, 'ha-smart-reports.js');
-const manifestPath = resolve(screenshotsDir, 'manifest.json');
+const screenshotOutputDir = process.env.SR_SCREENSHOT_OUTPUT_DIR ? resolve(process.env.SR_SCREENSHOT_OUTPUT_DIR) : screenshotsDir;
+const manifestPath = resolve(screenshotOutputDir, 'manifest.json');
 const seed = 'sr-demo-v1';
 const clock = '2026-08-31T10:00:00.000Z';
 const locale = 'en-US';
@@ -308,6 +309,7 @@ async function captureOnce(client, origin, variant, sourceSha256) {
 }
 
 async function main() {
+  mkdirSync(screenshotOutputDir, { recursive: true });
   const executable = resolveChrome();
   const sourceSha256 = sha256(readFileSync(sourcePath));
   const executableSha256 = sha256(readFileSync(executable));
@@ -336,7 +338,7 @@ async function main() {
         }
       }
       if (samples[0] !== samples[1]) throw new Error(`${variant.file} is not byte-deterministic: ${samples.join(' != ')}`);
-      writeFileSync(resolve(screenshotsDir, variant.file), selected.bytes);
+      writeFileSync(resolve(screenshotOutputDir, variant.file), selected.bytes);
       captures.push({
         file: variant.file,
         theme: variant.theme,

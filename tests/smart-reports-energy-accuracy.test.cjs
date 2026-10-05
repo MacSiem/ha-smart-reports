@@ -104,8 +104,8 @@ test('device values never increase household total', async () => {
     'sensor.dishwasher': 1,
   });
   assert.equal(card._energyViewState.total.value, 10);
-  assert.match(card.shadowRoot.textContent, /10(?:\.0)?\s*kWh/);
-  assert.doesNotMatch(card.shadowRoot.textContent, /19(?:\.0)?\s*kWh/);
+  assert.match(card.shadowRoot.textContent, /10(?:\.0{1,2})?\s*kWh/);
+  assert.doesNotMatch(card.shadowRoot.textContent, /19(?:\.0{1,2})?\s*kWh/);
   card.remove(); dom.window.close();
 });
 
@@ -161,7 +161,7 @@ test('one fetched statistic preserves separate total and device references', asy
   assert.equal(card._energyViewState.devices[0].value, 3);
   assert.equal(card._energyViewState.devices[0].unit, 'kWh');
   assert.equal(card._energyViewState.device_data_status, 'ready');
-  assert.match(card.shadowRoot.textContent, /Reference row\s*3\.0 kWh/i);
+  assert.match(card.shadowRoot.textContent, /Reference row\s*3\.00 kWh/i);
   const exportedDevice = card._buildExportDocument(FIXED_NOW).energy.devices[0];
   assert.deepEqual(
     JSON.parse(JSON.stringify({ value: exportedDevice.value, unit: exportedDevice.unit, status: exportedDevice.status })),

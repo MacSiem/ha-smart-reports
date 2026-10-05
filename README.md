@@ -53,6 +53,27 @@ The legacy `energy_entity` option remains a compatibility alias for one
 explicit total statistic when `energy_total_statistics` is empty. It does not
 enable discovery or a live-state fallback.
 
+### Report views and charts
+
+Energy has **Summary**, **Devices**, and **Costs** views of one recorded snapshot.
+Summary shows consumption, cost, source counts and daily history. Devices shows
+kWh bars with each device's own coverage. Costs shows the cost samples and their
+own time range. Switching views does not request statistics again.
+
+Daily bars use local calendar dates, including DST days. Striped days have
+incomplete history; empty days are not measured zero. Device values may have
+different coverage, and nested devices remain included in their parent.
+
+The visual editor offers Energy Dashboard or Explicit statistics and separate
+total/device/cost IDs. Existing labels and parent relationships remain intact
+when their IDs remain selected. Advanced relationships and a flat-rate estimate
+can also be declared in YAML. Names come from configured labels, HA friendly
+names or statistic metadata; live entity values never supply energy numbers.
+
+The same period and source selection remain visible during refresh. Unchanged
+results retain their content DOM. A new period or source selection clears old
+values while loading; errors never export stale data.
+
 ### Accuracy and unavailable data
 
 - Recorder metadata must declare a sum-capable energy statistic. Power and
@@ -66,8 +87,12 @@ enable discovery or a live-state fallback.
   or 25 hours.
 - The report ends at the last completed UTC hour shown in its range and exports.
   Missing boundary buckets remain partial; Today has no data until its first completed hour.
-- If a required source is incomplete, invalid or has no samples, combined
-  totals and cost are withheld instead of being shown as zero.
+- If a required source is incomplete, invalid or has no samples,
+  the complete energy total is withheld instead of being shown as zero.
+  **Recorded consumption** separately shows only validated samples that exist,
+  with source counts and coverage. It is not a complete household total.
+  Cost samples appear separately as **Recorded cost** with their own range,
+  including when the combined complete report cost is unavailable.
 - The card distinguishes loading, not configured, unsupported, permission
   denied, request error, no data, partial data and ready states.
 
@@ -88,6 +113,9 @@ currency: PLN
 ```
 
 There is no default tariff. A zero rate is valid and remains zero.
+Recorded cost can cover a shorter period than energy. The current tariff is
+not multiplied by past partial energy; a flat-rate estimate still requires a
+complete energy total.
 
 ## Automations and System
 
@@ -174,8 +202,8 @@ and links to `/config/energy`; it does not guess a sensor.
 | `show_system` | boolean | `true` | Show the System tab. |
 | `show_support` | boolean | `true` | Show the optional support link to administrators unless dismissed. |
 
-The visual editor safely exposes Title and Currency. Tab selection is local
-to each card instance. If all three `show_*` flags are false, the card shows a
+The visual editor exposes Title, Currency, source mode and separate total,
+device and cost statistic IDs. Tab selection is local to each card instance. If all three `show_*` flags are false, the card shows a
 configuration message and performs no Home Assistant data requests.
 
 ## Privacy and limitations
@@ -212,3 +240,12 @@ same Home Assistant origin when storage is available.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+### Additional recorded fields in exports
+
+JSON schema2 retains the meanings of complete `total.value` and `cost.value`.
+It adds `recorded_total`, `recorded_cost`, source/device `recorded_value` and
+`coverage`, and `daily` history. Unavailable complete totals remain null.
+CSV retains the flat header and adds distinctly named recorded/day/coverage
+rows. Total, cost and device roles remain separate; adding them together would
+count devices twice. Formula-leading labels remain neutralized.
