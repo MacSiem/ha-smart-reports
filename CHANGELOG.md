@@ -2,7 +2,13 @@
 
 All notable changes to **Smart Reports** are documented here.
 
-## [4.1.0] - Unreleased
+## [4.1.1] - 2026-10-08
+
+- Correct the published 4.1.0 release date and document installation from the HACS default catalog, with custom repository setup kept separately.
+- Explain the Home Assistant 2024.1.0 API compatibility contract, optional cost mapping and local frontend dependencies.
+- Preserve card behavior; this maintenance release changes documentation and version metadata only. Screenshot provenance is refreshed for this exact source.
+
+## [4.1.0] - 2026-10-05
 
 - Restore useful recorded consumption/cost summaries even with incomplete history, keeping complete totals separate and exposing source coverage.
 - Add Summary, Devices and Costs views, daily energy history, device kWh bars and current system domain bars.
