@@ -161,7 +161,29 @@ metadata, checks horizontal overflow and runs OCR privacy checks.
 
 ## Installation
 
-### HACS (custom repository)
+### HACS default catalog
+
+Smart Reports is included in the **HACS default catalog** as a Dashboard plugin. No custom repository is needed:
+
+1. Open HACS and search for **Smart Reports**.
+2. Download the latest stable version and reload your browser.
+3. Add `custom:ha-smart-reports` to your dashboard.
+
+When upgrading, use the update offered by HACS and reload your browser to load the new JavaScript. Existing card configuration, source selections and labels are retained. The optional support dismissal remains local to the browser.
+
+### Compatibility
+
+Requires Home Assistant **2024.1.0** or newer. The minimum is qualified against the Core and frontend API contracts shipped with that version; existing live installation and UI checks used current Home Assistant, rather than a separate 2024.1.0 instance.
+
+Dashboard source selection uses `energy/get_prefs`; explicit selection works from configured statistic IDs without Energy Dashboard discovery. Recorder reads use `recorder/get_statistics_metadata` and `recorder/statistics_during_period` with `period: hour` and `types: [change]`. All these commands and request fields exist in Core 2024.1.0. Older metadata uses `unit_of_measurement`; newer `statistics_unit_of_measurement` is optional. Unit class, source labels and nested-device relationships are used when present, with documented fallbacks otherwise.
+
+The optional `energy/info` lookup fills only missing generated-cost mappings. It also exists in Core 2024.1.0; unavailable mappings do not fabricate costs or replace explicit cost sources. Permission errors remain visible. Energy Dashboard and valid Recorder sum statistics determine data availability; the card's minimum does not guarantee complete retained history.
+
+Automation and system views read the `hass.states` object supplied to Lovelace. Theme, locale, timezone, currency and administrator visibility use the frontend's custom-card contract. The editor uses standard DOM controls and the `config-changed` event. Charts use local DOM and CSS, with no chart library or CDN. Use a browser supported by your Home Assistant frontend.
+
+Smart Reports does not require the HA Tools Email integration, SMTP or any optional email backend. Email scheduling and sending belong to the separate Email products.
+
+### Custom repository (alternative)
 
 1. Open HACS → Frontend (Dashboard) → ⋮ → **Custom repositories**.
 2. Add `https://github.com/MacSiem/ha-smart-reports` with category
