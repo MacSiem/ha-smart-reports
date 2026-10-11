@@ -1,7 +1,7 @@
 /**
  * Home Assistant Smart Reports Card
  * Recorder-backed energy reports, automation statistics, and system overview.
- * Version: 4.1.1
+ * Version: 4.1.2
  */
 
 (function registerHASmartReports() {
@@ -9,7 +9,7 @@
 
   if (customElements.get('ha-smart-reports')) return;
 
-  const VERSION = '4.1.1';
+  const VERSION = '4.1.2';
   const VALID_PERIODS = new Set(['1d', '7d', '30d']);
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
@@ -536,7 +536,15 @@
     }
 
     async _dashboardSources(generation) {
-      const prefs = await this._hass.callWS({ type: 'energy/get_prefs' });
+      let prefs;
+      try {
+        prefs = await this._hass.callWS({ type: 'energy/get_prefs' });
+      } catch (error) {
+        // Core reports an unconfigured Energy Dashboard as not_found / No prefs.
+        // This applies only to preference discovery, never Recorder failures.
+        if (!error || error.code !== 'not_found') throw error;
+        prefs = null;
+      }
       if (!this._isCurrentEnergyRequest(generation)) return null;
       const totals = []; const costs = []; const devices = []; const costCoverage = new Map();
       const costParents = new Map();
