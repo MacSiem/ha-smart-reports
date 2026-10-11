@@ -22,7 +22,10 @@ discovers sensors by matching words in entity IDs. It reads Recorder
 The default source mode is `dashboard`:
 
 1. `energy/get_prefs` supplies the grid-import, cost and device statistic IDs
-   already configured in Home Assistant Energy.
+   already configured in Home Assistant Energy. If Home Assistant reports missing
+   preferences (`not_found`), the card shows Energy configuration guidance with
+   unavailable values and disabled exports. Other preference and Recorder errors
+   remain visible; missing configuration never creates demo data or zero totals.
    Current device entries use their `name` as the display label. If any grid
    source has no direct `stat_cost`, `energy/info` is queried only to fill
    those missing mappings; a direct cost source is never replaced.

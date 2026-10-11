@@ -2,6 +2,11 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [4.1.2] - 2026-10-11
+
+- Show Energy configuration guidance when Home Assistant reports that Energy Dashboard preferences do not exist, instead of a statistics loading error.
+- Preserve Retry for other preference failures and Recorder errors; unconfigured reports keep unavailable values and disabled exports.
+
 ## [4.1.1] - 2026-10-08
 
 - Correct the published 4.1.0 release date and document installation from the HACS default catalog, with custom repository setup kept separately.
