@@ -14,6 +14,13 @@
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
   const PL = Object.freeze({
+    "Search devices or sources": "Szukaj urządzenia lub źródła",
+    "Name or entity/statistic ID": "Nazwa lub identyfikator encji/statystyki",
+    "Clear search": "Wyczyść wyszukiwanie",
+    "Shown devices": "Pokazane urządzenia",
+    "No matching devices": "Brak pasujących urządzeń",
+    "Parent device": "Urządzenie nadrzędne",
+    "Export includes all devices and sources in this report, including those hidden by search.": "Eksport obejmuje wszystkie urządzenia i źródła w raporcie, także ukryte przez wyszukiwanie.",
     "Energy report views": "Widoki raportu energii",
     "Summary": "Podsumowanie",
     "Devices": "Urządzenia",
@@ -225,6 +232,7 @@
       };
       this._activeTab = 'energy';
       this._energyView = 'summary';
+      this._deviceQuery = '';
       this._period = '7d';
       this._connected = false;
       this._scaffoldRendered = false;
@@ -255,6 +263,7 @@
       const language = languageOf(hass);
       const languageChanged = language !== this._language;
       this._language = language;
+      if (this._hass && (this._hass.user?.id !== hass?.user?.id || this._hass.connection !== hass?.connection)) this._deviceQuery = '';
       this._hass = hass;
       this._syncTheme();
       this._syncSupport();
@@ -270,6 +279,7 @@
     }
 
     setConfig(config) {
+      this._deviceQuery = '';
       const next = config && typeof config === 'object' ? config : {};
       const hasRate = Object.prototype.hasOwnProperty.call(next, 'energy_price');
       const currency = typeof next.currency === 'string' && next.currency.trim() ? next.currency.trim() : null;
@@ -311,6 +321,7 @@
         <style>
           :host{--sr-primary:var(--primary-color,#3b82f6);--sr-card:var(--card-background-color,var(--ha-card-background,#fff));--sr-text:var(--primary-text-color,#172033);--sr-muted:var(--secondary-text-color,#667085);--sr-border:var(--divider-color,#d9e0ea);--sr-good:#15803d;--sr-warn:#b45309;--sr-bad:#b42318;display:block;color:var(--sr-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}.card{background:var(--sr-card);border:1px solid var(--sr-border);border-radius:16px;overflow:hidden}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}h2,h3,p{margin:0}h2{font-size:20px}h3{font-size:15px}.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--sr-border);overflow-x:auto}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--sr-muted);padding:10px 12px}.tab.active{color:var(--sr-primary);border-bottom-color:var(--sr-primary);font-weight:650}.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 0}.toolbar-actions{display:flex;flex-wrap:wrap;gap:8px}.control,.action{min-height:38px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);padding:8px 11px}.action.primary{background:var(--sr-primary);border-color:var(--sr-primary);color:#fff}.action:disabled{cursor:not-allowed;opacity:.45}.pane{padding:20px;min-height:220px}.state{display:grid;gap:12px;place-items:start;padding:22px;border:1px solid var(--sr-border);border-radius:12px}.state[role="status"]{border-left:4px solid var(--sr-primary)}.state.partial{border-left-color:var(--sr-warn)}.state.error{border-left-color:var(--sr-bad)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{border:1px solid var(--sr-border);border-radius:12px;padding:14px}.metric-label,.muted{color:var(--sr-muted);font-size:12px}.metric-value{margin-top:5px;font-size:23px;font-weight:720}.section{margin-top:18px}.list{display:grid;gap:8px;margin-top:10px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--sr-border);padding:9px 2px}.row.child{padding-left:24px}.row-name{overflow-wrap:anywhere}.status-ready{color:var(--sr-good)}.warning{color:var(--sr-warn)}.fixed-link{color:var(--sr-primary)}.donate-section{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;border-top:1px solid var(--sr-border);padding:13px 18px;color:var(--sr-muted);font-size:12px}.donate-section a{color:var(--sr-primary);text-decoration:none}[hidden]{display:none!important}@media(max-width:520px){.header,.toolbar{align-items:stretch;flex-direction:column}.toolbar-actions{width:100%}.action{flex:1}}
           .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:flex;gap:8px;overflow-x:auto;padding:16px 2px 8px;max-width:100%}.day-column{display:grid;gap:6px;text-align:center;flex:0 0 40px;color:var(--sr-muted);font-size:11px}.day-track{height:100px;display:flex;align-items:flex-end;background:var(--sr-border);border-radius:4px;overflow:hidden}.day-track .bar-fill{width:100%}.day-column.partial .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.day-column.partial .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.day-column.no_data .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
+          .device-search-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0}.device-search-form label{flex:1;min-width:min(100%,180px);display:grid;gap:6px;font-size:13px}.device-search{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);font:inherit}.device-search-clear{min-height:44px;min-width:44px}.device-search:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.device-search-count,.device-export-note{overflow-wrap:anywhere;line-height:1.5}.chart-row small{overflow-wrap:anywhere}
           :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
         </style>
         <ha-card class="card">
@@ -837,17 +848,39 @@
       if (this._focusedEnergyView) nav.querySelector(`[data-energy-view="${this._focusedEnergyView}"]`)?.focus();
     }
 
+    _filteredDevices(devices) {
+      const query = String(this._deviceQuery || '').trim().toLocaleLowerCase();
+      return query ? devices.filter(row => [row.label, row.statistic_id].some(value => String(value || '').toLocaleLowerCase().includes(query))) : devices;
+    }
+
+    _renderDeviceSearch(container, devices) {
+      const controls = document.createElement('div'); controls.className = 'device-search-form';
+      const label = document.createElement('label'); label.textContent = this._t('Search devices or sources');
+      const input = document.createElement('input'); input.type = 'search'; input.className = 'device-search'; input.maxLength = 256;
+      input.value = this._deviceQuery || ''; input.placeholder = this._t('Name or entity/statistic ID');
+      input.addEventListener('input', () => { this._deviceQuery = input.value.slice(0,256); this._renderEnergyState(); });
+      input.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); this._deviceQuery = ''; this._renderEnergyState(); } });
+      label.appendChild(input);
+      const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'action device-search-clear'; clear.textContent = this._t('Clear search');
+      clear.addEventListener('click', () => { this._deviceQuery = ''; this._renderEnergyState(); this.shadowRoot.querySelector('.device-search')?.focus(); });
+      controls.append(label,clear); container.appendChild(controls);
+      const count = document.createElement('p'); count.className = 'muted device-search-count'; count.setAttribute('role','status'); count.setAttribute('aria-live','polite');
+      count.textContent = `${this._t('Shown devices')}: ${this._filteredDevices(devices).length} / ${devices.length}`; container.appendChild(count);
+      const note = document.createElement('p'); note.className = 'muted device-export-note'; note.textContent = this._t('Export includes all devices and sources in this report, including those hidden by search.'); container.appendChild(note);
+    }
+
     _coverageText(source) {
       const coverage = source.coverage;
       return coverage ? `${this._formatNumber(coverage.observed_hours, 0)} / ${this._formatNumber(coverage.expected_hours, 0)} h · ${this._t(source.status)}` : this._t(source.status || 'no_data');
     }
 
-    _barChart(rows, label, unit) {
+    _barChart(rows, label, unit, {scaleRows = rows, deviceContext = null} = {}) {
       const chart = document.createElement('section'); chart.className = 'bar-chart section'; chart.setAttribute('aria-label', this._t(label));
       const finite = row => typeof row.recorded_value === 'number' && Number.isFinite(row.recorded_value) ? row.recorded_value : (row.status === 'ready' && typeof row.value === 'number' && Number.isFinite(row.value) ? row.value : null);
-      const maximum = Math.max(0, ...rows.map(row => finite(row) || 0));
+      const maximum = Math.max(0, ...scaleRows.map(row => finite(row) || 0));
       for (const source of rows) {
         const row = document.createElement('div'); row.className = `chart-row${source.depth > 0 ? ' child' : ''}`;
+        if (deviceContext) row.dataset.deviceStatistic = source.statistic_id;
         const name = document.createElement('span'); name.className = 'row-name'; name.textContent = source.label || source.statistic_id;
         const measured = finite(source); const value = document.createElement('span'); value.textContent = `${this._formatNumber(measured, unit ? 2 : 0)}${unit ? ` ${unit}` : ''}`;
         const track = document.createElement('div'); track.className = 'bar-track';
@@ -855,6 +888,12 @@
         if (measured !== null) { track.setAttribute('role', 'meter'); track.setAttribute('aria-label', name.textContent); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', String(Math.max(maximum, measured))); track.setAttribute('aria-valuenow', String(measured)); track.setAttribute('aria-valuetext', `${value.textContent} · ${this._coverageText(source)}`); }
         track.appendChild(bar); row.append(name, value, track);
         if (unit) { const coverage = document.createElement('small'); coverage.className = source.status === 'ready' ? 'muted' : 'warning'; coverage.textContent = this._coverageText(source); row.appendChild(coverage); }
+        if (deviceContext && source.included_in_stat) {
+          const parent = deviceContext.get(source.included_in_stat);
+          const context = document.createElement('small'); context.className = 'muted';
+          context.textContent = `${this._t('Parent device')}: ${parent?.label || source.included_in_stat}${parent?.label && parent.label !== source.included_in_stat ? ` (${source.included_in_stat})` : ''}`;
+          row.appendChild(context);
+        }
         chart.appendChild(row);
       }
       return chart;
@@ -918,6 +957,8 @@
       if (!this._scaffoldRendered) return;
       const container = this.shadowRoot.getElementById('content'); const state = this._energyViewState || { status: 'idle' };
       const exportable = ['ready', 'partial', 'no_data'].includes(state.status);
+      const search = this.shadowRoot.activeElement;
+      const searchFocus = search?.classList.contains('device-search') ? {start:search.selectionStart,end:search.selectionEnd} : null;
       this._focusedEnergyView = this.shadowRoot.activeElement && this.shadowRoot.activeElement.dataset.energyView;
       this.shadowRoot.getElementById('exportJsonBtn').disabled = !exportable; this.shadowRoot.getElementById('exportCsvBtn').disabled = !exportable; container.replaceChildren();
       if (state.status === 'loading' || state.status === 'idle') { container.appendChild(this._stateBlock('Loading recorder statistics…', 'This report uses recorded changes for the selected local-calendar period.', '', 'status')); return; }
@@ -964,24 +1005,32 @@
       if (this._energyView !== 'costs') {
         const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = this._t(state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown')); container.appendChild(heading);
         const devices = state.devices || [];
-        if (devices.length) {
-          container.appendChild(this._barChart(this._energyView === 'summary' ? devices.slice(0, 6) : devices, 'Recorded energy by device', 'kWh'));
+        if (this._energyView === 'devices') this._renderDeviceSearch(container, devices);
+        const shown = this._energyView === 'devices' ? this._filteredDevices(devices) : devices.slice(0, 6);
+        if (shown.length) {
+          container.appendChild(this._barChart(shown, 'Recorded energy by device', 'kWh', {scaleRows:this._energyView === 'devices' ? devices : shown,deviceContext:new Map(devices.map(row=>[row.statistic_id,row]))}));
           const note = document.createElement('p'); note.className = 'muted'; note.textContent = this._t('Device values have their own coverage; nested devices are included in their parent.'); container.appendChild(note);
           if (this._energyView === 'summary' && devices.length > 6) { const all = document.createElement('button'); all.type = 'button'; all.className = 'action section'; all.textContent = this._t('See all devices'); all.addEventListener('click', () => { this._energyView = 'devices'; this._renderEnergyState(); }); container.appendChild(all); }
-        } else { const empty = document.createElement('p'); empty.className = 'muted section'; empty.textContent = this._t('No device statistics are configured.'); container.appendChild(empty); }
+        } else { const empty = document.createElement('p'); empty.className = 'muted section'; empty.textContent = this._t(devices.length ? 'No matching devices' : 'No device statistics are configured.'); container.appendChild(empty); }
       }
       if (this._energyView !== 'devices') this._renderCostCoverage(container, state);
       const evidence = document.createElement('details'); evidence.className = 'section source-evidence';
       const evidenceHeading = document.createElement('summary'); evidenceHeading.textContent = this._t('Source evidence'); evidence.appendChild(evidenceHeading);
       const evidenceList = document.createElement('div'); evidenceList.className = 'list';
-      for (const source of [...(state.total_sources || []), ...(state.cost_sources || [])]) {
-        const row = document.createElement('div'); row.className = 'row';
+      const evidenceSources = [...(state.total_sources || []), ...(state.cost_sources || [])];
+      if (this._energyView === 'devices' && String(this._deviceQuery || '').trim()) evidence.open = true;
+      for (const source of (this._energyView === 'devices' ? this._filteredDevices(evidenceSources) : evidenceSources)) {
+        const row = document.createElement('div'); row.className = 'row'; row.dataset.energySource = source.statistic_id;
         const name = document.createElement('span'); name.className = 'row-name'; const sourceLabel = source.label || source.statistic_id; name.textContent = sourceLabel === source.statistic_id ? source.statistic_id : `${sourceLabel} (${source.statistic_id})`;
         const detail = document.createElement('span'); detail.className = source.status === 'ready' ? 'status-ready' : 'warning'; detail.textContent = source.reason ? `${this._t(source.status)}: ${this._t(source.reason)}` : this._t(source.status);
         row.append(name, detail); evidenceList.appendChild(row);
       }
       for (const warningText of state.warnings || []) { const warning = document.createElement('p'); warning.className = 'warning'; warning.textContent = this._warningText(warningText); evidenceList.appendChild(warning); }
       evidence.appendChild(evidenceList); container.appendChild(evidence);
+      if (searchFocus) {
+        const next = container.querySelector('.device-search'); next?.focus({preventScroll:true});
+        if (next && searchFocus.start != null) next.setSelectionRange(searchFocus.start,searchFocus.end);
+      }
     }
 
     _metric(labelText, valueText) {
