@@ -120,7 +120,7 @@ test('automation empty view, known warning codes, and settings follow HA languag
     assert.match(card.shadowRoot.getElementById('content').textContent, /included_in_stat jest dozwolone tylko dla źródeł urządzeń: sensor.UserEnergy/);
     const editor = dom.window.document.createElement('ha-smart-reports-editor');
     editor.setConfig({ title: 'User Energy', currency: 'PLN' }); editor.hass = hass;
-    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Tytuł', 'Waluta', 'Tryb źródeł', 'Identyfikatory statystyk zużycia', 'Identyfikatory statystyk urządzeń', 'Identyfikatory statystyk kosztów']);
+    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Tytuł', 'Waluta', 'Tryb źródeł', 'Identyfikatory statystyk zużycia', 'Identyfikatory statystyk urządzeń', 'Identyfikatory statystyk kosztów', 'Tryb kosztu', 'Stała stawka za kWh']);
     assert.equal(editor.shadowRoot.getElementById('cf_title').value, 'User Energy');
     let changed;
     editor.addEventListener('config-changed', event => { changed = event.detail.config; });
@@ -128,7 +128,7 @@ test('automation empty view, known warning codes, and settings follow HA languag
     editor.shadowRoot.getElementById('cf_title').dispatchEvent(new dom.window.Event('input'));
     assert.equal(changed.title, 'Edited title'); assert.equal(changed.currency, 'PLN');
     hass.language = 'en'; editor.hass = hass;
-    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Title', 'Currency', 'Source mode', 'Total statistic IDs', 'Device statistic IDs', 'Cost statistic IDs']);
+    assert.deepEqual(Array.from(editor.shadowRoot.querySelectorAll('label'), node => node.firstChild.textContent), ['Title', 'Currency', 'Source mode', 'Total statistic IDs', 'Device statistic IDs', 'Cost statistic IDs', 'Cost mode', 'Flat rate per kWh']);
     assert.equal(editor.shadowRoot.getElementById('cf_title').value, 'Edited title');
   } finally { dom.window.close(); }
 });
