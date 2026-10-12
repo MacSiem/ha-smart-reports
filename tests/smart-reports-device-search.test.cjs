@@ -34,3 +34,9 @@ test('Polish search, parent context and full-export notice are localized and esc
  const f=await fixture('pl');try{f.card._energyViewState.devices[1].label='<img src=x onerror=1>';f.card._renderEnergyState();assert.equal(f.card.shadowRoot.querySelector('img'),null);assert.match(f.card.shadowRoot.textContent,/Szukaj urządzenia/);assert.match(f.card.shadowRoot.textContent,/Eksport obejmuje wszystkie urządzenia/);assert.match(f.card.shadowRoot.textContent,/Urządzenie nadrzędne: Kitchen/);
  }finally{f.card.remove();f.dom.window.close();}
 });
+
+test('source search matches root label/ID, reveals matching evidence and preserves full export',async()=>{
+ const f=await fixture();try{f.card._energyViewState.total_sources=[{statistic_id:'sensor.grid',label:'House import',unit:'kWh',value:30,status:'ready'}];f.card._renderEnergyState();const before=JSON.stringify(f.card._buildExportDocument('2026-08-30T00:00:00Z'));
+  const i=f.card.shadowRoot.querySelector('.device-search');assert.ok(i);i.value='HOUSE';i.dispatchEvent(new f.window.Event('input'));assert.deepEqual(Array.from(f.card.shadowRoot.querySelectorAll('[data-energy-source]'),e=>e.dataset.energySource),['sensor.grid']);assert.equal(f.card.shadowRoot.querySelector('.source-evidence').open,true);assert.equal(f.card.shadowRoot.querySelectorAll('[data-device-statistic]').length,0);assert.equal(JSON.stringify(f.card._buildExportDocument('2026-08-30T00:00:00Z')),before);
+ }finally{f.card.remove();f.dom.window.close();}
+});
