@@ -9,11 +9,898 @@
 
   if (customElements.get('ha-smart-reports')) return;
 
+  // BEGIN mirror shared/ha-tools-energy-tariff.js
+
+// Canonical, side-effect-free tariff model. Consumers vendor this factory inside
+// their own scope. Rates are user settings, never a country's assumed defaults.
+function createEnergyTariffV3(input) {
+  const errors = [];
+  const fail = (path, reason) => errors.push({ path, reason });
+  const record = value => value && typeof value === 'object' && !Array.isArray(value);
+  const finite = value => typeof value === 'number' && Number.isFinite(value);
+  const dateKey = value => {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return false;
+    const stamp = Date.parse(value + 'T00:00:00Z');
+    return Number.isFinite(stamp) && new Date(stamp).toISOString().slice(0, 10) === value;
+  };
+  const monthDay = value => typeof value === 'string' && /^\d{2}-\d{2}$/.test(value) && dateKey('2000-' + value);
+  const timestamp = value => {
+    let stamp;
+    if (finite(value)) stamp = Math.trunc(value);
+    else {
+      // One shared calendar/offset contract; Date.parse alone normalizes Feb 30
+      // and 24:00, unlike the server. Milliseconds truncate in both consumers.
+      const match = typeof value === 'string' && value.match(/^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d+)?)?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/);
+      if (!match || !dateKey(match[1])) return NaN;
+      stamp = Date.parse(value);
+    }
+    return finite(stamp) && stamp >= -62135596800000 && stamp <= 253402300799999 ? stamp : NaN;
+  };
+  const minutes = (value, end = false) => {
+    if (end && value === '24:00') return 1440;
+    if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return NaN;
+    return Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+  };
+  const p = record(input) ? input : {};
+  if (!record(input)) fail('profile', 'invalid_profile');
+  if (p.schema !== 1) fail('schema', 'unsupported_schema');
+  if (typeof p.currency !== 'string' || !/^[A-Z]{3}$/.test(p.currency)) fail('currency', 'invalid_currency');
+  if (!['gross', 'net'].includes(p.priceBasis)) fail('priceBasis', 'invalid_price_basis');
+  let formatter;
+  try {
+    if (typeof p.timezone !== 'string' || !p.timezone) throw new Error('timezone');
+    formatter = new Intl.DateTimeFormat('en-CA', { timeZone: p.timezone,
+      calendar: 'gregory', numberingSystem: 'latn', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  } catch (_) { fail('timezone', 'invalid_timezone'); }
+  const clock = record(p.clock) ? { ...p.clock } : {};
+  if (!['civil', 'fixed'].includes(clock.mode)) fail('clock.mode', 'invalid_clock');
+  if (clock.mode === 'fixed' && (!Number.isInteger(clock.offsetMinutes) || clock.offsetMinutes < -840 || clock.offsetMinutes > 840))
+    fail('clock.offsetMinutes', 'invalid_offset');
+  for (const key of ['validFrom', 'validTo']) if (p[key] != null && !dateKey(p[key])) fail(key, 'invalid_date');
+  if (dateKey(p.validFrom) && dateKey(p.validTo) && p.validFrom > p.validTo) fail('validTo', 'reversed_validity');
+  if (p.fixedMonthly != null && (!finite(p.fixedMonthly) || p.fixedMonthly < 0)) fail('fixedMonthly', 'invalid_fee');
+  const energyRate = (value, path) => {
+    if (!finite(value) || (value < 0 && p.allowNegativeEnergy !== true)) fail(path, 'invalid_rate');
+    return value;
+  };
+  const variableRate = (value, path) => {
+    if (value == null) return null;
+    if (!finite(value) || value < 0) fail(path, 'invalid_fee');
+    return value;
+  };
+  const zones = new Map();
+  if (!Array.isArray(p.zones) || !p.zones.length || p.zones.length > 32) fail('zones', 'invalid_zones');
+  for (const [i, z] of (Array.isArray(p.zones) ? p.zones : []).entries()) {
+    const path = `zones.${i}`;
+    if (!record(z) || typeof z.id !== 'string' || !/^[\w-]{1,64}$/.test(z.id) || zones.has(z.id)) {
+      fail(path, 'invalid_zone'); continue;
+    }
+    zones.set(z.id, { zone: z.id, label: typeof z.label === 'string' ? z.label : z.id,
+      energyRate: energyRate(z.energyRate, path + '.energyRate'), variableRate: variableRate(z.variableRate, path + '.variableRate') });
+  }
+  const defaultZone = p.defaultZone == null ? null : p.defaultZone;
+  if (defaultZone !== null && !zones.has(defaultZone)) fail('defaultZone', 'unknown_zone');
+  const parseRules = (value, kind) => {
+    if (value == null) return [];
+    if (!Array.isArray(value) || value.length > 512) { fail(kind, 'invalid_rules'); return []; }
+    return value.map((r, i) => {
+      const path = `${kind}.${i}`;
+      if (!record(r)) { fail(path, 'invalid_rule'); return null; }
+      if (!zones.has(r.zone)) fail(path + '.zone', 'unknown_zone');
+      const priority = r.priority == null ? 0 : r.priority;
+      if (!Number.isInteger(priority) || Math.abs(priority) > 10000) fail(path + '.priority', 'invalid_priority');
+      let weekdays = null, dates = null, season = null;
+      if (r.weekdays != null) {
+        if (!Array.isArray(r.weekdays) || !r.weekdays.length || r.weekdays.some(d => !Number.isInteger(d) || d < 0 || d > 6)) fail(path + '.weekdays', 'invalid_weekdays');
+        else weekdays = new Set(r.weekdays);
+      }
+      if (r.dates != null || kind === 'exceptions') {
+        if (!Array.isArray(r.dates) || !r.dates.length || r.dates.length > 3660 || r.dates.some(d => !dateKey(d))) fail(path + '.dates', 'invalid_dates');
+        else dates = new Set(r.dates);
+      }
+      if (r.season != null) {
+        if (!record(r.season) || !monthDay(r.season.from) || !monthDay(r.season.to)) fail(path + '.season', 'invalid_season');
+        else season = { from: r.season.from, to: r.season.to };
+      }
+      const intervals = [];
+      if (!Array.isArray(r.intervals) || !r.intervals.length || r.intervals.length > 48) fail(path + '.intervals', 'invalid_intervals');
+      else for (const [j, interval] of r.intervals.entries()) {
+        const from = minutes(interval?.from), to = minutes(interval?.to, true);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) fail(`${path}.intervals.${j}`, 'invalid_interval');
+        else intervals.push({ from, to });
+      }
+      return { zone: r.zone, priority, weekdays, dates, season, intervals };
+    }).filter(Boolean);
+  };
+  const rules = parseRules(p.rules, 'rules'), exceptions = parseRules(p.exceptions, 'exceptions');
+  let dynamic = null;
+  if (p.dynamic != null) {
+    if (!record(p.dynamic) || !Array.isArray(p.dynamic.intervals) || p.dynamic.intervals.length > 10000) fail('dynamic', 'invalid_dynamic');
+    else {
+      dynamic = p.dynamic.intervals.map((r, i) => {
+        const from = timestamp(r?.from), to = timestamp(r?.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) fail(`dynamic.intervals.${i}`, 'invalid_interval');
+        return { from, to, zone: 'dynamic', label: 'Dynamic',
+          energyRate: energyRate(r?.energyRate, `dynamic.intervals.${i}.energyRate`),
+          variableRate: variableRate(r?.variableRate, `dynamic.intervals.${i}.variableRate`) };
+      }).sort((a, b) => a.from - b.from);
+      for (let i = 1; i < dynamic.length; i++) if (dynamic[i].from < dynamic[i - 1].to) fail('dynamic', 'overlapping_prices');
+    }
+  }
+  const valid = errors.length === 0;
+  const unavailable = reason => ({ available: false, reason });
+  const localParts = stamp => {
+    if (clock.mode === 'fixed') {
+      const d = new Date(stamp + clock.offsetMinutes * 60000);
+      return { date: d.toISOString().slice(0, 10), minute: d.getUTCHours() * 60 + d.getUTCMinutes() };
+    }
+    const values = Object.fromEntries(formatter.formatToParts(stamp).filter(v => v.type !== 'literal').map(v => [v.type, v.value]));
+    return { date: `${values.year}-${values.month}-${values.day}`, minute: Number(values.hour) * 60 + Number(values.minute) };
+  };
+  const matchesDay = (rule, day) => {
+    if (rule.dates && !rule.dates.has(day)) return false;
+    if (rule.weekdays && !rule.weekdays.has(new Date(day + 'T00:00:00Z').getUTCDay())) return false;
+    const mmdd = day.slice(5), s = rule.season;
+    return !s || (s.from <= s.to ? mmdd >= s.from && mmdd <= s.to : mmdd >= s.from || mmdd <= s.to);
+  };
+  const matches = (rule, day, minute) => rule.intervals.some(interval => {
+    if (interval.from < interval.to) return minute >= interval.from && minute < interval.to && matchesDay(rule, day);
+    if (minute >= interval.from) return matchesDay(rule, day);
+    if (minute < interval.to) {
+      const previousDay = new Date(Date.parse(day + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+      return matchesDay(rule, previousDay);
+    }
+    return false;
+  });
+  const rateAt = instant => {
+    if (!valid) return unavailable('invalid_profile');
+    const stamp = timestamp(instant);
+    if (!Number.isFinite(stamp)) return unavailable('invalid_timestamp');
+    const local = localParts(stamp);
+    if ((p.validFrom && local.date < p.validFrom) || (p.validTo && local.date > p.validTo)) return unavailable('outside_validity');
+    if (dynamic) {
+      // Price periods use absolute timestamps, so repeated DST hours are distinct.
+      let low = 0, high = dynamic.length;
+      while (low < high) { const mid = (low + high) >>> 1; if (dynamic[mid].from <= stamp) low = mid + 1; else high = mid; }
+      const price = dynamic[low - 1];
+      return price && stamp < price.to ? { available: true, ...price, date: local.date } : unavailable('missing_rate');
+    }
+    const special = exceptions.filter(r => matches(r, local.date, local.minute));
+    const candidates = special.length ? special : rules.filter(r => matches(r, local.date, local.minute));
+    let zone = defaultZone;
+    if (candidates.length) {
+      const priority = Math.max(...candidates.map(r => r.priority));
+      const ids = new Set(candidates.filter(r => r.priority === priority).map(r => r.zone));
+      if (ids.size !== 1) return unavailable('ambiguous_rules');
+      zone = [...ids][0];
+    }
+    return zones.has(zone) ? { available: true, ...zones.get(zone), date: local.date } : unavailable('missing_rate');
+  };
+  const samePrice = (a, b) => a.available && b.available && a.energyRate === b.energyRate && a.variableRate === b.variableRate;
+  const priceBucket = row => {
+    const from = timestamp(row?.from), to = timestamp(row?.to), kwh = row?.kwh;
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 86400000 || !finite(kwh) || kwh < 0)
+      return { available: false, reason: 'invalid_measurement', from, to };
+    const first = rateAt(from);
+    if (!first.available) return { ...first, from, to };
+    // Never apportion an aggregate measurement across different prices. Every
+    // minute boundary and every dynamic boundary is checked, including the end.
+    const checkpoints = new Set([to - 1]);
+    for (let t = (Math.floor(from / 60000) + 1) * 60000; t < to; t += 60000) checkpoints.add(t);
+    if (dynamic) for (const price of dynamic) for (const t of [price.from, price.to]) if (t > from && t < to) checkpoints.add(t);
+    const zoneIds = new Set([first.zone]);
+    for (const stamp of checkpoints) {
+      const next = rateAt(stamp);
+      if (!next.available) return { ...next, from, to };
+      if (!samePrice(first, next)) return { available: false, reason: 'mixed_rate_bucket', from, to };
+      zoneIds.add(next.zone);
+    }
+    const energyCost = kwh * first.energyRate, variableCost = first.variableRate === null ? null : kwh * first.variableRate;
+    const usageCost = variableCost === null ? null : energyCost + variableCost;
+    if (![energyCost, variableCost, usageCost].every(v => v === null || finite(v)))
+      return { available: false, reason: 'nonfinite_cost', from, to };
+    const ids = [...zoneIds].sort();
+    return { available: true, from, to, kwh, zone: ids.length === 1 ? ids[0] : null,
+      zones: ids, zoneAttribution: ids.length === 1 ? 'single' : 'multiple', energyRate: first.energyRate,
+      variableRate: first.variableRate, energyCost, variableCost, usageCost };
+  };
+  const priceBuckets = (rows, coverage) => {
+    const issues = [], priced = [];
+    if (!valid) issues.push({ reason: 'invalid_profile' });
+    if (!Array.isArray(rows) || !rows.length) issues.push({ reason: 'no_data' });
+    for (const [index, row] of (Array.isArray(rows) ? rows : []).entries()) {
+      const result = priceBucket(row); priced.push({ index, ...result });
+      if (!result.available) issues.push({ index, reason: result.reason });
+    }
+    const ordered = [...priced].sort((a, b) => a.from - b.from);
+    for (let i = 1; i < ordered.length; i++) if (ordered[i].from < ordered[i - 1].to) issues.push({ index: ordered[i].index, reason: 'overlapping_measurement' });
+    if (coverage != null) {
+      const from = timestamp(coverage.from), to = timestamp(coverage.to);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) issues.push({ reason: 'invalid_coverage' });
+      else if (!ordered.length || ordered[0].from !== from || ordered.at(-1).to !== to || ordered.some((r, i) => i && r.from !== ordered[i - 1].to))
+        issues.push({ reason: 'missing_measurement' });
+    }
+    let complete = !issues.length;
+    let kwh = complete ? priced.reduce((sum, r) => sum + r.kwh, 0) : null;
+    let energyCost = complete ? priced.reduce((sum, r) => sum + r.energyCost, 0) : null;
+    let variableCost = complete && priced.every(r => r.variableCost !== null) ? priced.reduce((sum, r) => sum + r.variableCost, 0) : null;
+    let usageCost = energyCost !== null && variableCost !== null ? energyCost + variableCost : null;
+    if (complete && ![kwh, energyCost, variableCost, usageCost].every(v => v === null || finite(v))) {
+      issues.push({ reason: 'nonfinite_total' }); complete = false;
+      kwh = energyCost = variableCost = usageCost = null;
+    }
+    return { complete, issues, rows: priced, kwh, energyCost, variableCost, usageCost,
+      currency: p.currency ?? null, priceBasis: p.priceBasis ?? null, timezone: p.timezone ?? null,
+      clock: { ...clock }, fixedMonthly: valid && finite(p.fixedMonthly) ? p.fixedMonthly : null };
+  };
+  return { valid, errors, rateAt, priceBuckets };
+}
+
+function energyTariffProfileV3(config, haConfig, kind) {
+  const c = config || {}, h = haConfig || {};
+  if (Object.hasOwn(c, 'tariff_profile')) return c.tariff_profile;
+  const isOptimizer = kind === 'optimizer';
+  const number = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+  // Older Optimizer YAML accepted decimal strings. Preserve those explicit
+  // prices, while refusing empty strings, booleans and automatic sample rates.
+  const optimizerNumber = value => number(value) ?? (typeof value === 'string' && value.trim() && Number.isFinite(Number(value)) ? Number(value) : null);
+  const mode = c.energy_tariff_mode || (isOptimizer && c.off_peak_rate != null ? 'day_night' : 'flat');
+  const start = c.energy_day_hour_start ?? c.peak_hours?.start ?? 6;
+  const end = c.energy_night_hour_start ?? c.peak_hours?.end ?? 22;
+  const clockTime = value => Number.isInteger(value) && value >= 0 && value <= 24 ? `${String(value).padStart(2, '0')}:00` : 'invalid';
+  // Legacy weekday/weekend classification used the current calendar day, even
+  // after midnight. Custom overnight rules intentionally use the start day.
+  const day = start === end ? [{ from: '00:00', to: '24:00' }] :
+    Number.isInteger(start) && Number.isInteger(end) && start > end && start <= 24 && end >= 0 ?
+      [...(start < 24 ? [{ from: clockTime(start), to: '24:00' }] : []),
+        ...(end > 0 ? [{ from: '00:00', to: clockTime(end) }] : [])] :
+      [{ from: clockTime(start), to: clockTime(end) }];
+  const zone = (id, energyRate) => ({ id, label: id, energyRate, variableRate: null });
+  const profile = { schema: 1, name: 'Configured tariff', currency: c.currency || h.currency || '',
+    timezone: h.time_zone || '', clock: { mode: 'civil' }, priceBasis: c.energy_price_basis || 'gross',
+    fixedMonthly: null, defaultZone: 'flat', zones: [], rules: [] };
+  if (mode === 'flat') profile.zones = [zone('flat', isOptimizer ? optimizerNumber(c.peak_rate ?? c.energy_price) : number(c.energy_price))];
+  else if (mode === 'day_night') {
+    profile.zones = [zone('day', isOptimizer ? optimizerNumber(c.peak_rate ?? c.energy_price) : number(c.energy_price_day)),
+      zone('night', isOptimizer ? optimizerNumber(c.off_peak_rate) : number(c.energy_price_night))];
+    profile.defaultZone = 'night'; profile.rules = [{ zone: 'day', intervals: day }];
+  } else if (mode === 'weekday_weekend') {
+    profile.zones = [zone('weekday', number(c.energy_price_weekday)), zone('weekend', number(c.energy_price_weekend))];
+    profile.defaultZone = 'weekday'; profile.rules = [{ zone: 'weekend', weekdays: [0, 6], intervals: [{ from: '00:00', to: '24:00' }] }];
+  } else if (mode === 'mixed') {
+    profile.zones = [zone('wd_day', number(c.energy_price_wd_day)), zone('wd_night', number(c.energy_price_wd_night)),
+      zone('we_day', number(c.energy_price_we_day)), zone('we_night', number(c.energy_price_we_night))];
+    profile.defaultZone = 'wd_night'; profile.rules = [
+      { zone: 'wd_day', weekdays: [1, 2, 3, 4, 5], intervals: day },
+      { zone: 'we_night', weekdays: [0, 6], intervals: [{ from: '00:00', to: '24:00' }] },
+      { zone: 'we_day', weekdays: [0, 6], priority: 1, intervals: day }];
+  } else profile.schema = 0;
+  return profile;
+}
+
+  // END mirror shared/ha-tools-energy-tariff.js
+
+  // BEGIN mirror shared/ha-tools-ui.js
+// HA Tools v3: vendored inside each consumer's own closure, never a window API.
+function createUiV3({ language = 'en' } = {}) {
+  const pl = String(language).startsWith('pl');
+  const states = {
+    success: ['Success', 'Sukces', '✓'],
+    partial: ['Partial', 'Częściowo', '½'],
+    unconfirmed: ['Unconfirmed', 'Niepotwierdzony', '?'],
+    error: ['Error', 'Błąd', '✕'],
+    not_checked: ['Not checked', 'Nie sprawdzono', '–'],
+    no_data: ['No data', 'Brak danych', '∅'],
+  };
+  const status = (value) => {
+    const code = typeof value === 'string' && Object.hasOwn(states, value) ? value : 'not_checked';
+    const row = states[code];
+    return { code, label: row[pl ? 1 : 0], icon: row[2], countsAsSuccess: code === 'success' };
+  };
+  const statusHtml = (value) => {
+    const result = status(value);
+    return `<span class="ht-result-state ht-result-state--${result.code}" data-result-state="${result.code}"><span aria-hidden="true">${result.icon}</span> ${result.label}</span>`;
+  };
+  const css = `
+.ht-result-state { display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid currentColor;border-radius:6px;font-size:12px;line-height:1.4;white-space:normal; }
+.ht-result-state--success { color:#237b3d;background:rgba(35,123,61,.10); }
+.ht-result-state--partial { color:#966400;background:rgba(150,100,0,.10); }
+.ht-result-state--unconfirmed { color:#ad5200;background:rgba(173,82,0,.10); }
+.ht-result-state--error { color:#c32b2b;background:rgba(195,43,43,.10); }
+.ht-result-state--not_checked,.ht-result-state--no_data { color:var(--secondary-text-color,#666);background:transparent; }
+.ht-result-state--no_data { border-style:dashed; }
+:host(.bento-dark) .ht-result-state--success { color:#81cf99; }
+:host(.bento-dark) .ht-result-state--partial { color:#efd080; }
+:host(.bento-dark) .ht-result-state--unconfirmed { color:#ffb97b; }
+:host(.bento-dark) .ht-result-state--error { color:#ff9999; }
+`;
+  return { status, statusHtml, css };
+}
+// Node tests use the canonical factory; this line is excluded from runtime copies.
+  // END mirror shared/ha-tools-ui.js
+
+  // BEGIN mirror shared/ha-tools-tariff-guard.js
+
+// One wire fence for the card-owned host and settings editor. A public timeout
+// is uncertainty, never permission to dispatch another raw operation.
+function createTariffGuardV3({ getHass, getContext = () => null, browser = typeof window === 'object' ? window : null, timeoutMs = 15000 }) {
+  const canonical = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+  let epoch = 0, association, connection, connectionOffline = false, browserOffline = browser?.navigator?.onLine === false;
+  let raw = null, suspended = false;
+  const listeners = new Set(), wireListeners = new Set();
+  const notify = () => { epoch++; for (const listener of [...listeners]) listener(); };
+  const connectionEvent = event => {
+    if (event.type === 'disconnected' || event.type === 'reconnect-error') connectionOffline = true;
+    else if (event.type === 'ready') connectionOffline = false;
+    notify();
+  };
+  const types = ['disconnected', 'ready', 'reconnect-error'];
+  const bind = next => {
+    if (connection === next) return;
+    for (const type of types) connection?.removeEventListener?.(type, connectionEvent);
+    connection = next; connectionOffline = next?.connected === false;
+    if (!suspended) for (const type of types) connection?.addEventListener?.(type, connectionEvent);
+  };
+  const browserEvent = event => { browserOffline = event.type === 'offline'; notify(); };
+  browser?.addEventListener?.('offline', browserEvent);
+  browser?.addEventListener?.('online', browserEvent);
+  const read = h => {
+    bind(h?.connection);
+    return { user: h?.user?.id, admin: h?.user?.is_admin === true, owner: h?.user?.is_owner === true,
+      active: h?.user?.is_active !== false, groups: canonical(h?.user?.groups || []),
+      connection: h?.connection, callWS: h?.callWS,
+      connected: h?.connection?.connected !== false && !connectionOffline,
+      online: !suspended && !browserOffline && browser?.navigator?.onLine !== false,
+      haConfig: canonical(h?.config || {}), context: canonical(getContext()) };
+  };
+  const equal = (a, b) => a && b && Object.keys(b).every(k => a[k] === b[k]);
+  const observe = (...prospectiveHass) => {
+    const now = read(prospectiveHass.length ? prospectiveHass[0] : getHass()), changed = association && !equal(association, now);
+    association = now;
+    if (changed) notify();
+    return { ...now, epoch };
+  };
+  const available = a => !!a?.user && a.active && !!a.connection && a.connected && a.online && typeof a.callWS === 'function';
+  const snapshot = () => observe();
+  const current = (token, admin = false) => {
+    const now = observe();
+    return token?.epoch === now.epoch && equal(token, Object.fromEntries(Object.entries(now).filter(([k]) => k !== 'epoch'))) && available(now) && (!admin || now.admin);
+  };
+  const call = (token, payload, admin = false) => {
+    if (!current(token, admin)) return Promise.reject({ code: 'authority_changed' });
+    if (raw) return Promise.reject({ code: 'wire_occupied' });
+    let resolvePublic, rejectPublic, finished = false;
+    const result = new Promise((resolve, reject) => { resolvePublic = resolve; rejectPublic = reject; });
+    const slot = {}; raw = slot;
+    const timer = setTimeout(() => { finished = true; rejectPublic({ code: 'timeout' }); }, timeoutMs);
+    let request;
+    try { request = Promise.resolve(token.callWS.call(getHass(), payload)); }
+    catch (error) { request = Promise.reject(error); }
+    // Both branches handle late settlement; no floating rejected finally promise.
+    const settled = () => {
+      clearTimeout(timer); if (raw === slot) raw = null;
+      for (const listener of [...wireListeners]) listener();
+    };
+    request.then(value => {
+      settled();
+      if (!finished) { finished = true; current(token, admin) ? resolvePublic(value) : rejectPublic({ code: 'authority_changed' }); }
+    }, error => { settled(); if (!finished) { finished = true; rejectPublic(error); } });
+    return result;
+  };
+  const suspend = () => {
+    if (suspended) return;
+    suspended = true;
+    for (const type of types) connection?.removeEventListener?.(type, connectionEvent);
+    browser?.removeEventListener?.('offline', browserEvent); browser?.removeEventListener?.('online', browserEvent);
+    notify();
+  };
+  const resume = () => {
+    if (!suspended) return;
+    suspended = false; browserOffline = browser?.navigator?.onLine === false;
+    for (const type of types) connection?.addEventListener?.(type, connectionEvent);
+    browser?.addEventListener?.('offline', browserEvent); browser?.addEventListener?.('online', browserEvent);
+    notify(); observe();
+  };
+  const dispose = () => {
+    for (const type of types) connection?.removeEventListener?.(type, connectionEvent);
+    browser?.removeEventListener?.('offline', browserEvent); browser?.removeEventListener?.('online', browserEvent);
+    notify(); listeners.clear(); wireListeners.clear(); // Raw occupancy intentionally survives disposal.
+  };
+  observe(); // Observe typed edges before the card/editor is ever mounted.
+  return { snapshot, observe, current, available, call, occupied: () => raw !== null,
+    subscribeWire: listener => { wireListeners.add(listener); return () => wireListeners.delete(listener); },
+    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, invalidate: notify, suspend, resume, dispose };
+}
+  // END mirror shared/ha-tools-tariff-guard.js
+
+  // BEGIN mirror shared/ha-tools-tariff-settings.js
+// Node-only dependency; runtime consumers vendor the guard in their own closure.
+
+// Vendor inside each card's closure. The parent owns state and its mount; no
+// global registration, helper services, SMTP configuration or browser storage.
+function createTariffSettingsV3({ root, getHass, language = 'en', state, validate, onSaved, onLoaded, onCancel, ui, guard }) {
+  if (!root || !state || typeof getHass !== 'function' || typeof validate !== 'function') throw new TypeError('tariff_settings_adapter');
+  const translations = new Map();
+  const pl = () => String(typeof language === 'function' ? language() : language).startsWith('pl');
+  const t = (en, polish) => { translations.set(en, polish); return pl() ? polish : en; };
+  const localMessage = () => {
+    const message = state.message || '';
+    for (const [en, polish] of translations) {
+      if (message === en || message === polish) return pl() ? polish : en;
+    }
+    return message;
+  };
+  const family = () => typeof ui === 'function' ? ui() : ui;
+  const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
+  const canonical = value => JSON.stringify(value, function (_, v) {
+    return object(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v;
+  });
+  const equal = (a, b) => canonical(a) === canonical(b);
+  const validProfile = profile => { try { return validate(profile)?.valid === true; } catch (_) { return false; } };
+  // The server returns only this bounded marker when persisted validation fails.
+  // Its confirmed revision lets an administrator explicitly replace the profile.
+  const invalidMarker = profile => object(profile) && profile.schema === 0 && Object.keys(profile).length === 1;
+  const statuses = () => ({ success: t('Success', 'Sukces'), partial: t('Partial', 'Częściowo'),
+    unconfirmed: t('Unconfirmed', 'Niepotwierdzony'), error: t('Error', 'Błąd'),
+    not_checked: t('Not checked', 'Nie sprawdzono'), no_data: t('No data', 'Brak danych') });
+  const statusHtml = () => family()?.statusHtml(state.status) || `<span data-result-state="${esc(state.status)}"><span aria-hidden="true">${({ success: '✓', partial: '½', unconfirmed: '?', error: '✕', not_checked: '–', no_data: '∅' })[state.status] || '–'}</span> ${esc(statuses()[state.status] || statuses().not_checked)}</span>`;
+  const blank = () => ({ schema: 1, type: 'Custom', name: '', currency: getHass()?.config?.currency || '',
+    timezone: getHass()?.config?.time_zone || '', clock: { mode: 'civil' }, priceBasis: 'gross',
+    fixedMonthly: null, defaultZone: null, zones: [], rules: [], exceptions: [] });
+  const seed = profile => invalidMarker(profile) ? blank() : clone(profile) || blank();
+  if (!object(state.draft) || invalidMarker(state.draft)) state.draft = seed(state.profile);
+  if (!statuses()[state.status]) state.status = 'not_checked';
+  if (invalidMarker(state.profile) && state.status === 'not_checked') state.status = 'error';
+  guard ||= createTariffGuardV3({ getHass });
+  let operation = 0, association, resumeFocus = null, disposed = false;
+  const observe = () => (association = guard.observe());
+  const available = a => guard.available(a);
+  const ticket = () => ({ ...observe(), operation: ++operation });
+  const current = (token, admin = false) => token.operation === operation && guard.current(token, admin);
+  const call = (token, payload, admin = false) => current(token, admin)
+    ? guard.call(token, payload, admin) : Promise.reject({ code: 'authority_changed' });
+  const unsubscribe = guard.subscribe(() => {
+    if (disposed) return;
+    operation++; resumeFocus = null;
+    state.profile = null; state.revision = null; state.updated_at = null;
+    state.draft = blank(); state._draftBaseline = clone(state.draft);
+    state.feedText = undefined; state.feedError = null; state.backendAvailable = false;
+    state.busy = false; state.status = 'unconfirmed'; state.message = '';
+    // This mount may already have been detached; erase it too, synchronously.
+    root.replaceChildren();
+  });
+  const unsubscribeWire = guard.subscribeWire(() => { if (!disposed && root.isConnected && available(guard.observe())) render(); });
+  const envelope = value => object(value) && Object.hasOwn(value, 'profile') &&
+    (value.profile === null || invalidMarker(value.profile) || (object(value.profile) && validProfile(value.profile))) && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
+    Object.hasOwn(value, 'updated_at') && (value.updated_at === null ||
+      (typeof value.updated_at === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value.updated_at) && Number.isFinite(Date.parse(value.updated_at))));
+  const message = (status, text) => { state.status = status; state.message = text; };
+  const unknown = () => { state.writeUnconfirmed = true; message('unconfirmed', t('Saving was not confirmed. Check the stored tariff before retrying. Your draft is preserved.',
+    'Nie potwierdzono zapisu. Sprawdź zapisaną taryfę przed ponowieniem. Szkic został zachowany.')); };
+  const load = async () => {
+    if (disposed || state.busy || guard.occupied()) return;
+    const token = ticket();
+    if (!available(token)) { message('error', t('Tariff backend unavailable.', 'Backend taryf jest niedostępny.')); render(); return; }
+    const pristine = equal(state.draft, seed(state.profile)), draft = clone(state.draft);
+    state.busy = true; state.message = t('Loading stored tariff…', 'Wczytywanie zapisanej taryfy…'); render();
+    try {
+      const result = await call(token, { type: 'ha_tools_email/get_tariff' });
+      if (!current(token)) return;
+      if (!envelope(result)) throw { code: 'malformed' };
+      state.profile = clone(result.profile); state.revision = result.revision; state.updated_at = result.updated_at;
+      state.backendAvailable = true; state.writeUnconfirmed = false;
+      state.draft = pristine ? seed(result.profile) : draft;
+      if (pristine) { state.feedText = undefined; state.feedError = null; }
+      if (invalidMarker(result.profile)) message('error', t('The stored tariff is invalid. Review and save a replacement; costs stay unavailable until a valid profile is confirmed.',
+        'Zapisana taryfa jest niepoprawna. Sprawdź i zapisz nowy profil; koszty pozostają niedostępne do potwierdzenia poprawnej taryfy.'));
+      else message(result.profile ? 'not_checked' : 'no_data', t('Stored tariff loaded. Review the fields before saving.', 'Wczytano taryfę. Sprawdź pola przed zapisem.'));
+      if (current(token) && typeof onLoaded === 'function') onLoaded(clone(result));
+    } catch (_) {
+      if (current(token)) { state.backendAvailable = false; message('error', t('Tariff backend unavailable or response invalid. Draft preserved.', 'Backend taryf jest niedostępny lub odpowiedź jest błędna. Zachowano szkic.')); }
+    } finally { if (current(token)) { state.busy = false; render(); } }
+  };
+  const save = async () => {
+    if (disposed || state.busy || guard.occupied()) return;
+    const token = ticket();
+    if (!available(token) || !token.admin || state.writeUnconfirmed || state.backendAvailable === false || !Number.isSafeInteger(state.revision)) {
+      message('error', t('Admin access and a loaded tariff backend are required.', 'Wymagane uprawnienia administratora i wczytany backend taryf.')); render(); return;
+    }
+    if (state.feedError) { message('error', state.feedError); render(); return; }
+    const proposed = clone(state.draft);
+    let result;
+    try { result = validate(proposed); } catch (_) { result = { valid: false }; }
+    if (!result?.valid) {
+      message('error', t('Invalid tariff. Check the marked paths: ', 'Niepoprawna taryfa. Sprawdź wskazane pola: ') +
+        (result?.errors || []).map(e => `${e.path}: ${e.reason}`).join('; ')); render(); return;
+    }
+    const previousRevision = state.revision;
+    state.busy = true; message('not_checked', t('Saving; waiting for stored readback…', 'Zapis; oczekiwanie na odczyt zapisanego profilu…')); render();
+    try {
+      const written = await call(token, { type: 'ha_tools_email/set_tariff', profile: proposed, expected_revision: previousRevision }, true);
+      if (!current(token, true)) return;
+      if (!object(written) || !Number.isSafeInteger(written.revision) || written.revision !== previousRevision + 1) { unknown(); return; }
+      const stored = await call(token, { type: 'ha_tools_email/get_tariff' }, true);
+      if (!current(token, true)) return;
+      if (!envelope(stored) || stored.updated_at === null || stored.revision !== written.revision || !equal(stored.profile, proposed)) { unknown(); return; }
+      state.writeUnconfirmed = false;
+      state.profile = clone(stored.profile); state.draft = clone(stored.profile); state.revision = stored.revision; state.updated_at = stored.updated_at;
+      message('success', t('Tariff saved and confirmed by stored readback.', 'Taryfa zapisana i potwierdzona odczytem.'));
+      if (current(token, true) && typeof onSaved === 'function') onSaved(clone(stored));
+    } catch (error) {
+      if (current(token, true) && ['conflict', 'revision_conflict', 'tariff_revision_conflict'].includes(error?.code)) {
+        state.writeUnconfirmed = true;
+        message('error', t('Revision conflict. Load the stored tariff and reconcile your draft.', 'Konflikt wersji. Wczytaj zapisaną taryfę i porównaj ze szkicem.'));
+      } else if (current(token)) unknown();
+    } finally { if (current(token)) { state.busy = false; render(); } }
+  };
+  const cancel = () => {
+    // A dispatched save cannot be undone safely. The button remains disabled.
+    if (disposed || state.busy || guard.occupied()) return;
+    operation++; state.draft = seed(state.profile); state.feedError = null; state.feedText = undefined;
+    message('not_checked', ''); render(); if (typeof onCancel === 'function') onCancel();
+  };
+  const read = path => path.split('.').reduce((value, key) => value?.[key], state.draft);
+  const write = (path, value) => {
+    const keys = path.split('.'); let at = state.draft;
+    for (const key of keys.slice(0, -1)) { if (!object(at[key]) && !Array.isArray(at[key])) at[key] = {}; at = at[key]; }
+    at[keys.at(-1)] = value;
+  };
+  const mutable = () => observe().admin && !state.busy && !guard.occupied() && available(association);
+  const field = (path, label, kind = 'text', choices) => {
+    const value = read(path);
+    const attrs = `data-path="${esc(path)}" aria-label="${esc(label)}"${mutable() ? '' : ' disabled'}`;
+    let input;
+    if (choices) input = `<select ${attrs}>${choices.map(([v, l]) => `<option value="${esc(v)}"${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    else input = `<input ${attrs} type="${kind === 'number' ? 'number' : kind}"${kind === 'number' ? ' step="any"' : ''} value="${esc(Array.isArray(value) ? value.join(', ') : value)}">`;
+    return `<label class="ht-tariff-field"><span>${esc(label)}</span>${input}</label>`;
+  };
+  const button = (action, label) => `<button type="button" data-action="${esc(action)}"${mutable() ? '' : ' disabled'}>${esc(label)}</button>`;
+  const zoneChoices = () => [['', t('Choose a zone', 'Wybierz strefę')], ...(state.draft.zones || []).map(z => [z.id, z.label || z.id])];
+  const intervals = (kind, i, row) => (row.intervals || []).map((_, j) => `<div class="ht-tariff-row">${
+    field(`${kind}.${i}.intervals.${j}.from`, t('From HH:MM', 'Od HH:MM'))}${
+    field(`${kind}.${i}.intervals.${j}.to`, t('To HH:MM (24:00 allowed)', 'Do HH:MM (także 24:00)'))}${
+    mutable() ? button(`remove-interval:${kind}:${i}:${j}`, t('Remove interval', 'Usuń przedział')) : ''}</div>`).join('') +
+    (mutable() ? button(`add-interval:${kind}:${i}`, t('Add interval', 'Dodaj przedział')) : '');
+  const rows = kind => (state.draft[kind] || []).map((row, i) => `<fieldset><legend>${esc(t(kind === 'rules' ? 'Rule' : 'Date exception', kind === 'rules' ? 'Reguła' : 'Wyjątek daty'))} ${i + 1}</legend><div class="ht-tariff-grid">${
+    field(`${kind}.${i}.zone`, t('Zone', 'Strefa'), 'text', zoneChoices())}${field(`${kind}.${i}.priority`, t('Priority', 'Priorytet'), 'number')}${
+    kind === 'exceptions' ? field(`${kind}.${i}.dates`, t('Dates YYYY-MM-DD, comma separated', 'Daty RRRR-MM-DD, oddzielone przecinkami')) :
+      field(`${kind}.${i}.season.from`, t('Season from MM-DD (optional)', 'Sezon od MM-DD (opcjonalny)')) + field(`${kind}.${i}.season.to`, t('Season to MM-DD (optional)', 'Sezon do MM-DD (opcjonalny)'))}</div>${
+    kind === 'rules' ? `<div class="ht-tariff-days">${[t('Sunday', 'Niedziela'), t('Monday', 'Poniedziałek'), t('Tuesday', 'Wtorek'), t('Wednesday', 'Środa'), t('Thursday', 'Czwartek'), t('Friday', 'Piątek'), t('Saturday', 'Sobota')].map((label, d) => `<label><input type="checkbox" data-weekday="${i}:${d}"${row.weekdays?.includes(d) ? ' checked' : ''}${mutable() ? '' : ' disabled'}><span>${esc(label)}</span></label>`).join('')}</div><p>${esc(t('No checked days = every day. Overnight intervals start on the selected day.', 'Brak zaznaczonych dni = codziennie. Przedział nocny zaczyna się w zaznaczonym dniu.'))}</p>` : ''}${
+    intervals(kind, i, row)}${mutable() ? button(`remove-row:${kind}:${i}`, t('Remove rule', 'Usuń regułę')) : ''}</fieldset>`).join('');
+  const css = `.ht-tariff-v3{box-sizing:border-box;color:var(--primary-text-color,#172033);font:inherit;width:100%;min-width:0;max-width:100%;padding:12px;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--bento-radius,20px)}
+.ht-tariff-v3 *{box-sizing:border-box;min-width:0}.ht-tariff-v3 h3,.ht-tariff-v3 p{overflow-wrap:anywhere}.ht-tariff-v3 fieldset{border:1px solid var(--divider-color,#d8dce5);border-radius:14px;margin:12px 0;padding:12px}.ht-tariff-v3 legend{max-width:100%;overflow-wrap:anywhere}.ht-tariff-v3 .ht-tariff-grid,.ht-tariff-v3 .ht-tariff-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:8px 0}.ht-tariff-v3 .ht-tariff-field{display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}.ht-tariff-v3 input,.ht-tariff-v3 select,.ht-tariff-v3 textarea,.ht-tariff-v3 button{font:inherit;color:inherit;border:1px solid var(--divider-color,#c7cdd9);border-radius:10px;background:var(--secondary-background-color,#f7f8fa);min-height:44px;max-width:100%;width:100%;padding:10px}.ht-tariff-v3 textarea{resize:vertical;min-height:110px}.ht-tariff-v3 button{cursor:pointer;width:auto;white-space:normal;overflow-wrap:anywhere}.ht-tariff-v3 button:disabled{cursor:default;opacity:.6}.ht-tariff-v3 :is(input,select,textarea,button):focus-visible{outline:3px solid var(--primary-color,#395fd1);outline-offset:2px}.ht-tariff-v3 .ht-tariff-days,.ht-tariff-v3 .ht-tariff-actions{display:flex;flex-wrap:wrap;gap:8px}.ht-tariff-v3 .ht-tariff-days label{display:flex;align-items:center;gap:8px;min-height:44px}.ht-tariff-v3 input[type=checkbox]{width:24px;min-height:24px;height:24px}.ht-tariff-v3 [role=status]{padding:12px;border-radius:12px;overflow-wrap:anywhere;background:var(--secondary-background-color,#f1f3f6);margin:12px 0}.ht-tariff-v3 [data-status=success]{color:var(--bento-success,#16804a);background:var(--bento-success-light,#e8f5ed)}.ht-tariff-v3 [data-status=error]{color:var(--error-color,#ba1a1a)}.ht-tariff-v3 [data-status=unconfirmed],.ht-tariff-v3 [data-status=partial]{color:var(--warning-color,#a15b00)}.ht-tariff-v3 details{margin:12px 0}.ht-tariff-v3 summary{min-height:44px;cursor:pointer}`;
+  function render() {
+    if (disposed) return;
+    const active = root.getRootNode().activeElement;
+    const focused = active && root.contains(active) ? active : root.querySelector(':focus');
+    const focusKey = focused ? { path: focused.dataset.path, action: focused.dataset.action, weekday: focused.dataset.weekday, feed: focused.dataset.feed } : resumeFocus;
+    const documentFocus = root.ownerDocument.activeElement, ownerRoot = root.getRootNode();
+    const externalFocus = documentFocus && documentFocus !== root.ownerDocument.body &&
+      documentFocus !== ownerRoot.host && !root.contains(documentFocus);
+    if (focused && state.busy) resumeFocus = focusKey;
+    const a = observe();
+    if (state.busy && (!available(a) || !a.admin) && state.message) unknown();
+    const p = state.draft;
+    root.innerHTML = `<style>${css}${family()?.css || ''}</style><section class="ht-tariff-v3" aria-label="${esc(t('Tariff settings', 'Ustawienia taryfy'))}"><h3>${esc(t('Your electricity tariff', 'Twoja taryfa energii'))}</h3><p>${esc(t('Enter your own rates and hours. Names G11/G12/G12w/G12n do not fill rates, holidays or schedules.', 'Wpisz własne ceny i godziny. Nazwy G11/G12/G12w/G12n nie uzupełniają cen, świąt ani harmonogramu.'))}</p>${
+      !a.admin ? `<p>${esc(t('Household access: read only.', 'Dostęp domownika: tylko odczyt.'))}</p>` : ''}${
+      !available(a) || state.backendAvailable === false ? `<p>${esc(t('Tariff backend unavailable. No local fallback.', 'Backend taryf jest niedostępny. Brak lokalnego zapisu zastępczego.'))}</p>` :
+        !Number.isSafeInteger(state.revision) ? `<p>${esc(t('Backend availability not checked. Load the tariff first.', 'Dostępność backendu nie została sprawdzona. Najpierw wczytaj taryfę.'))}</p>` : ''}
+${invalidMarker(state.profile) ? `<p role="alert">${esc(t('The stored tariff is invalid. Create and save a valid replacement. No rates were guessed.', 'Zapisana taryfa jest niepoprawna. Utwórz i zapisz poprawny profil. Nie przyjęto domyślnych stawek.'))}</p>` : ''}
+<div class="ht-tariff-grid">${field('type', t('Tariff name type', 'Typ nazwy taryfy'), 'text', ['Custom', 'G11', 'G12', 'G12w', 'G12n'].map(v => [v, v]))}${field('name', t('Name (optional PGE label)', 'Nazwa (opcjonalnie nazwa PGE)'))}${field('currency', t('Currency ISO 4217', 'Waluta ISO 4217'))}${field('timezone', t('IANA timezone', 'Strefa czasowa IANA'))}${field('clock.mode', t('Tariff clock', 'Zegar taryfy'), 'text', [['civil', t('Civil time (DST)', 'Czas lokalny (zmiana czasu)')], ['fixed', t('Fixed UTC offset', 'Stałe przesunięcie UTC')]])}${field('clock.offsetMinutes', t('Fixed offset minutes', 'Stałe przesunięcie w minutach'), 'number')}${field('priceBasis', t('Price basis', 'Podstawa ceny'), 'text', [['gross', t('Gross', 'Brutto')], ['net', t('Net', 'Netto')]])}${field('validFrom', t('Valid from (optional)', 'Ważna od (opcjonalnie)'), 'date')}${field('validTo', t('Valid to (optional)', 'Ważna do (opcjonalnie)'), 'date')}${field('fixedMonthly', t('Fixed monthly fee (separate)', 'Opłata stała miesięczna (osobno)'), 'number')}</div>
+<h3>${esc(t('Energy and variable fees per kWh', 'Energia i opłaty zmienne za kWh'))}</h3><p>${esc(t('Empty = unknown; zero is a known zero. Fixed monthly fees are shown separately, never prorated.', 'Puste = nieznane; zero jest znaną wartością zero. Opłata stała jest osobna, bez proporcjonalnego naliczania.'))}</p>${
+(p.zones || []).map((_, i) => `<fieldset><legend>${esc(t('Zone', 'Strefa'))} ${i + 1}</legend><div class="ht-tariff-grid">${field(`zones.${i}.id`, t('Zone ID', 'ID strefy'))}${field(`zones.${i}.label`, t('Zone label', 'Etykieta strefy'))}${field(`zones.${i}.energyRate`, t('Energy / kWh', 'Energia / kWh'), 'number')}${field(`zones.${i}.variableRate`, t('Variable fees / kWh (optional)', 'Opłaty zmienne / kWh (opcjonalne)'), 'number')}</div>${mutable() ? button(`remove-zone:${i}`, t('Remove zone', 'Usuń strefę')) : ''}</fieldset>`).join('')}${mutable() ? button('add-zone', t('Add zone', 'Dodaj strefę')) : ''}${field('defaultZone', t('Default zone (optional)', 'Strefa domyślna (opcjonalna)'), 'text', zoneChoices())}
+<h3>${esc(t('Schedule rules', 'Reguły harmonogramu'))}</h3>${rows('rules')}${mutable() ? button('add-rule', t('Add rule', 'Dodaj regułę')) : ''}<h3>${esc(t('Date exceptions', 'Wyjątki dat'))}</h3>${rows('exceptions')}${mutable() ? button('add-exception', t('Add date exception', 'Dodaj wyjątek daty')) : ''}
+<details><summary>${esc(t('Advanced: absolute dynamic price feed', 'Zaawansowane: bezwzględne przedziały cen dynamicznych'))}</summary><p>${esc(t('Optional dynamic feed overrides schedule prices. Use explicit UTC/offset timestamps. Only this feed uses JSON.', 'Opcjonalny feed dynamiczny zastępuje ceny harmonogramu. Użyj znaczników UTC lub z przesunięciem. JSON służy wyłącznie temu feedowi.'))}</p><label class="ht-tariff-field"><span>${esc(t('Dynamic feed JSON (empty = off)', 'Feed dynamiczny JSON (pusty = wyłączony)'))}</span><textarea data-feed="true"${mutable() ? '' : ' disabled'}>${esc(state.feedText ?? (p.dynamic == null ? '' : JSON.stringify(p.dynamic, null, 2)))}</textarea></label>${field('allowNegativeEnergy', t('Negative energy prices', 'Ujemne ceny energii'), 'text', [['false', t('Disabled', 'Wyłączone')], ['true', t('Explicitly allowed', 'Jawnie dozwolone')]])}</details>
+<div role="status" aria-live="polite" data-status="${esc(state.status)}">${statusHtml()}${state.message ? ': ' + esc(localMessage()) : ''}</div><div class="ht-tariff-actions"><button type="button" data-action="load"${state.busy || guard.occupied() || !available(a) ? ' disabled' : ''}>${esc(t('Load stored tariff', 'Wczytaj zapisaną taryfę'))}</button>${a.admin ? `<button type="button" data-action="save"${state.busy || guard.occupied() || !available(a) || state.writeUnconfirmed || state.backendAvailable === false || !Number.isSafeInteger(state.revision) ? ' disabled' : ''}>${esc(t('Save tariff', 'Zapisz taryfę'))}</button><button type="button" data-action="cancel"${state.busy || guard.occupied() ? ' disabled' : ''}>${esc(t('Cancel', 'Anuluj'))}</button>` : ''}</div></section>`;
+    root.querySelectorAll('[data-path]').forEach(el => el.addEventListener('input', () => {
+      if (!mutable()) { render(); return; }
+      const path = el.dataset.path;
+      let value = el.value;
+      if (el.type === 'number') value = value.trim() === '' ? null : Number(value);
+      else if (path.endsWith('.dates')) value = value.split(/[\s,]+/).filter(Boolean);
+      else if (path === 'allowNegativeEnergy') value = value === 'true';
+      else if (['validFrom', 'validTo', 'defaultZone'].includes(path)) value = value || null;
+      write(path, value);
+      if (path.includes('.season.')) {
+        const base = path.split('.').slice(0, 2).join('.'), season = read(base + '.season');
+        if (!season.from && !season.to) delete read(base).season;
+      }
+      message('not_checked', '');
+      const badge = root.querySelector('[role=status]');
+      if (badge) { badge.dataset.status = 'not_checked'; badge.innerHTML = statusHtml(); }
+    }));
+    root.querySelectorAll('[data-path]').forEach(el => el.addEventListener('change', () => {
+      if (/^zones\.\d+\.(id|label)$/.test(el.dataset.path)) render();
+    }));
+    root.querySelectorAll('[data-weekday]').forEach(el => el.addEventListener('change', () => {
+      if (!mutable()) { render(); return; }
+      const [i, day] = el.dataset.weekday.split(':').map(Number), row = p.rules[i], days = new Set(row.weekdays || []);
+      if (el.checked) days.add(day); else days.delete(day);
+      if (days.size) row.weekdays = [...days].sort(); else delete row.weekdays;
+      message('not_checked', ''); render();
+    }));
+    root.querySelector('[data-feed]')?.addEventListener('input', event => {
+      if (!mutable()) { render(); return; }
+      state.feedText = event.target.value;
+      try { const dynamic = state.feedText.trim() ? JSON.parse(state.feedText) : null;
+        if (dynamic !== null && !object(dynamic)) throw Error();
+        p.dynamic = dynamic; state.feedError = null; message('not_checked', '');
+      } catch (_) { state.feedError = t('Invalid dynamic feed JSON.', 'Niepoprawny JSON feedu dynamicznego.'); message('error', state.feedError); }
+      const badge = root.querySelector('[role=status]');
+      if (badge) { badge.dataset.status = state.status; badge.innerHTML = statusHtml() + (state.message ? ': ' + esc(localMessage()) : ''); }
+    });
+    root.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', () => {
+      const [action, ...args] = el.dataset.action.split(':');
+      if (action === 'load') { void load(); return; }
+      if (!mutable()) return;
+      if (action === 'save') { void save(); return; }
+      if (action === 'cancel') { cancel(); return; }
+      if (action === 'add-zone') {
+        p.zones ||= []; let id = `zone-${p.zones.length + 1}`;
+        while (p.zones.some(z => z.id === id)) id += '-new';
+        p.zones.push({ id, label: '', energyRate: null, variableRate: null });
+      } else if (action === 'remove-zone') p.zones.splice(Number(args[0]), 1);
+      else if (action === 'add-rule' || action === 'add-exception') {
+        const kind = action === 'add-rule' ? 'rules' : 'exceptions'; p[kind] ||= [];
+        p[kind].push({ zone: p.defaultZone || p.zones?.[0]?.id || '', priority: 0,
+          ...(kind === 'exceptions' ? { dates: [] } : {}), intervals: [{ from: '00:00', to: '24:00' }] });
+      } else if (action === 'remove-row') p[args[0]].splice(Number(args[1]), 1);
+      else if (action === 'add-interval') { const row = p[args[0]][Number(args[1])]; row.intervals ||= []; row.intervals.push({ from: '00:00', to: '24:00' }); }
+      else if (action === 'remove-interval') p[args[0]][Number(args[1])].intervals.splice(Number(args[2]), 1);
+      message('not_checked', ''); render();
+    }));
+    if (focusKey) {
+      const target = [...root.querySelectorAll('input,select,textarea,button')].find(el =>
+        (focusKey.path && el.dataset.path === focusKey.path) || (focusKey.action && el.dataset.action === focusKey.action) ||
+        (focusKey.weekday && el.dataset.weekday === focusKey.weekday) || (focusKey.feed && el.dataset.feed === focusKey.feed));
+      if (target && !target.disabled && !externalFocus) target.focus();
+    }
+    if (!state.busy) resumeFocus = null;
+  }
+  return { render, load, cancel, dispose: () => { disposed = true; operation++; unsubscribe(); unsubscribeWire(); } };
+}
+
+  // END mirror shared/ha-tools-tariff-settings.js
+
+  // BEGIN mirror shared/ha-tools-tariff-host.js
+// Node-only import; omitted in consumer closure.
+
+// Card-owned adapter: it never writes card YAML, helpers, schedules or SMTP.
+function createTariffHostV3({ card, kind, createModel, legacyProfile, createSettings, createUi, readTimeoutMs = 15000, guard, onRefresh }) {
+  const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
+  const language = () => card._hass?.locale?.language || card._hass?.language || card._lang || 'en';
+  const text = (en, pl) => String(language()).startsWith('pl') ? pl : en;
+  guard ||= createTariffGuardV3({ getHass: () => card._hass, getContext: () => card._config, timeoutMs: readTimeoutMs });
+  const identity = () => guard.snapshot();
+  const same = (a, b) => a?.epoch === b?.epoch && a?.user === b?.user && a?.connection === b?.connection;
+  let pending = null, attemptedEpoch = null, cachedKey, cachedModel, editorRoot, editor, focusKey = null;
+  const state = () => (card._tariffEditorState ||= { profile: null, revision: null, status: 'not_checked', busy: false });
+  const effectiveConfig = () => {
+    const config = card._config || {};
+    if (Object.hasOwn(config, 'tariff_profile')) return config;
+    return card._sharedTariffProfile != null && same(card._sharedTariffAssociation, identity(card._hass))
+      ? { ...config, tariff_profile: card._sharedTariffProfile } : config;
+  };
+  const activeProfile = () => legacyProfile(effectiveConfig(), card._hass?.config, kind);
+  const model = function (proposed) {
+    if (arguments.length) return createModel(proposed);
+    const profile = activeProfile(), key = JSON.stringify(profile);
+    if (cachedModel && key === cachedKey) return cachedModel;
+    cachedKey = key; cachedModel = createModel(profile); return cachedModel;
+  };
+  const currency = () => {
+    const value = activeProfile()?.currency;
+    return typeof value === 'string' && /^[A-Z]{3}$/.test(value) ? value : '';
+  };
+  const purge = () => {
+    card._sharedTariffProfile = null; card._sharedTariffAssociation = null;
+    card._sharedTariffLoadedAt = 0; card._tariffEditorState = null;
+    card._sharedTariffReadStatus = 'not_checked'; card._tariffSettingsOpen = false;
+    cachedKey = undefined; cachedModel = undefined; editorRoot?.replaceChildren(); editor?.dispose?.(); editorRoot = null; editor = null; focusKey = null;
+    for (const mount of card.shadowRoot?.querySelectorAll('[data-tariff-mount]') || []) mount.replaceChildren();
+    const details = card.shadowRoot?.querySelector('[data-tariff-details]'); if (details) details.open = false;
+    // Pending raw request remains owned by guard; a new epoch cannot free it.
+  };
+  guard.subscribe(purge);
+  const reset = (...nextHass) => guard.observe(...nextHass);
+  const load = async (force = false) => {
+    const token = identity();
+    if (!guard.available(token)) return false;
+    if (card._sharedTariffReadStatus === 'success' && same(card._sharedTariffAssociation, token)) return true;
+    if (pending) return pending;
+    if (guard.occupied() || (!force && attemptedEpoch === token.epoch)) return false;
+    attemptedEpoch = token.epoch;
+    const operation = (async () => {
+      try {
+        const result = await guard.call(token, { type: 'ha_tools_email/get_tariff' });
+        if (!guard.current(token)) return false;
+        if (!result || !Object.hasOwn(result, 'profile') || !Number.isSafeInteger(result.revision) || result.revision < 0 ||
+          !Object.hasOwn(result, 'updated_at') || (result.updated_at !== null &&
+          (typeof result.updated_at !== 'string' || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(result.updated_at) || !Number.isFinite(Date.parse(result.updated_at)))))
+          throw new Error('invalid_tariff_response');
+        const valid = result.profile === null || createModel(result.profile).valid;
+        const profile = result.profile === null ? null : valid ? clone(result.profile) : { schema: 0 };
+        card._sharedTariffProfile = profile; card._sharedTariffAssociation = token; card._sharedTariffLoadedAt = Date.now();
+        card._sharedTariffReadStatus = 'success';
+        const saved = state(), pristine = !saved.draft || JSON.stringify(saved.draft) === JSON.stringify(saved._draftBaseline) || JSON.stringify(saved.draft) === JSON.stringify(saved.profile);
+        saved.profile = clone(profile); saved.revision = result.revision; saved.updated_at = result.updated_at;
+        saved.backendAvailable = true;
+        if (pristine) { saved.draft = valid ? clone(profile) : undefined; saved._draftBaseline = clone(saved.draft); }
+        return true;
+      } catch (_) {
+        if (guard.current(token)) card._sharedTariffReadStatus = 'unconfirmed';
+        return false;
+      }
+    })();
+    pending = operation;
+    operation.then(() => { if (pending === operation) pending = null; }, () => { if (pending === operation) pending = null; });
+    return operation;
+  };
+  const snapshot = () => {
+    const token = identity(), own = Object.hasOwn(card._config || {}, 'tariff_profile');
+    if (!guard.available(token)) return { profile: null, reason: 'tariff_authority_unavailable' };
+    if (own) return { profile: clone(card._config.tariff_profile), revision: null, provenance: 'card_config' };
+    if (!same(card._sharedTariffAssociation, token) || card._sharedTariffReadStatus !== 'success') return { profile: null, reason: 'tariff_unconfirmed' };
+    return { profile: clone(card._sharedTariffProfile), revision: state().revision, provenance: 'shared_backend', updated_at: state().updated_at };
+  };
+  const markup = () => {
+    const active = card.shadowRoot?.activeElement;
+    focusKey = active?.closest('[data-tariff-details]') ? {
+      summary: active.tagName === 'SUMMARY', path: active.dataset.path,
+      action: active.dataset.action, weekday: active.dataset.weekday, feed: active.dataset.feed
+    } : null;
+    return `<style>
+    [data-energy-container]{container-type:inline-size;container-name:energy-card}
+    .tabs{flex-wrap:wrap;overflow:visible;max-width:100%}
+    .tabs>button{min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere;flex:0 1 auto}
+    button{min-height:44px;min-width:44px}
+    .energy-tab-picker{display:none;margin:12px 0}
+    .energy-tab-picker select{font:inherit;color:var(--primary-text-color,#172033);background:var(--card-background-color,#fff);width:100%;max-width:100%;min-height:44px;border:1px solid var(--divider-color,#d8dce5);border-radius:10px;padding:10px}
+    .energy-tab-picker select:focus-visible{outline:3px solid var(--primary-color,#395fd1);outline-offset:2px}
+    @container energy-card (max-width:279.99px){.tabs{display:none}.energy-tab-picker{display:block}}
+    [data-tariff-details]{margin:16px 0;min-width:0;max-width:100%}
+    [data-tariff-details]>summary{min-height:44px;display:flex;align-items:center;padding:10px;border:1px solid var(--divider-color,#d8dce5);border-radius:10px;cursor:pointer;overflow-wrap:anywhere}
+    [data-tariff-details]>summary:focus-visible{outline:3px solid var(--primary-color,#395fd1);outline-offset:2px}
+    </style>${card._sharedTariffReadStatus === 'unconfirmed' ? `<p role="status">${text('Shared tariff could not be confirmed. Reload explicitly to confirm prices. No tariff cost is guessed.', 'Nie udało się potwierdzić wspólnej taryfy. Wczytaj ponownie, aby potwierdzić ceny. Koszt taryfy nie jest zgadywany.')}</p>` : ''}
+    <details data-tariff-details${card._tariffSettingsOpen ? ' open' : ''}><summary>${text('Tariff settings', 'Ustawienia taryfy')}</summary>
+    ${Object.hasOwn(card._config || {}, 'tariff_profile') ? `<p>${text('This card uses its own configured tariff. Shared settings apply to cards using the shared profile.', 'Ta karta używa własnej skonfigurowanej taryfy. Ustawienia współdzielone dotyczą kart korzystających ze wspólnego profilu.')}</p>` : ''}
+    <div data-tariff-mount></div></details>`;
+  };
+  const mount = root => {
+    if (editorRoot !== root || !editor) {
+      editor?.dispose?.();
+      const saved = state();
+      if (!saved.draft) {
+        const profile = activeProfile();
+        if (createModel(profile).valid) saved.draft = clone(profile);
+      }
+      editorRoot = root;
+      const mountToken = identity();
+      const refreshed = envelope => {
+        if (!guard.current(mountToken)) return;
+        card._sharedTariffProfile = clone(envelope.profile); card._sharedTariffAssociation = identity(card._hass);
+        card._sharedTariffLoadedAt = Date.now();
+        card._sharedTariffReadStatus = 'success';
+        // The editor finishes its pending state before the parent replaces DOM.
+        queueMicrotask(() => {
+          if (!guard.current(mountToken)) return;
+          if (onRefresh) { onRefresh(envelope); return; }
+          if (kind === 'insights') void card._fetchData();
+          if (kind === 'email') void card._fetchAllPeriodStats().then(() => card._render());
+          card._render();
+        });
+      };
+      editor = createSettings({ root, getHass: () => card._hass, language, state: saved, validate: createModel,
+        guard, ui: () => createUi({ language: language() }),
+        onSaved: refreshed, onLoaded: refreshed,
+        onCancel: () => {
+          card._tariffSettingsOpen = false;
+          const details = root.closest('[data-tariff-details]');
+          if (details) { details.open = false; details.querySelector('summary')?.focus(); }
+        } });
+    }
+    if (!Object.hasOwn(state(), '_draftBaseline')) state()._draftBaseline = clone(state().draft);
+    editor.render();
+  };
+  const bind = () => {
+    guard.observe();
+    const tabs = card.shadowRoot.querySelector('.tabs');
+    if (tabs && kind !== 'smart') {
+      tabs.parentElement.setAttribute('data-energy-container', '');
+      const buttons = [...tabs.querySelectorAll('button')];
+      tabs.setAttribute('role', 'tablist');
+      tabs.setAttribute('aria-label', text('Energy views', 'Widoki energii'));
+      let picker = card.shadowRoot.querySelector('.energy-tab-picker select');
+      if (!picker) {
+        const label = document.createElement('label'); label.className = 'energy-tab-picker';
+        picker = document.createElement('select'); label.append(picker); tabs.before(label);
+        picker.addEventListener('change', () => buttons[Number(picker.value)]?.click());
+      }
+      picker.setAttribute('aria-label', text('Energy view', 'Widok energii'));
+      picker.replaceChildren(...buttons.map((button, index) => {
+        const option = document.createElement('option'); option.value = String(index);
+        option.textContent = button.textContent.trim(); option.selected = button.classList.contains('active');
+        button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(option.selected));
+        if (!button.dataset.energyPickerBound) {
+          button.dataset.energyPickerBound = 'true';
+          button.addEventListener('click', () => queueMicrotask(() => {
+            buttons.forEach((item, i) => {
+              const active = item.classList.contains('active'); item.setAttribute('aria-selected', String(active));
+              if (active) picker.value = String(i);
+            });
+          }));
+        }
+        return option;
+      }));
+    }
+    const details = card.shadowRoot.querySelector('[data-tariff-details]');
+    if (!details) return;
+    let root = details.querySelector('[data-tariff-mount]');
+    if (editorRoot && editor && root !== editorRoot) { root.replaceWith(editorRoot); root = editorRoot; }
+    if (!details.dataset.bound) {
+      details.dataset.bound = 'true';
+      details.addEventListener('toggle', () => {
+        card._tariffSettingsOpen = details.open;
+        if (details.open) mount(root);
+      });
+    }
+    if (details.open) mount(root);
+    if (focusKey) {
+      const key = focusKey; focusKey = null;
+      const target = key.summary ? details.querySelector('summary') : details.open &&
+        [...root.querySelectorAll('input,select,textarea,button')].find(el =>
+          (key.path && el.dataset.path === key.path) || (key.action && el.dataset.action === key.action) ||
+          (key.weekday && el.dataset.weekday === key.weekday) || (key.feed && el.dataset.feed === key.feed));
+      if (target && !target.disabled) target.focus({ preventScroll: true });
+    }
+  };
+  return { model, profile: activeProfile, currency, reset, load, snapshot, markup, bind, guard, ui: () => createUi({ language: language() }) };
+}
+
+  // END mirror shared/ha-tools-tariff-host.js
+
   const VERSION = '4.1.2';
   const VALID_PERIODS = new Set(['1d', '7d', '30d']);
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
   const PL = Object.freeze({
+    "shared_backend": "Wspólny profil z backendu",
+    "card_config": "Profil z konfiguracji karty",
+    "Configured tariff energy cost": "Koszt energii według skonfigurowanej taryfy",
+    "Measured hours": "Zmierzone godziny",
+    "Revision": "Wersja",
+    "Current profile validity": "Bieżąca dostępność profilu",
+    "Energy cost only; variable and fixed fees are separate. This is not a complete electricity bill.": "Tylko koszt energii; opłaty zmienne i stałe są osobno. To nie jest pełny rachunek za prąd.",
+    "Measured subset only": "Tylko zmierzony podzbiór",
+    "Variable fees": "Opłaty zmienne",
+    "Energy and variable fees": "Energia i opłaty zmienne",
+    "Fixed monthly fee (separate)": "Miesięczna opłata stała (osobno)",
+    "month": "miesiąc",
+    "Cost evidence": "Dane kosztu",
+    "Chart": "Wykres",
+    "Data": "Dane",
+    "Measured energy": "Zmierzona energia",
+    "Priced energy": "Wyceniona energia",
+    "Flat rate per kWh": "Stała stawka za kWh",
+    "Cost mode": "Tryb kosztu",
+    "Recorded costs, then explicit flat estimate": "Zarejestrowane koszty, potem jawny stały szacunek",
+    "Recorded monetary statistics": "Statystyki kosztów w walucie",
+    "Configured tariff from measured hours": "Skonfigurowana taryfa ze zmierzonych godzin",
+    "invalid_profile": "Niepoprawny profil",
+    "missing_measurement": "Brak pomiaru",
+    "mixed_rate_bucket": "Różne ceny wewnątrz godziny",
+    "tariff_unconfirmed": "Taryfa niepotwierdzona",
+    "tariff_authority_unavailable": "Brak dostępu do taryfy",
+    "outside_validity": "Poza okresem ważności",
+    "nonaligned_window": "Niepełne godziny okresu",
+    "invalid_root_sources": "Niepoprawne źródła główne",
+    "invalid_measurement": "Niepoprawny pomiar",
+    "ambiguous_rules": "Niejednoznaczne reguły",
+
     "Search devices or sources": "Szukaj urządzenia lub źródła",
     "Name or entity/statistic ID": "Nazwa lub identyfikator encji/statystyki",
     "Clear search": "Wyczyść wyszukiwanie",
@@ -218,6 +1105,7 @@
       this.attachShadow({ mode: 'open' });
       this._hass = null;
       this._config = {
+        energy_cost_mode: 'auto',
         title: 'Smart Reports',
         show_energy: true,
         show_automations: true,
@@ -246,6 +1134,8 @@
 
     connectedCallback() {
       this._connected = true;
+      this._tariffGuard?.resume();
+      this._tariffGuard?.observe();
       this._renderScaffold();
       this._syncTheme();
       this._syncTabs();
@@ -254,6 +1144,8 @@
 
     disconnectedCallback() {
       this._connected = false;
+      this._tariffGuard?.suspend();
+      this._tariffGuard?.observe();
       if (this._refreshTimer !== null) clearTimeout(this._refreshTimer);
       this._refreshTimer = null;
       this._invalidateEnergyRequest();
@@ -265,6 +1157,8 @@
       this._language = language;
       if (this._hass && (this._hass.user?.id !== hass?.user?.id || this._hass.connection !== hass?.connection)) this._deviceQuery = '';
       this._hass = hass;
+      if (this._config.energy_cost_mode === 'configured_tariff') this._tariffController().reset();
+      else this._tariffGuard?.observe();
       this._syncTheme();
       this._syncSupport();
       if (languageChanged && this._scaffoldRendered) {
@@ -284,6 +1178,8 @@
       const hasRate = Object.prototype.hasOwnProperty.call(next, 'energy_price');
       const currency = typeof next.currency === 'string' && next.currency.trim() ? next.currency.trim() : null;
       this._config = {
+        ...next,
+        energy_cost_mode: ['cost_statistics','flat_rate_estimate','configured_tariff'].includes(next.energy_cost_mode) ? next.energy_cost_mode : 'auto',
         title: typeof next.title === 'string' && next.title.trim() ? next.title.trim() : 'Smart Reports',
         show_energy: next.show_energy !== false,
         show_automations: next.show_automations !== false,
@@ -299,6 +1195,7 @@
           : null,
         currency,
       };
+      this._tariffGuard?.observe();
       if (this._scaffoldRendered) {
         this._syncSupport();
         this._invalidateEnergyRequest();
@@ -321,6 +1218,7 @@
         <style>
           :host{--sr-primary:var(--primary-color,#3b82f6);--sr-card:var(--card-background-color,var(--ha-card-background,#fff));--sr-text:var(--primary-text-color,#172033);--sr-muted:var(--secondary-text-color,#667085);--sr-border:var(--divider-color,#d9e0ea);--sr-good:#15803d;--sr-warn:#b45309;--sr-bad:#b42318;display:block;color:var(--sr-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}.card{background:var(--sr-card);border:1px solid var(--sr-border);border-radius:16px;overflow:hidden}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}h2,h3,p{margin:0}h2{font-size:20px}h3{font-size:15px}.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--sr-border);overflow-x:auto}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--sr-muted);padding:10px 12px}.tab.active{color:var(--sr-primary);border-bottom-color:var(--sr-primary);font-weight:650}.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 0}.toolbar-actions{display:flex;flex-wrap:wrap;gap:8px}.control,.action{min-height:38px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);padding:8px 11px}.action.primary{background:var(--sr-primary);border-color:var(--sr-primary);color:#fff}.action:disabled{cursor:not-allowed;opacity:.45}.pane{padding:20px;min-height:220px}.state{display:grid;gap:12px;place-items:start;padding:22px;border:1px solid var(--sr-border);border-radius:12px}.state[role="status"]{border-left:4px solid var(--sr-primary)}.state.partial{border-left-color:var(--sr-warn)}.state.error{border-left-color:var(--sr-bad)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{border:1px solid var(--sr-border);border-radius:12px;padding:14px}.metric-label,.muted{color:var(--sr-muted);font-size:12px}.metric-value{margin-top:5px;font-size:23px;font-weight:720}.section{margin-top:18px}.list{display:grid;gap:8px;margin-top:10px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--sr-border);padding:9px 2px}.row.child{padding-left:24px}.row-name{overflow-wrap:anywhere}.status-ready{color:var(--sr-good)}.warning{color:var(--sr-warn)}.fixed-link{color:var(--sr-primary)}.donate-section{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;border-top:1px solid var(--sr-border);padding:13px 18px;color:var(--sr-muted);font-size:12px}.donate-section a{color:var(--sr-primary);text-decoration:none}[hidden]{display:none!important}@media(max-width:520px){.header,.toolbar{align-items:stretch;flex-direction:column}.toolbar-actions{width:100%}.action{flex:1}}
           .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:flex;gap:8px;overflow-x:auto;padding:16px 2px 8px;max-width:100%}.day-column{display:grid;gap:6px;text-align:center;flex:0 0 40px;color:var(--sr-muted);font-size:11px}.day-track{height:100px;display:flex;align-items:flex-end;background:var(--sr-border);border-radius:4px;overflow:hidden}.day-track .bar-fill{width:100%}.day-column.partial .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.day-column.partial .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.day-column.no_data .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
+           .tariff-hour-bars{display:flex;gap:8px;overflow-x:auto;max-width:100%;padding:8px 2px}.tariff-hour{flex:0 0 110px;text-align:center;display:grid;gap:6px;font-size:12px}.tariff-hour small{overflow-wrap:anywhere}.tariff-track{height:100px;position:relative;border-block:1px solid var(--sr-border);background:linear-gradient(transparent calc(50% - 1px),var(--sr-border) 50%,transparent calc(50% + 1px))}.tariff-fill{position:absolute;bottom:50%;width:100%;background:var(--sr-primary)}.tariff-fill.negative{top:50%;bottom:auto;background:var(--sr-muted)}.tariff-hour[data-availability=gap] .tariff-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.tariff-evidence p{overflow-wrap:anywhere}.tariff-hour-bars:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
           .device-search-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0}.device-search-form label{flex:1;min-width:min(100%,180px);display:grid;gap:6px;font-size:13px}.device-search{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);font:inherit}.device-search-clear{min-height:44px;min-width:44px}.device-search:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.device-search-count,.device-export-note{overflow-wrap:anywhere;line-height:1.5}.chart-row small{overflow-wrap:anywhere}
           :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
         </style>
@@ -349,6 +1247,7 @@
         const period = VALID_PERIODS.has(event.target.value) ? event.target.value : '7d';
         if (period === this._period) return;
         this._period = period;
+        this._tariffGuard?.observe();
         this._invalidateEnergyRequest();
         this._scheduleRefresh(true);
       });
@@ -438,6 +1337,7 @@
       if (!this._availableTabs().includes(tab) || tab === this._activeTab) return;
       if (this._activeTab === 'energy') this._invalidateEnergyRequest();
       this._activeTab = tab;
+      this._tariffGuard?.observe();
       this._syncTabs();
       this._scheduleRefresh(true);
     }
@@ -736,7 +1636,7 @@
     }
 
     _calculateCost(total, costSources, config) {
-      const configured = Array.isArray(costSources) ? costSources : [];
+      const configured = config.energy_cost_mode === 'flat_rate_estimate' ? [] : (Array.isArray(costSources) ? costSources : []);
       if (configured.length > 0) {
         if (configured.some((source) => source.reason === 'incompatible_currency_metadata')) return { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: configured.map((source) => source.statistic_id), reason: 'currency_mismatch' };
         if (configured.some((source) => source.status !== 'ready')) return { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: configured.map((source) => source.statistic_id), reason: 'partial_cost' };
@@ -744,6 +1644,7 @@
         if (currencies.length !== 1) return { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: configured.map((source) => source.statistic_id), reason: 'currency_mismatch' };
         return { value: configured.reduce((sum, source) => sum + source.value, 0), currency: currencies[0], method: 'cost_statistics', rate: null, source_statistic_ids: configured.map((source) => source.statistic_id), reason: null };
       }
+      if (config.energy_cost_mode === 'cost_statistics') return { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'missing_statistics' };
       if (typeof config.energy_price !== 'number' || !Number.isFinite(config.energy_price) || config.energy_price < 0) return { value: null, currency: config.currency || null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'missing_rate' };
       if (typeof config.currency !== 'string' || !config.currency.trim()) return { value: null, currency: null, method: 'unavailable', rate: config.energy_price, source_statistic_ids: [], reason: 'missing_currency' };
       if (!total || typeof total.value !== 'number' || !Number.isFinite(total.value)) return { value: null, currency: config.currency, method: 'unavailable', rate: config.energy_price, source_statistic_ids: [], reason: 'energy_data_unavailable' };
@@ -751,11 +1652,12 @@
     }
 
     async _loadEnergy() {
+      if (this._config.energy_cost_mode === 'configured_tariff') this._tariffController().reset();
       const generation = ++this._energyRequestGeneration;
       const period = this._periodDescriptor();
       const mode = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'energy_dashboard';
       const previous = this._energyViewState;
-      const reportConfig = JSON.stringify([this._config.energy_source_mode, this._config.energy_total_statistics, this._config.energy_device_statistics, this._config.energy_cost_statistics, this._config.energy_entity, this._config.energy_price, this._config.currency]);
+      const reportConfig = JSON.stringify([this._config.energy_source_mode, this._config.energy_total_statistics, this._config.energy_device_statistics, this._config.energy_cost_statistics, this._config.energy_entity, this._config.energy_price, this._config.currency, this._config.energy_cost_mode, this._config.tariff_profile]);
       const sameWindow = this._energyReportConfig === reportConfig && previous && ['ready', 'partial', 'no_data'].includes(previous.status) && previous.source_mode === mode && previous.period && previous.period.key === period.key && previous.period.start === period.start && previous.period.end === period.end && previous.period.time_zone === period.time_zone;
       if (!sameWindow) this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
       try {
@@ -794,11 +1696,18 @@
           ? { status: 'ready', value: totalSources.reduce((sum, source) => sum + source.value, 0), unit: 'kWh', source_statistic_ids: totalSources.map((source) => source.statistic_id) }
           : { status, value: null, unit: 'kWh', source_statistic_ids: totalSources.map((source) => source.statistic_id) };
         let cost = this._calculateCost(completeTotal, costSources, this._config);
-        if (selection.cost_configuration_incomplete) cost = { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: costSources.map((source) => source.statistic_id), reason: 'partial_cost' };
+        if (this._config.energy_cost_mode !== 'configured_tariff' && this._config.energy_cost_mode !== 'flat_rate_estimate' && selection.cost_configuration_incomplete) cost = { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: costSources.map((source) => source.statistic_id), reason: 'partial_cost' };
         if (status !== 'ready') {
           const reason = status === 'no_data' ? 'no_data' : (status === 'unsupported' ? 'unsupported_source' : 'partial_energy');
           cost = { ...cost, value: null, method: 'unavailable', reason };
         }
+        if (this._config.energy_cost_mode === 'configured_tariff') {
+          const host = this._tariffController();
+          if (!Object.hasOwn(this._config,'tariff_profile')) await host.load();
+          if (!this._isCurrentEnergyRequest(generation)) return;
+          cost = this._priceConfiguredTariff(period, selection.totals, statisticsById, metadataById, host.snapshot());
+          this._tariffPricingContext = { generation, period, roots: selection.totals, statistics: statisticsById, metadata: metadataById };
+        } else this._tariffPricingContext = null;
         const deviceModel = this._buildDeviceRows(deviceSources);
         const deviceDataStatus = deviceSources.some((source) => source.status !== 'ready') ? 'partial' : 'ready';
         const warnings = [...(selection.warnings || [])];
@@ -811,6 +1720,148 @@
       } catch (error) {
         if (this._isCurrentEnergyRequest(generation)) this._setEnergyViewState(this._errorState(error, period));
       }
+    }
+
+    _priceConfiguredTariff(period, roots, statistics, metadata, snapshot) {
+      const unavailable = reason => ({ method: 'configured_tariff', value: null, currency: null, rate: null,
+        source_statistic_ids: roots.map(s => s.statistic_id), reason, records: Object.freeze([]), measured_energy_cost: null,
+        coverage: { observed_hours: 0, expected_hours: 0, observed_source_hours: 0, expected_source_hours: 0 } });
+      const profile = snapshot?.profile, model = createEnergyTariffV3(profile);
+      if (!model.valid) return unavailable(snapshot?.reason || 'invalid_profile');
+      const start = numericTime(period.start), end = numericTime(period.end), hour = 3600000;
+      if (!roots.length || new Set(roots.map(s => s.statistic_id)).size !== roots.length || roots.some(s => s.role !== 'total' || s.included_in_stat)) return unavailable('invalid_root_sources');
+      if (start === null || end === null || end <= start || start % hour || end % hour || (end - start) / hour > 744) return unavailable('nonaligned_window');
+      const common = new Map(), fatal = new Map(), ids = roots.map(s => s.statistic_id);
+      for (const source of roots) {
+        const id = source.statistic_id, md = metadata[id], unit = this._metadataUnit(md);
+        if (!md || md.has_sum !== true || !ENERGY_UNITS.has(unit) || (md.unit_class != null && md.unit_class !== 'energy')) { fatal.set(id, 'incompatible_energy_metadata'); continue; }
+        const series = statistics[id];
+        if (series != null && !Array.isArray(series)) { fatal.set(id, 'invalid_measurement'); continue; }
+        const sorted = (series || []).map(b => ({ from: numericTime(b?.start), to: numericTime(b?.end), change: b?.change })).sort((a,b) => a.from - b.from);
+        if (sorted.some((b,i) => b.from === null || b.to === null || b.to - b.from !== hour || b.from % hour || b.from < start || b.to > end ||
+          (i && b.from < sorted[i-1].to) || (b.change != null && (typeof b.change !== 'number' || !Number.isFinite(b.change) || b.change < 0)))) { fatal.set(id, 'invalid_measurement'); continue; }
+        const factor = unit === 'Wh' ? 0.001 : unit === 'MWh' ? 1000 : 1;
+        for (const b of sorted) if (typeof b.change === 'number') {
+          const kwh = b.change * factor;
+          if (!Number.isFinite(kwh)) { fatal.set(id, 'nonfinite_measurement'); break; }
+          if (!common.has(b.from)) common.set(b.from, new Map()); common.get(b.from).set(id, kwh);
+        }
+      }
+      // No root overlap assumption is inferred from devices or residual values.
+      // Each complete common hour is measured once across the explicitly selected roots.
+      const measured = [];
+      if (!fatal.size) for (let from = start; from < end; from += hour) {
+        const contributions = common.get(from);
+        if (contributions?.size === roots.length) measured.push({ from, to: from + hour, kwh: [...contributions.values()].reduce((a,b) => a+b,0) });
+      }
+      const priced = model.priceBuckets(measured, { from: start, to: end });
+      const byHour = new Map(priced.rows.map(row => [row.from, row])), measuredByHour = new Map(measured.map(row => [row.from,row]));
+      const records = [];
+      for (let from = start; from < end; from += hour) {
+        const p = byHour.get(from), available = p?.available === true;
+        const contributions = common.get(from), reason = available ? null : p?.reason || (fatal.size ? [...fatal.values()][0] : 'missing_measurement');
+        records.push(Object.freeze({ from: new Date(from).toISOString(), to: new Date(from + hour).toISOString(),
+          source_statistic_ids: Object.freeze([...ids]), source_kwh: Object.freeze(measuredByHour.has(from) ? Object.fromEntries(contributions) : {}),
+          available, measurement_available: measuredByHour.has(from), reason, kwh: measuredByHour.get(from)?.kwh ?? null, zone: p?.zone ?? null, zones: Object.freeze(p?.zones || []),
+          energyRate: p?.energyRate ?? null, variableRate: p?.variableRate ?? null,
+          energyCost: available ? p.energyCost : null, variableCost: available ? p.variableCost : null, usageCost: available ? p.usageCost : null,
+          currency: profile.currency, price_basis: profile.priceBasis, revision: snapshot.revision ?? null }));
+      }
+      const ready = records.filter(r => r.available), sum = field => { const n = ready.reduce((a,b) => a+b[field],0); return ready.length && Number.isFinite(n) ? n : null; };
+      const current = model.rateAt(this._now().toISOString());
+      const observedSourceHours = !fatal.size ? [...common.values()].reduce((n,c) => n+c.size,0) : 0;
+      return Object.freeze({ method: 'configured_tariff', value: priced.complete ? priced.energyCost : null,
+        currency: profile.currency, rate: null, source_statistic_ids: Object.freeze([...ids]),
+        reason: priced.complete ? null : (fatal.size ? [...fatal.values()][0] : priced.issues[0]?.reason || 'missing_measurement'),
+        records: Object.freeze(records), measured_energy_cost: sum('energyCost'), measured_kwh: sum('kwh'),
+        variable_cost: priced.complete ? priced.variableCost : null, usage_cost: priced.complete ? priced.usageCost : null,
+        fixed_monthly: priced.fixedMonthly, price_basis: profile.priceBasis, tariff_timezone: profile.timezone,
+        tariff_clock: Object.freeze({ ...profile.clock }), revision: snapshot.revision ?? null, provenance: snapshot.provenance || null,
+        current_profile_validity: Object.freeze({ available: current.available, reason: current.reason || null, checked_at: this._now().toISOString() }),
+        coverage: Object.freeze({ observed_hours: ready.length, expected_hours: (end-start)/hour,
+          observed_source_hours: observedSourceHours, expected_source_hours: roots.length * (end-start)/hour,
+          complete: priced.complete, measured_subset: !priced.complete && ready.length > 0 }) });
+    }
+
+    _tariffController() {
+      if (this._tariffHost) return this._tariffHost;
+      this._tariffGuard ||= createTariffGuardV3({ getHass: () => this._hass,
+        getContext: () => ({ config: this._config, period: this._period, tab: this._activeTab, connected: this._connected }) });
+      this._tariffGuard.subscribe(() => {
+        this._invalidateEnergyRequest(); this._energyReportConfig = null; this._tariffPricingContext = null; this._deviceQuery = '';
+        this._tariffSettingsSection?.replaceChildren(); this._tariffSettingsSection = null;
+        this._energyViewState = { status: 'idle' };
+        // Clear cached priced/private source DOM immediately; do not dispatch a retry.
+        if (this._scaffoldRendered && this._activeTab === 'energy') this.shadowRoot.getElementById('content')?.replaceChildren();
+      });
+      this._tariffHost = createTariffHostV3({ card: this, kind: 'smart', createModel: createEnergyTariffV3,
+        legacyProfile: config => Object.hasOwn(config, 'tariff_profile') ? config.tariff_profile : null,
+        createSettings: createTariffSettingsV3, createUi: createUiV3, guard: this._tariffGuard,
+        onRefresh: () => {
+          // Settings readback updates the settled snapshot without another recorder request.
+          const context = this._tariffPricingContext;
+          if (context && context.generation === this._energyRequestGeneration) {
+            const cost = this._priceConfiguredTariff(context.period, context.roots, context.statistics, context.metadata, this._tariffHost.snapshot());
+            this._setEnergyViewState({ ...this._energyViewState, cost });
+          } else this._renderEnergyState();
+        } });
+      return this._tariffHost;
+    }
+
+    _renderTariffSettings(container, markup) {
+      if (this._config.energy_cost_mode !== 'configured_tariff') return;
+      const host = this._tariffController(), block = document.createElement('section');
+      const existingMount = this._tariffSettingsSection?.querySelector('[data-tariff-mount]');
+      block.innerHTML = markup ?? host.markup();
+      // Keep the editor and its in-flight operation across ordinary report renders.
+      // The strong guard separately erases this mount on any authority/context edge.
+      if (existingMount) block.querySelector('[data-tariff-mount]').replaceWith(existingMount);
+      this._tariffSettingsSection = block; container.appendChild(block); host.bind();
+    }
+
+    _renderTariffEvidence(container, cost) {
+      const section = document.createElement('section'); section.className = 'tariff-evidence section';
+      const heading = document.createElement('h3'); heading.textContent = this._t('Configured tariff energy cost'); section.appendChild(heading);
+      const text = document.createElement('p'); text.className = 'muted';
+      text.textContent = `${this._t('Measured hours')}: ${cost.coverage.observed_hours}/${cost.coverage.expected_hours} · ${cost.currency || '—'} · ${cost.price_basis || '—'} · ${cost.tariff_timezone || '—'} · ${this._t('Revision')}: ${cost.revision ?? '—'} · ${this._t(cost.provenance || 'unavailable')} · ${this._t('Current profile validity')}: ${this._t(cost.current_profile_validity?.available ? 'ready' : cost.current_profile_validity?.reason || cost.reason || 'unavailable')}`;
+      section.appendChild(text);
+      const note = document.createElement('p'); note.textContent = this._t('Energy cost only; variable and fixed fees are separate. This is not a complete electricity bill.'); section.appendChild(note);
+      if (cost.value === null) {
+        const subset = document.createElement('p'); subset.setAttribute('role','status');
+        subset.textContent = `${this._t('Measured subset only')}: ${cost.measured_energy_cost == null ? '—' : this._formatNumber(cost.measured_energy_cost,2)} ${cost.currency || ''} · ${this._t(cost.reason || 'unavailable')}`; section.appendChild(subset);
+      }
+      for (const [key,label,unit] of [['variable_cost','Variable fees',cost.currency],['usage_cost','Energy and variable fees',cost.currency],['fixed_monthly','Fixed monthly fee (separate)',`${cost.currency || ''}/${this._t('month')}`]]) {
+        const line = document.createElement('p');line.textContent = `${this._t(label)}: ${cost[key] == null ? '—' : this._formatNumber(cost[key],2)} ${unit || ''}`;section.appendChild(line);
+      }
+      const views = document.createElement('div'); views.className='report-views';views.setAttribute('role','tablist');views.setAttribute('aria-label',this._t('Cost evidence'));
+      for (const [key,label] of [['chart','Chart'],['data','Data']]) {
+        const button=document.createElement('button');button.type='button';button.className='action';button.dataset.costView=key;button.setAttribute('role','tab');button.setAttribute('aria-selected',String((this._costEvidenceView || 'chart')===key));button.textContent=this._t(label);
+        button.addEventListener('click',()=>{this._costEvidenceView=key;this._renderEnergyState();this.shadowRoot.querySelector(`[data-cost-view="${key}"]`)?.focus();});views.appendChild(button);
+      }section.appendChild(views);
+      const panel = document.createElement('div');panel.setAttribute('role','tabpanel');
+      const records=cost.records; // Both views consume exactly the same immutable record sequence.
+      if ((this._costEvidenceView || 'chart') === 'data') {
+        for (const record of records) {
+          const row=document.createElement('p');row.dataset.pricedRow=record.from;
+          row.textContent=`${record.from} → ${record.to} · ${record.source_statistic_ids.join(', ')} · ${record.kwh ?? '—'} kWh · ${record.energyCost ?? '—'} ${cost.currency} · ${record.energyRate ?? '—'} ${cost.currency}/kWh · ${record.zones.join(', ') || '—'} · ${this._t(record.reason || 'ready')}`;panel.appendChild(row);
+        }
+      } else {
+        for (const [key,unit,label] of [['kwh','kWh','Measured energy'],['energyCost',cost.currency || '—','Priced energy']]) {
+          const chart=document.createElement('section');chart.className='tariff-hour-chart';chart.setAttribute('aria-label',`${this._t(label)} (${unit})`);
+          const axis=document.createElement('p');axis.textContent=`${this._t(label)} · ${unit}`;chart.appendChild(axis);
+          const isMeasured = record => key === 'kwh' ? record.measurement_available : record.available;
+          const scale=Math.max(1,...records.filter(isMeasured).map(r=>Math.abs(r[key] || 0)));
+          const bars=document.createElement('div');bars.className='tariff-hour-bars';bars.setAttribute('tabindex','0');
+          for (const record of records) {
+            const bar=document.createElement('div');bar.className='tariff-hour';bar.dataset.pricedRow=record.from;bar.dataset.availability=isMeasured(record)?'measured':'gap';
+            const date=document.createElement('small');date.textContent=this._formatPeriodDate(record.from,this._energyViewState.period.time_zone);
+            const value=document.createElement('span');value.textContent=`${isMeasured(record) ? this._formatNumber(record[key],2) : '—'} ${unit}`;
+            const track=document.createElement('div');track.className='tariff-track';
+            if(isMeasured(record)){const fill=document.createElement('div');fill.className=`tariff-fill${record[key]<0?' negative':''}`;fill.style.height=`${Math.abs(record[key])/scale*50}%`;track.appendChild(fill);}
+            bar.title=`${record.from} → ${record.to} · ${record.source_statistic_ids.join(', ')} · ${record.zones.join(', ')} · ${record.energyRate ?? '—'} ${cost.currency}/kWh · ${cost.price_basis} · ${this._t('Revision')}: ${cost.revision ?? '—'} · ${this._t(record.reason || 'ready')}`;bar.setAttribute('role','img');bar.setAttribute('aria-label',`${bar.title} · ${value.textContent}`);bar.append(date,track,value);bars.appendChild(bar);
+          }chart.appendChild(bars);panel.appendChild(chart);
+        }
+      }section.appendChild(panel);container.appendChild(section);
     }
 
     _dailyEnergySeries(period, sources, statistics, metadata) {
@@ -954,13 +2005,16 @@
     }
 
     _renderEnergyState() {
+      this._tariffGuard?.observe();
       if (!this._scaffoldRendered) return;
       const container = this.shadowRoot.getElementById('content'); const state = this._energyViewState || { status: 'idle' };
       const exportable = ['ready', 'partial', 'no_data'].includes(state.status);
       const search = this.shadowRoot.activeElement;
       const searchFocus = search?.classList.contains('device-search') ? {start:search.selectionStart,end:search.selectionEnd} : null;
       this._focusedEnergyView = this.shadowRoot.activeElement && this.shadowRoot.activeElement.dataset.energyView;
+      const tariffMarkup = this._config.energy_cost_mode === 'configured_tariff' ? this._tariffController().markup() : null;
       this.shadowRoot.getElementById('exportJsonBtn').disabled = !exportable; this.shadowRoot.getElementById('exportCsvBtn').disabled = !exportable; container.replaceChildren();
+      this._renderTariffSettings(container, tariffMarkup);
       if (state.status === 'loading' || state.status === 'idle') { container.appendChild(this._stateBlock('Loading recorder statistics…', 'This report uses recorded changes for the selected local-calendar period.', '', 'status')); return; }
       if (state.status === 'not_configured') {
         const block = this._stateBlock('Configure Energy Dashboard or select explicit statistics.', 'Smart Reports does not discover sensors by substring and does not use live entity states.', '', 'status');
@@ -992,9 +2046,9 @@
       if (state.status === 'partial') container.appendChild(this._stateBlock('Partial history — recorded values only.', 'At least one required statistic was missing, invalid, incomplete, or used an incompatible currency.', 'partial', 'status'));
       const summary = document.createElement('section'); summary.className = 'summary';
       const recordedTotal = state.recorded_total || {};
-      const recordedCost = state.recorded_cost || {};
+      const recordedCost = state.cost?.method === 'configured_tariff' ? {} : state.recorded_cost || {};
       summary.appendChild(this._metric(state.status === 'partial' ? 'Recorded consumption' : 'Grid import', `${this._formatNumber(state.status === 'partial' ? recordedTotal.value : state.total.value, 2)} ${state.total.unit || 'kWh'}`));
-      const costLabel = state.cost && state.cost.method === 'cost_statistics' ? 'Actual cost' : (state.cost && state.cost.method === 'flat_rate_estimate' ? 'Estimated cost' : 'Cost unavailable');
+      const costLabel = state.cost && state.cost.method === 'configured_tariff' ? 'Configured tariff energy cost' : state.cost && state.cost.method === 'cost_statistics' ? 'Actual cost' : (state.cost && state.cost.method === 'flat_rate_estimate' ? 'Estimated cost' : 'Cost unavailable');
       const costValue = state.cost && typeof state.cost.value === 'number' ? `${this._formatNumber(state.cost.value, 2)} ${state.cost.currency || ''}`.trim() : '—';
       summary.appendChild(this._metric(state.cost && state.cost.value == null && recordedCost.value != null ? 'Recorded cost' : costLabel, state.cost && state.cost.value == null && recordedCost.value != null ? `${this._formatNumber(recordedCost.value, 2)} ${recordedCost.unit || ''}` : costValue));
       summary.appendChild(this._metric('Sources with data', `${recordedTotal.sources_with_data || 0} / ${(state.total_sources || []).length}`));
@@ -1013,7 +2067,10 @@
           if (this._energyView === 'summary' && devices.length > 6) { const all = document.createElement('button'); all.type = 'button'; all.className = 'action section'; all.textContent = this._t('See all devices'); all.addEventListener('click', () => { this._energyView = 'devices'; this._renderEnergyState(); }); container.appendChild(all); }
         } else { const empty = document.createElement('p'); empty.className = 'muted section'; empty.textContent = this._t(devices.length ? 'No matching devices' : 'No device statistics are configured.'); container.appendChild(empty); }
       }
-      if (this._energyView !== 'devices') this._renderCostCoverage(container, state);
+      if (this._energyView !== 'devices') {
+        if (state.cost?.method === 'configured_tariff') this._renderTariffEvidence(container,state.cost);
+        else this._renderCostCoverage(container, state);
+      }
       const evidence = document.createElement('details'); evidence.className = 'section source-evidence';
       const evidenceHeading = document.createElement('summary'); evidenceHeading.textContent = this._t('Source evidence'); evidence.appendChild(evidenceHeading);
       const evidenceList = document.createElement('div'); evidenceList.className = 'list';
@@ -1113,6 +2170,7 @@
     }
 
     _buildExportDocument(nowValue) {
+      this._tariffGuard?.observe();
       const state = this._energyViewState || {}; const period = state.period || this._periodDescriptor(); const total = state.total || {}; const cost = state.cost || {}; const generated = asDate(nowValue) || new Date();
       return {
         schema_version: 2,
@@ -1123,6 +2181,7 @@
           status: state.status || 'error',
           total: { label: 'Grid import', value: typeof total.value === 'number' && Number.isFinite(total.value) ? total.value : null, unit: total.unit || 'kWh', source_statistic_ids: Array.isArray(total.source_statistic_ids) ? [...total.source_statistic_ids] : [] },
           cost: { value: typeof cost.value === 'number' && Number.isFinite(cost.value) ? cost.value : null, currency: cost.currency || null, method: cost.method || 'unavailable', rate: typeof cost.rate === 'number' && Number.isFinite(cost.rate) ? cost.rate : null, source_statistic_ids: Array.isArray(cost.source_statistic_ids) ? [...cost.source_statistic_ids] : [], reason: cost.reason || null },
+          ...(cost.method === 'configured_tariff' ? { tariff: { records: cost.records, coverage: cost.coverage, revision: cost.revision ?? null, provenance: cost.provenance || null, currency: cost.currency, price_basis: cost.price_basis, tariff_timezone: cost.tariff_timezone, tariff_clock: cost.tariff_clock, fixed_monthly: cost.fixed_monthly ?? null, variable_cost: cost.variable_cost ?? null, usage_cost: cost.usage_cost ?? null, measured_energy_cost: cost.measured_energy_cost ?? null, current_profile_validity: cost.current_profile_validity || null } } : {}),
           recorded_total: state.recorded_total || null,
           recorded_cost: state.recorded_cost || null,
           daily: state.daily || [],
@@ -1150,6 +2209,9 @@
       const base = [report.schema_version, report.generated_at, report.period.key, report.period.start, report.period.end, report.period.time_zone]; const rows = [header];
       rows.push([...base, 'energy', 'total', report.energy.total.source_statistic_ids.join('|'), report.energy.total.label, report.energy.total.value, report.energy.total.unit, report.energy.status, report.source_mode, '', '']);
       rows.push([...base, 'energy', 'cost', report.energy.cost.source_statistic_ids.join('|'), report.energy.cost.method, report.energy.cost.value, report.energy.cost.currency, report.energy.cost.value == null ? (report.energy.cost.reason || 'unavailable') : 'ready', report.energy.cost.method, '', report.energy.cost.reason]);
+      for (const record of report.energy.tariff?.records || []) {
+        for (const [key,kind,unit] of [['kwh','tariff_hour_energy','kWh'],['energyCost','tariff_hour_cost',record.currency],['energyRate','tariff_hour_rate',`${record.currency}/kWh`]]) rows.push([...base,'energy',kind,record.source_statistic_ids.join('|'),`${record.from} / ${record.to}`,record[key],unit,record.available?'ready':'partial','configured_tariff','',JSON.stringify({zones:record.zones,revision:record.revision,price_basis:record.price_basis,reason:record.reason})]);
+      }
       for (const metric of ['recorded_total', 'recorded_cost']) {
         const value = report.energy[metric];
         if (value && value.status === 'partial' && value.value != null) rows.push([...base, 'energy', metric, value.source_statistic_ids.join('|'), metric, value.value, value.unit, 'partial', 'recorder_available_samples', '', 'incomplete_coverage']);
@@ -1168,6 +2230,7 @@
     }
 
     _downloadExport(format) {
+      this._tariffGuard?.observe();
       const state = this._energyViewState || {}; if (!['ready', 'partial', 'no_data'].includes(state.status)) return;
       const report = this._buildExportDocument(this._now()); this._lastExportDocument = report; this._lastDownloadedExport = report; const isJson = format === 'json'; const contents = isJson ? `${JSON.stringify(report, null, 2)}\n` : this._buildCsv(report); const blob = new Blob([contents], { type: isJson ? 'application/json' : 'text/csv' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `smart-report-${report.period.key}.${isJson ? 'json' : 'csv'}`; anchor.click(); URL.revokeObjectURL(url);
     }
@@ -1184,7 +2247,7 @@
     }
     _render() {
       this.shadowRoot.replaceChildren();
-      const style = document.createElement('style'); style.textContent = ':host{display:grid;gap:12px;padding:12px;color:var(--primary-text-color,#172033);font-family:system-ui,sans-serif}label{display:grid;gap:5px}input{font:inherit;padding:9px;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px;background:var(--card-background-color,#fff);color:inherit}input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--primary-color,#3b82f6);outline-offset:2px}[hidden]{display:none!important}';
+      const style = document.createElement('style'); style.textContent = ':host{display:grid;gap:12px;padding:12px;color:var(--primary-text-color,#172033);font-family:system-ui,sans-serif}label{display:grid;gap:5px}input,select,textarea{min-height:44px;max-width:100%;min-width:0;box-sizing:border-box;font:inherit;padding:9px;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px;background:var(--card-background-color,#fff);color:inherit}input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--primary-color,#3b82f6);outline-offset:2px}[hidden]{display:none!important}';
       const field = (id, labelText, key) => { const label = document.createElement('label'); label.textContent = translate(this._hass, labelText); const input = document.createElement('input'); input.id = id; input.value = typeof this._config[key] === 'string' ? this._config[key] : ''; input.addEventListener('input', () => { this._config = { ...this._config, [key]: input.value }; this._dispatch(); }); label.appendChild(input); return label; };
       this.shadowRoot.append(style, field('cf_title', 'Title', 'title'), field('cf_currency', 'Currency', 'currency'));
       const modeLabel = document.createElement('label'); modeLabel.textContent = translate(this._hass, 'Source mode');
@@ -1203,6 +2266,13 @@
         }); label.appendChild(input); sources.appendChild(label);
       }
       const note = document.createElement('p'); note.textContent = translate(this._hass, 'One statistic ID per line. Advanced labels and parent relationships can be configured in YAML.'); note.style.fontSize = '12px'; sources.appendChild(note); this.shadowRoot.appendChild(sources);
+      const rateLabel = document.createElement('label');rateLabel.textContent=translate(this._hass,'Flat rate per kWh');
+      const rate=document.createElement('input');rate.type='number';rate.min='0';rate.step='any';rate.id='cf_energy_price';rate.value=typeof this._config.energy_price==='number'?String(this._config.energy_price):'';
+      rate.addEventListener('change',()=>{const value=rate.value.trim()===''?null:Number(rate.value);this._config={...this._config,energy_price:typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null};this._dispatch();});rateLabel.appendChild(rate);
+      const costLabel=document.createElement('label');costLabel.textContent=translate(this._hass,'Cost mode');const costMode=document.createElement('select');costMode.id='cf_cost_mode';
+      for(const [value,label] of [['auto','Recorded costs, then explicit flat estimate'],['cost_statistics','Recorded monetary statistics'],['flat_rate_estimate','Explicit flat-rate estimate'],['configured_tariff','Configured tariff from measured hours']]){const option=document.createElement('option');option.value=value;option.textContent=translate(this._hass,label);costMode.appendChild(option);}
+      costMode.value=['cost_statistics','flat_rate_estimate','configured_tariff'].includes(this._config.energy_cost_mode)?this._config.energy_cost_mode:'auto';costMode.addEventListener('change',()=>{this._config={...this._config,energy_cost_mode:costMode.value};this._dispatch();});costLabel.appendChild(costMode);
+      this.shadowRoot.append(costLabel,rateLabel);
       mode.addEventListener('change', () => { this._config = { ...this._config, energy_source_mode: mode.value }; sources.hidden = mode.value !== 'explicit'; this._dispatch(); });
     }
     _dispatch() { this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, bubbles: true, composed: true })); }
