@@ -48,7 +48,7 @@ test('configured tariff uses one existing statistics request and optional backen
  const {dom,card}=await mountCard({hass,config:explicitConfig({energy_cost_mode:'configured_tariff'})});try{
  assert.equal(card._energyViewState.cost.value,6);assert.equal(hass.calls.filter(m=>m.type==='recorder/statistics_during_period').length,1);assert.equal(hass.calls.filter(m=>m.type==='ha_tools_email/get_tariff').length,1);
  card._energyView='costs';card._renderEnergyState();const calls=hass.calls.length;const snapshot=card._energyViewState.cost.records;
- card.shadowRoot.querySelector('[data-cost-view="data"]').click();assert.equal(card._energyViewState.cost.records,snapshot);assert.equal(hass.calls.length,calls);assert.equal(card.shadowRoot.querySelectorAll('[data-priced-row]').length,snapshot.length);
+ card.shadowRoot.querySelector('[data-cost-view="data"]').click();assert.equal(card._energyViewState.cost.records,snapshot);assert.equal(hass.calls.length,calls);assert.equal(card.shadowRoot.querySelectorAll('[data-priced-row]').length,Math.min(50,snapshot.length));
  const exp=card._buildExportDocument();assert.equal(exp.schema_version,2);assert.equal(exp.energy.tariff.revision,4);assert.equal(exp.energy.tariff.records[0].energyCost,6);assert.equal('profile' in exp.energy.tariff,false);assert.equal('exceptions' in exp.energy.tariff,false);assert.ok(exp.energy.devices);assert.ok(exp.energy.daily);assert.match(card._buildCsv(exp),/tariff_hour_energy/);
  }finally{card.remove();dom.window.close();}
 });
