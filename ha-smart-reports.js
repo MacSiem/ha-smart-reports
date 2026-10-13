@@ -321,7 +321,6 @@ function createUiV3({ language = 'en' } = {}) {
   // END mirror shared/ha-tools-ui.js
 
   // BEGIN mirror shared/ha-tools-tariff-guard.js
-
 // One wire fence for the card-owned host and settings editor. A public timeout
 // is uncertainty, never permission to dispatch another raw operation.
 function createTariffGuardV3({ getHass, getContext = () => null, browser = typeof window === 'object' ? window : null, timeoutMs = 15000 }) {
@@ -349,7 +348,7 @@ function createTariffGuardV3({ getHass, getContext = () => null, browser = typeo
   const read = h => {
     bind(h?.connection);
     return { user: h?.user?.id, admin: h?.user?.is_admin === true, owner: h?.user?.is_owner === true,
-      active: h?.user?.is_active !== false, groups: canonical(h?.user?.groups || []),
+      active: h?.user?.is_active !== false, groups: canonical(h?.user?.groups || []), groupIds: canonical(h?.user?.group_ids || []),
       connection: h?.connection, callWS: h?.callWS,
       connected: h?.connection?.connected !== false && !connectionOffline,
       online: !suspended && !browserOffline && browser?.navigator?.onLine !== false,
@@ -868,6 +867,11 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
   const PL = Object.freeze({
+    'All hours':'Wszystkie godziny','Page':'Strona','Previous':'Poprzednia','Next':'Następna',
+    'Hourly records':'Dane godzinowe','Daily overview':'Przegląd dzienny','UTC interval':'Przedział UTC',
+    'Energy / kWh':'Energia / kWh','Zone':'Strefa','Status':'Stan',
+    'Select a day to inspect its hours. Stripes show measured subsets; gaps are not zero.':'Wybierz dzień, aby zobaczyć godziny. Paski oznaczają zmierzoną część danych; brak danych nie oznacza zera.',
+
     "shared_backend": "Wspólny profil z backendu",
     "card_config": "Profil z konfiguracji karty",
     "Configured tariff energy cost": "Koszt energii według skonfigurowanej taryfy",
@@ -1218,7 +1222,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         <style>
           :host{--sr-primary:var(--primary-color,#3b82f6);--sr-card:var(--card-background-color,var(--ha-card-background,#fff));--sr-text:var(--primary-text-color,#172033);--sr-muted:var(--secondary-text-color,#667085);--sr-border:var(--divider-color,#d9e0ea);--sr-good:#15803d;--sr-warn:#b45309;--sr-bad:#b42318;display:block;color:var(--sr-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}.card{background:var(--sr-card);border:1px solid var(--sr-border);border-radius:16px;overflow:hidden}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}h2,h3,p{margin:0}h2{font-size:20px}h3{font-size:15px}.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--sr-border);overflow-x:auto}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--sr-muted);padding:10px 12px}.tab.active{color:var(--sr-primary);border-bottom-color:var(--sr-primary);font-weight:650}.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 0}.toolbar-actions{display:flex;flex-wrap:wrap;gap:8px}.control,.action{min-height:38px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);padding:8px 11px}.action.primary{background:var(--sr-primary);border-color:var(--sr-primary);color:#fff}.action:disabled{cursor:not-allowed;opacity:.45}.pane{padding:20px;min-height:220px}.state{display:grid;gap:12px;place-items:start;padding:22px;border:1px solid var(--sr-border);border-radius:12px}.state[role="status"]{border-left:4px solid var(--sr-primary)}.state.partial{border-left-color:var(--sr-warn)}.state.error{border-left-color:var(--sr-bad)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{border:1px solid var(--sr-border);border-radius:12px;padding:14px}.metric-label,.muted{color:var(--sr-muted);font-size:12px}.metric-value{margin-top:5px;font-size:23px;font-weight:720}.section{margin-top:18px}.list{display:grid;gap:8px;margin-top:10px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--sr-border);padding:9px 2px}.row.child{padding-left:24px}.row-name{overflow-wrap:anywhere}.status-ready{color:var(--sr-good)}.warning{color:var(--sr-warn)}.fixed-link{color:var(--sr-primary)}.donate-section{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;border-top:1px solid var(--sr-border);padding:13px 18px;color:var(--sr-muted);font-size:12px}.donate-section a{color:var(--sr-primary);text-decoration:none}[hidden]{display:none!important}@media(max-width:520px){.header,.toolbar{align-items:stretch;flex-direction:column}.toolbar-actions{width:100%}.action{flex:1}}
           .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:flex;gap:8px;overflow-x:auto;padding:16px 2px 8px;max-width:100%}.day-column{display:grid;gap:6px;text-align:center;flex:0 0 40px;color:var(--sr-muted);font-size:11px}.day-track{height:100px;display:flex;align-items:flex-end;background:var(--sr-border);border-radius:4px;overflow:hidden}.day-track .bar-fill{width:100%}.day-column.partial .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.day-column.partial .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.day-column.no_data .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
-           .tariff-hour-bars{display:flex;gap:8px;overflow-x:auto;max-width:100%;padding:8px 2px}.tariff-hour{flex:0 0 110px;text-align:center;display:grid;gap:6px;font-size:12px}.tariff-hour small{overflow-wrap:anywhere}.tariff-track{height:100px;position:relative;border-block:1px solid var(--sr-border);background:linear-gradient(transparent calc(50% - 1px),var(--sr-border) 50%,transparent calc(50% + 1px))}.tariff-fill{position:absolute;bottom:50%;width:100%;background:var(--sr-primary)}.tariff-fill.negative{top:50%;bottom:auto;background:var(--sr-muted)}.tariff-hour[data-availability=gap] .tariff-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.tariff-evidence p{overflow-wrap:anywhere}.tariff-hour-bars:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
+          .tariff-evidence{display:grid;gap:12px;min-width:0}.tariff-evidence p,.tariff-evidence h4{overflow-wrap:anywhere}.tariff-day-chart{display:grid;gap:8px;margin-top:12px}.tariff-day-chart h4{margin:0;font-size:14px}.tariff-day{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;min-height:64px;min-width:44px;max-width:100%;padding:10px 12px;border:1px solid var(--sr-border);border-radius:10px;background:var(--sr-card);color:var(--sr-text);text-align:left;font:inherit}.tariff-day[aria-pressed=true]{border-color:var(--sr-primary);outline:1px solid var(--sr-primary)}.tariff-day strong{overflow-wrap:anywhere}.tariff-day small{grid-column:1/-1;color:var(--sr-muted);font-size:11px}.tariff-day-track{grid-column:1/-1;position:relative;height:8px;background:var(--sr-border);border-radius:4px;overflow:hidden}.tariff-day-track.signed{background:linear-gradient(to right,var(--sr-border) calc(50% - 1px),var(--sr-text) 50%,var(--sr-border) calc(50% + 1px))}.tariff-day-fill{position:absolute;top:0;height:100%;background:var(--sr-primary);border-radius:3px}.tariff-day[data-availability=partial] .tariff-day-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.tariff-day[data-availability=gap] .tariff-day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.tariff-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.tariff-pagination span{flex:1;min-width:0}.tariff-evidence button{min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}.tariff-data-row{border:1px solid var(--sr-border);border-radius:10px;padding:12px;margin-top:8px;min-width:0;overflow-wrap:anywhere}.tariff-data-row h4{font-size:13px;margin:0 0 8px}.tariff-data-row dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 12px;margin:0;font-size:12px}.tariff-data-row dt{color:var(--sr-muted)}.tariff-data-row dd{margin:0}.tariff-day:focus-visible{outline:3px solid var(--sr-primary);outline-offset:2px}
           .device-search-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0}.device-search-form label{flex:1;min-width:min(100%,180px);display:grid;gap:6px;font-size:13px}.device-search{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);font:inherit}.device-search-clear{min-height:44px;min-width:44px}.device-search:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.device-search-count,.device-export-note{overflow-wrap:anywhere;line-height:1.5}.chart-row small{overflow-wrap:anywhere}
           :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
         </style>
@@ -1724,7 +1728,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
     _priceConfiguredTariff(period, roots, statistics, metadata, snapshot) {
       const unavailable = reason => ({ method: 'configured_tariff', value: null, currency: null, rate: null,
-        source_statistic_ids: roots.map(s => s.statistic_id), reason, records: Object.freeze([]), measured_energy_cost: null,
+        source_statistic_ids: roots.map(s => s.statistic_id), reason, records: Object.freeze([]), daily: Object.freeze([]), measured_energy_cost: null,
         coverage: { observed_hours: 0, expected_hours: 0, observed_source_hours: 0, expected_source_hours: 0 } });
       const profile = snapshot?.profile, model = createEnergyTariffV3(profile);
       if (!model.valid) return unavailable(snapshot?.reason || 'invalid_profile');
@@ -1773,7 +1777,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       return Object.freeze({ method: 'configured_tariff', value: priced.complete ? priced.energyCost : null,
         currency: profile.currency, rate: null, source_statistic_ids: Object.freeze([...ids]),
         reason: priced.complete ? null : (fatal.size ? [...fatal.values()][0] : priced.issues[0]?.reason || 'missing_measurement'),
-        records: Object.freeze(records), measured_energy_cost: sum('energyCost'), measured_kwh: sum('kwh'),
+        records: Object.freeze(records), daily: this._tariffDailyRecords(period, records), measured_energy_cost: sum('energyCost'), measured_kwh: sum('kwh'),
         variable_cost: priced.complete ? priced.variableCost : null, usage_cost: priced.complete ? priced.usageCost : null,
         fixed_monthly: priced.fixedMonthly, price_basis: profile.priceBasis, tariff_timezone: profile.timezone,
         tariff_clock: Object.freeze({ ...profile.clock }), revision: snapshot.revision ?? null, provenance: snapshot.provenance || null,
@@ -1783,12 +1787,45 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           complete: priced.complete, measured_subset: !priced.complete && ready.length > 0 }) });
     }
 
+    _tariffDailyRecords(period, records) {
+      const start = asDate(period.start), end = asDate(period.end);
+      if (!start || !end || end <= start || !records.length) return Object.freeze([]);
+      const days = []; let parts = this._partsInZone(start, period.time_zone);
+      const sum = (rows, field) => {
+        const value = rows.reduce((total, row) => total + row[field], 0);
+        return rows.length && Number.isFinite(value) ? value : null;
+      };
+      for (let index = 0; index < 31; index++) {
+        const bounds = this._zonedDayBounds(parts, period.time_zone);
+        const from = Math.max(start.getTime(), bounds.start.getTime()), to = Math.min(end.getTime(), bounds.end.getTime());
+        if (to <= from) break;
+        // Never split an hourly meter reading across a local midnight. A fractional
+        // boundary stays incomplete instead of inventing within-hour consumption.
+        const hours = records.filter(row => Date.parse(row.from) >= from && Date.parse(row.to) <= to);
+        const measured = hours.filter(row => row.measurement_available), priced = hours.filter(row => row.available);
+        const expected = (to - from) / 3600000;
+        const energyComplete = Number.isInteger(expected) && measured.length === expected;
+        const costComplete = Number.isInteger(expected) && priced.length === expected;
+        const kwh = sum(measured, 'kwh'), money = sum(priced, 'energyCost');
+        const complete = energyComplete && costComplete && kwh !== null && money !== null;
+        days.push(Object.freeze({ from: new Date(from).toISOString(), to: new Date(to).toISOString(),
+          kwh: energyComplete ? kwh : null, energyCost: costComplete ? money : null,
+          recorded_kwh: kwh, recorded_energy_cost: money,
+          measurement_available: energyComplete && kwh !== null, available: costComplete && money !== null,
+          expected_hours: expected, measured_hours: measured.length, observed_hours: priced.length,
+          status: complete ? 'ready' : measured.length ? 'partial' : 'no_data', records: Object.freeze(hours) }));
+        if (bounds.end >= end) break;
+        parts = this._addCalendarDays(parts, 1);
+      }
+      return Object.freeze(days);
+    }
+
     _tariffController() {
       if (this._tariffHost) return this._tariffHost;
       this._tariffGuard ||= createTariffGuardV3({ getHass: () => this._hass,
         getContext: () => ({ config: this._config, period: this._period, tab: this._activeTab, connected: this._connected }) });
       this._tariffGuard.subscribe(() => {
-        this._invalidateEnergyRequest(); this._energyReportConfig = null; this._tariffPricingContext = null; this._deviceQuery = '';
+        this._invalidateEnergyRequest(); this._energyReportConfig = null; this._tariffPricingContext = null; this._deviceQuery = ''; this._costSelectedDay = null; this._costDataPage = 0; this._costChartPage = 0;
         this._tariffSettingsSection?.replaceChildren(); this._tariffSettingsSection = null;
         this._energyViewState = { status: 'idle' };
         // Clear cached priced/private source DOM immediately; do not dispatch a retry.
@@ -1838,30 +1875,73 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         const button=document.createElement('button');button.type='button';button.className='action';button.dataset.costView=key;button.setAttribute('role','tab');button.setAttribute('aria-selected',String((this._costEvidenceView || 'chart')===key));button.textContent=this._t(label);
         button.addEventListener('click',()=>{this._costEvidenceView=key;this._renderEnergyState();this.shadowRoot.querySelector(`[data-cost-view="${key}"]`)?.focus();});views.appendChild(button);
       }section.appendChild(views);
-      const panel = document.createElement('div');panel.setAttribute('role','tabpanel');
-      const records=cost.records; // Both views consume exactly the same immutable record sequence.
+      const panel = document.createElement('div'); panel.setAttribute('role','tabpanel');
+      const records = cost.records, daily = cost.daily || [];
+      const selected = daily.find(day => day.from === this._costSelectedDay);
+      if (!selected) this._costSelectedDay = null;
+      const rerender = (selector, fallback) => {
+        this._renderEnergyState();
+        const target = this.shadowRoot.querySelector(selector);
+        (target && !target.disabled ? target : this.shadowRoot.querySelector(fallback || '[data-cost-view][aria-selected="true"]'))?.focus();
+      };
+      if (selected) {
+        const detail = document.createElement('p'); detail.dataset.costSelectedDay = selected.from; detail.setAttribute('role','status');
+        detail.textContent = `${this._formatPeriodDate(selected.from,this._energyViewState.period.time_zone)} · ${selected.measured_hours}/${selected.expected_hours} ${this._t('Measured hours')} · ${this._t(selected.status)} · ${this._formatNumber(selected.recorded_kwh,2)} kWh · ${this._formatNumber(selected.recorded_energy_cost,2)} ${cost.currency || '—'}`;
+        panel.appendChild(detail);
+        const clear = document.createElement('button'); clear.type='button'; clear.className='action'; clear.dataset.costClearDay=''; clear.textContent=this._t('All hours');
+        clear.addEventListener('click',()=>{this._costSelectedDay=null;this._costDataPage=0;rerender('[data-cost-view][aria-selected="true"]');}); panel.appendChild(clear);
+      }
+      const paginate = (count, size, property, attribute) => {
+        const pages=Math.max(1,Math.ceil(count/size));
+        this[property]=Math.max(0,Math.min(pages-1,this[property] || 0));
+        const nav=document.createElement('nav'); nav.className='tariff-pagination'; nav.setAttribute('aria-label',this._t(attribute==='costPage'?'Hourly records':'Daily overview'));
+        const status=document.createElement('span'); status.textContent=`${this._t('Page')} ${this[property]+1}/${pages}`; nav.appendChild(status);
+        for (const [direction,label,offset] of [['previous','Previous',-1],['next','Next',1]]) {
+          const button=document.createElement('button');button.type='button';button.className='action';button.dataset[attribute]=direction;button.textContent=this._t(label);
+          button.disabled=offset<0?this[property]===0:this[property]===pages-1;
+          button.addEventListener('click',()=>{this[property]+=offset;rerender(`[data-${attribute==='costPage'?'cost-page':'cost-chart-page'}="${direction}"]`,`[data-${attribute==='costPage'?'cost-page':'cost-chart-page'}]:not([disabled])`);});nav.appendChild(button);
+        }
+        panel.appendChild(nav); return this[property]*size;
+      };
       if ((this._costEvidenceView || 'chart') === 'data') {
-        for (const record of records) {
-          const row=document.createElement('p');row.dataset.pricedRow=record.from;
-          row.textContent=`${record.from} → ${record.to} · ${record.source_statistic_ids.join(', ')} · ${record.kwh ?? '—'} kWh · ${record.energyCost ?? '—'} ${cost.currency} · ${record.energyRate ?? '—'} ${cost.currency}/kWh · ${record.zones.join(', ') || '—'} · ${this._t(record.reason || 'ready')}`;panel.appendChild(row);
+        const rows = selected ? selected.records : records;
+        const offset = paginate(rows.length,50,'_costDataPage','costPage');
+        for (const record of rows.slice(offset,offset+50)) {
+          const row=document.createElement('article');row.className='tariff-data-row';row.dataset.pricedRow=record.from;
+          const title=document.createElement('h4');title.textContent=`${this._formatPeriodDate(record.from,this._energyViewState.period.time_zone)} → ${this._formatPeriodDate(record.to,this._energyViewState.period.time_zone)}`;row.appendChild(title);
+          const data=document.createElement('dl');
+          for(const [label,value] of [
+            ['Measured energy',`${this._formatNumber(record.kwh,2)} kWh`],
+            ['Priced energy',`${this._formatNumber(record.energyCost,2)} ${cost.currency || '—'}`],
+            ['Energy / kWh',`${this._formatNumber(record.energyRate,4)} ${cost.currency || '—'}/kWh`],
+            ['Zone',record.zones.join(', ') || '—'],['Status',this._t(record.reason || 'ready')],
+            ['Source evidence',record.source_statistic_ids.join(', ')],['UTC interval',`${record.from} → ${record.to}`]]) {
+            const term=document.createElement('dt');term.textContent=this._t(label);const valueNode=document.createElement('dd');valueNode.textContent=value;data.append(term,valueNode);
+          }row.appendChild(data);panel.appendChild(row);
         }
       } else {
-        for (const [key,unit,label] of [['kwh','kWh','Measured energy'],['energyCost',cost.currency || '—','Priced energy']]) {
-          const chart=document.createElement('section');chart.className='tariff-hour-chart';chart.setAttribute('aria-label',`${this._t(label)} (${unit})`);
-          const axis=document.createElement('p');axis.textContent=`${this._t(label)} · ${unit}`;chart.appendChild(axis);
-          const isMeasured = record => key === 'kwh' ? record.measurement_available : record.available;
-          const scale=Math.max(1,...records.filter(isMeasured).map(r=>Math.abs(r[key] || 0)));
-          const bars=document.createElement('div');bars.className='tariff-hour-bars';bars.setAttribute('tabindex','0');
-          for (const record of records) {
-            const bar=document.createElement('div');bar.className='tariff-hour';bar.dataset.pricedRow=record.from;bar.dataset.availability=isMeasured(record)?'measured':'gap';
-            const date=document.createElement('small');date.textContent=this._formatPeriodDate(record.from,this._energyViewState.period.time_zone);
-            const value=document.createElement('span');value.textContent=`${isMeasured(record) ? this._formatNumber(record[key],2) : '—'} ${unit}`;
-            const track=document.createElement('div');track.className='tariff-track';
-            if(isMeasured(record)){const fill=document.createElement('div');fill.className=`tariff-fill${record[key]<0?' negative':''}`;fill.style.height=`${Math.abs(record[key])/scale*50}%`;track.appendChild(fill);}
-            bar.title=`${record.from} → ${record.to} · ${record.source_statistic_ids.join(', ')} · ${record.zones.join(', ')} · ${record.energyRate ?? '—'} ${cost.currency}/kWh · ${cost.price_basis} · ${this._t('Revision')}: ${cost.revision ?? '—'} · ${this._t(record.reason || 'ready')}`;bar.setAttribute('role','img');bar.setAttribute('aria-label',`${bar.title} · ${value.textContent}`);bar.append(date,track,value);bars.appendChild(bar);
-          }chart.appendChild(bars);panel.appendChild(chart);
+        const offset=paginate(daily.length,7,'_costChartPage','costChartPage');
+        const note=document.createElement('p');note.className='muted';note.textContent=this._t('Select a day to inspect its hours. Stripes show measured subsets; gaps are not zero.');panel.appendChild(note);
+        for (const [key,subset,unit,label] of [['kwh','recorded_kwh','kWh','Measured energy'],['energyCost','recorded_energy_cost',cost.currency || '—','Priced energy']]) {
+          const chart=document.createElement('section');chart.className='tariff-day-chart';chart.setAttribute('aria-label',`${this._t(label)} (${unit})`);
+          const axis=document.createElement('h4');axis.textContent=`${this._t(label)} · ${unit}`;chart.appendChild(axis);
+          const signed = daily.some(day => day[subset] < 0);
+          const scale=Math.max(0,...daily.map(day=>Math.abs(day[subset] || 0)));
+          for (const day of daily.slice(offset,offset+7)) {
+            const value=day[subset], complete=key==='kwh'?day.measurement_available:day.available;
+            const button=document.createElement('button');button.type='button';button.className='tariff-day';button.dataset.costDay=day.from;button.dataset.costMetric=key;button.dataset.availability=value===null?'gap':complete?'ready':'partial';button.setAttribute('aria-pressed',String(selected?.from===day.from));
+            const date=document.createElement('span');date.textContent=new Intl.DateTimeFormat(languageOf(this._hass),{day:'numeric',month:'short',timeZone:this._energyViewState.period.time_zone}).format(new Date(day.from));
+            const amount=document.createElement('strong');amount.textContent=`${this._formatNumber(value,2)} ${unit}`;
+            const status=document.createElement('small');status.textContent=this._t(complete?'ready':day.status);
+            const track=document.createElement('span');track.className=`tariff-day-track${signed?' signed':''}`;track.setAttribute('aria-hidden','true');
+            if(value!==null){const fill=document.createElement('span');fill.className='tariff-day-fill';const width=scale?Math.abs(value)/scale*(signed?50:100):0;fill.style.width=`${width}%`;fill.style.left=`${signed?(value<0?50-width:50):0}%`;track.appendChild(fill);}
+            button.title=`${day.from} → ${day.to} · ${day.measured_hours}/${day.expected_hours} ${this._t('Measured hours')} · ${this._t(day.status)}`;
+            button.append(date,amount,status,track);
+            button.addEventListener('click',()=>{this._costSelectedDay=day.from;this._costDataPage=0;rerender(`[data-cost-day="${day.from}"][data-cost-metric="${key}"]`);});chart.appendChild(button);
+          }panel.appendChild(chart);
         }
-      }section.appendChild(panel);container.appendChild(section);
+      }
+      section.appendChild(panel);container.appendChild(section);
     }
 
     _dailyEnergySeries(period, sources, statistics, metadata) {
@@ -2181,7 +2261,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           status: state.status || 'error',
           total: { label: 'Grid import', value: typeof total.value === 'number' && Number.isFinite(total.value) ? total.value : null, unit: total.unit || 'kWh', source_statistic_ids: Array.isArray(total.source_statistic_ids) ? [...total.source_statistic_ids] : [] },
           cost: { value: typeof cost.value === 'number' && Number.isFinite(cost.value) ? cost.value : null, currency: cost.currency || null, method: cost.method || 'unavailable', rate: typeof cost.rate === 'number' && Number.isFinite(cost.rate) ? cost.rate : null, source_statistic_ids: Array.isArray(cost.source_statistic_ids) ? [...cost.source_statistic_ids] : [], reason: cost.reason || null },
-          ...(cost.method === 'configured_tariff' ? { tariff: { records: cost.records, coverage: cost.coverage, revision: cost.revision ?? null, provenance: cost.provenance || null, currency: cost.currency, price_basis: cost.price_basis, tariff_timezone: cost.tariff_timezone, tariff_clock: cost.tariff_clock, fixed_monthly: cost.fixed_monthly ?? null, variable_cost: cost.variable_cost ?? null, usage_cost: cost.usage_cost ?? null, measured_energy_cost: cost.measured_energy_cost ?? null, current_profile_validity: cost.current_profile_validity || null } } : {}),
+          ...(cost.method === 'configured_tariff' ? { tariff: { records: cost.records, daily: (cost.daily || []).map(({records, ...day}) => day), coverage: cost.coverage, revision: cost.revision ?? null, provenance: cost.provenance || null, currency: cost.currency, price_basis: cost.price_basis, tariff_timezone: cost.tariff_timezone, tariff_clock: cost.tariff_clock, fixed_monthly: cost.fixed_monthly ?? null, variable_cost: cost.variable_cost ?? null, usage_cost: cost.usage_cost ?? null, measured_energy_cost: cost.measured_energy_cost ?? null, current_profile_validity: cost.current_profile_validity || null } } : {}),
           recorded_total: state.recorded_total || null,
           recorded_cost: state.recorded_cost || null,
           daily: state.daily || [],

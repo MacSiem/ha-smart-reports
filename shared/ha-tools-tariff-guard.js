@@ -27,7 +27,7 @@ function createTariffGuardV3({ getHass, getContext = () => null, browser = typeo
   const read = h => {
     bind(h?.connection);
     return { user: h?.user?.id, admin: h?.user?.is_admin === true, owner: h?.user?.is_owner === true,
-      active: h?.user?.is_active !== false, groups: canonical(h?.user?.groups || []),
+      active: h?.user?.is_active !== false, groups: canonical(h?.user?.groups || []), groupIds: canonical(h?.user?.group_ids || []),
       connection: h?.connection, callWS: h?.callWS,
       connected: h?.connection?.connected !== false && !connectionOffline,
       online: !suspended && !browserOffline && browser?.navigator?.onLine !== false,
