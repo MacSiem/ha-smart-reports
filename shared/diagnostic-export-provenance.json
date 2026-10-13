@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "upstream": "ha-trace-viewer/shared (UI and dialog unchanged)",
+  "consumer": "ha-smart-reports",
+  "base_head": "fce4bd96562f9a817e2ae69f1e77074ab04b18ff",
+  "files": {
+    "shared/ha-tools-ui.js": {
+      "sourceSha256": "029c06206e55abad9aa09dfcf65bb13027ec24ce6a0bfacc45a938891b27254e",
+      "runtimeSha256": "96ecfe3ddf6f8eddaaf06c51ba9b5f9059e46d2dfdf132359579c1730e90e140"
+    },
+    "shared/ha-tools-export.js": {
+      "sourceSha256": "1f9e9c5444ec3b6de44eec136f14ae9e7d89dae1002650b33f746ab9633982f1",
+      "runtimeSha256": "f83f8ba9c0e0f0c41421c1f6beb78074d37ba79582bc15ae4cd9844d026559e5"
+    },
+    "shared/ha-smart-reports-export.js": {
+      "sourceSha256": "570a233a9854b836d86500788946f6c3c4a2dbe6601cd5d2393e9e9f6fcfb1c1",
+      "runtimeSha256": "7a6f48d8cd86dce645f01f9ff6534e462b47d9d3ca23ee876c2c1727c2b7f318"
+    }
+  }
+}

@@ -281,7 +281,7 @@ function energyTariffProfileV3(config, haConfig, kind) {
 
   // END mirror shared/ha-tools-energy-tariff.js
 
-  // BEGIN mirror shared/ha-tools-ui.js
+  // BEGIN HA TOOLS UI V3 source-sha256=029c06206e55abad9aa09dfcf65bb13027ec24ce6a0bfacc45a938891b27254e
 // HA Tools v3: vendored inside each consumer's own closure, never a window API.
 function createUiV3({ language = 'en' } = {}) {
   const pl = String(language).startsWith('pl');
@@ -317,8 +317,7 @@ function createUiV3({ language = 'en' } = {}) {
 `;
   return { status, statusHtml, css };
 }
-// Node tests use the canonical factory; this line is excluded from runtime copies.
-  // END mirror shared/ha-tools-ui.js
+// END HA TOOLS UI V3
 
   // BEGIN mirror shared/ha-tools-tariff-guard.js
 // One wire fence for the card-owned host and settings editor. A public timeout
@@ -1155,6 +1154,399 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     return date ? date.getTime() : null;
   }
 
+  // BEGIN HA TOOLS EXPORT V3 source-sha256=1f9e9c5444ec3b6de44eec136f14ae9e7d89dae1002650b33f746ab9633982f1
+/**
+ * W6 export dialog. Pure ES module; vendor this factory INSIDE each consumer's
+ * own IIFE (remove only the `export` keyword). Never attach it to window.
+ * Construction is inert. open() appends only its own container to root.
+ *
+ * Required dependency injection:
+ * root: Element/ShadowRoot; getLanguage(): 'pl'|'en'; createUiV3: existing W4 factory.
+ * getContext(): {role,userId,connectionId,datasetId,revision,connected,canExport,
+ *                sourceConfirmed}. Identities/revision are nonempty scalar values;
+ * bump revision monotonically for source/filter/selection/identity changes,
+ * including a restored source; never reuse an old revision. Never return tokens or data.
+ * policy: {id,allowlistedFields:string[],neverInclude:[tokens,users,addresses,raw_config]}.
+ * formats: explicit subset of ['json','csv','txt']; defaults must be explicit valid choices.
+ * buildPayload({context,draft,policy,signal}): read-only, Promise or sync result:
+ * {serialized:string,confirmed:true,sourceConfirmed:true,status:'success'|'partial',
+ *  included:string[],excluded:string[],sourceLimit:string}.
+ * Included/Excluded/sourceLimit describe the REVIEWED CONSUMER policy and actual
+ * source limitations in the current language. The consumer MUST explicitly select
+ * allowed fields, exclude tokens/users/addresses/raw configuration under EVERY
+ * private opt-in, and sanitize CSV formula cells where applicable. A generic
+ * recursive export/redactor of arbitrary raw state/config is NOT a valid consumer.
+ * This factory cannot inspect or truthfully sanitize an unknown arbitrary schema.
+ * For partial reports the consumer also encodes the partial status, inclusion
+ * scope and source limitations IN its allowlisted file schema, not only UI text.
+ * performDownload({serialized,blob,filename,format,context,signal}): explicit Save
+ * only. Return {outcome:'initiated'|'saved'|'unknown'}; 'saved' requires actual
+ * adapter confirmation, never infer disk persistence from an anchor click.
+ * Optional clock(): monotonic milliseconds; setTimer(fn,ms), clearTimer(handle).
+ *
+ * Returned API: open({opener}), cancel(), contextChanged(), destroy(). Every open
+ * resets private consent. contextChanged() discards bytes/consent immediately;
+ * owner also calls cancel/destroy on disconnect. Save ALWAYS rechecks context.
+ * One preview on open, explicit Refresh thereafter; bounded 10s, no automatic
+ * retries/downloads/persistence. AbortSignal is advisory; late results are ignored.
+ */
+function createExportDialog(options) {
+  const { root, getContext, getLanguage, createUiV3, buildPayload, performDownload,
+    clock = () => globalThis.performance.now(), setTimer = (fn, ms) => globalThis.setTimeout(fn, ms),
+    clearTimer = id => globalThis.clearTimeout(id), defaultFormat, defaultFilename } = options || {};
+  const allowedFormats = ['json', 'csv', 'txt', 'yaml'];
+  const excludedCategories = ['tokens', 'users', 'addresses', 'raw_config'];
+  const strings = value => Array.isArray(value) && value.length > 0 && value.every(v => typeof v === 'string' && v.trim());
+  if (!root?.append || !root.ownerDocument || [getContext, getLanguage, createUiV3, buildPayload, performDownload, clock, setTimer, clearTimer].some(fn => typeof fn !== 'function')) {
+    throw new TypeError('root and injected getContext/getLanguage/createUiV3/buildPayload/performDownload/clock/timers are required');
+  }
+  const suppliedPolicy = options.policy;
+  if (!suppliedPolicy || typeof suppliedPolicy.id !== 'string' || !suppliedPolicy.id.trim() || !strings(suppliedPolicy.allowlistedFields) || !strings(suppliedPolicy.neverInclude) || excludedCategories.some(key => !suppliedPolicy.neverInclude.includes(key))) {
+    throw new TypeError('Explicit reviewed consumer policy with allowlistedFields and neverInclude is required');
+  }
+  const policy = Object.freeze({ id: suppliedPolicy.id, allowlistedFields: Object.freeze([...suppliedPolicy.allowlistedFields]), neverInclude: Object.freeze([...suppliedPolicy.neverInclude]) });
+  if (!strings(options.formats) || options.formats.some(f => !allowedFormats.includes(f)) || new Set(options.formats).size !== options.formats.length || !options.formats.includes(defaultFormat) || typeof defaultFilename !== 'string') {
+    throw new TypeError('Explicit formats/defaultFormat/defaultFilename are required');
+  }
+  const formats = Object.freeze([...options.formats]);
+  const doc = root.ownerDocument;
+  const mime = { json: 'application/json;charset=utf-8', csv: 'text/csv;charset=utf-8', txt: 'text/plain;charset=utf-8', yaml: 'application/yaml;charset=utf-8' };
+  const copy = {
+    en: { title: 'Export', filename: 'Filename', format: 'Format', private: 'Include reviewed private fields (this export only)', included: 'Included in the file', excluded: 'Excluded from the file', source: 'Source and limits', preview: 'Exact file content', save: 'Save', refresh: 'Refresh preview', cancel: 'Cancel', busy: 'Building preview… Save waits for confirmed bytes.', changed: 'Choices changed. Refresh preview before Save.', context: 'Source or access changed. Review the source and refresh preview.', unavailable: 'Source unavailable or unconfirmed. Reconnect or confirm the source, then refresh.', invalidFormat: 'Choose an allowed format: JSON, CSV, TXT or YAML as offered.', invalidName: 'Use a basename of 1–128 characters: no paths, control characters, reserved names or leading/trailing spaces.', extension: 'Filename must end with the selected extension. Edit the filename, then refresh.', timeout: 'Preview exceeded 10 seconds. Check the source and explicitly refresh.', buildError: 'Could not build a confirmed preview. Check the source and refresh.', unconfirmed: 'Bytes or source metadata are unconfirmed. Confirm the source and refresh.', noData: 'No confirmed file content. Select available data and refresh.', saving: 'Handing off the confirmed preview… Wait for the adapter result.', initiated: 'Download initiated. Saving to the filesystem is not confirmed. Refresh only for a new export intent.', saved: 'Save confirmed by the download adapter.', unknown: 'Download result unconfirmed. Check the previous attempt before explicitly refreshing for a new export intent.' },
+    pl: { title: 'Eksport', filename: 'Nazwa pliku', format: 'Format', private: 'Dołącz sprawdzone pola prywatne (tylko ten eksport)', included: 'W pliku jest', excluded: 'W pliku nie ma', source: 'Źródło i ograniczenia', preview: 'Dokładna zawartość pliku', save: 'Zapisz', refresh: 'Odśwież podgląd', cancel: 'Anuluj', busy: 'Przygotowywanie podglądu… Zapis wymaga potwierdzonej zawartości.', changed: 'Wybór zmieniony. Odśwież podgląd przed zapisem.', context: 'Źródło lub uprawnienia zmienione. Sprawdź źródło i odśwież podgląd.', unavailable: 'Źródło niedostępne lub niepotwierdzone. Połącz lub potwierdź źródło i odśwież.', invalidFormat: 'Wybierz dostępny format: JSON, CSV, TXT lub YAML z listy.', invalidName: 'Użyj nazwy pliku o długości 1–128 znaków: bez ścieżek, znaków sterujących, nazw zastrzeżonych i skrajnych spacji.', extension: 'Nazwa pliku musi mieć rozszerzenie wybranego formatu. Popraw nazwę i odśwież.', timeout: 'Podgląd przekroczył 10 sekund. Sprawdź źródło i jawnie odśwież.', buildError: 'Nie udało się przygotować potwierdzonego podglądu. Sprawdź źródło i odśwież.', unconfirmed: 'Zawartość lub opis źródła niepotwierdzony. Potwierdź źródło i odśwież.', noData: 'Brak potwierdzonej zawartości pliku. Wybierz dostępne dane i odśwież.', saving: 'Przekazywanie potwierdzonego podglądu… Poczekaj na wynik zapisu.', initiated: 'Pobieranie rozpoczęte. Zapis na dysku nie jest potwierdzony. Odśwież tylko dla nowej próby eksportu.', saved: 'Adapter pobierania potwierdził zapis.', unknown: 'Wynik pobierania niepotwierdzony. Sprawdź poprzednią próbę przed jawnym odświeżeniem dla nowego eksportu.' },
+  };
+  const css = `
+[data-ha-tools-export] { container-type:inline-size;min-width:0;max-width:100%;color:var(--primary-text-color,inherit);font:inherit; }
+[data-ha-tools-export] * { box-sizing:border-box; }
+[data-ha-tools-export] [role=dialog] { width:100%;min-width:0;border:1px solid var(--divider-color,#aaa);border-radius:12px;background:var(--card-background-color,#fff);padding:16px; }
+[data-ha-tools-export] h2,[data-ha-tools-export] h3,[data-ha-tools-export] p,[data-ha-tools-export] li { overflow-wrap:anywhere;white-space:normal; }
+[data-ha-tools-export] h2 { margin:0 0 12px;font-size:1.25em; }
+[data-ha-tools-export] h3 { margin:12px 0 6px;font-size:1em; }
+[data-ha-tools-export] .ht-export-fields { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px; }
+[data-ha-tools-export] label { display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere; }
+[data-ha-tools-export] .ht-export-private { flex-direction:row;align-items:center;min-height:44px;margin-top:12px; }
+[data-ha-tools-export] input:not([type=checkbox]),[data-ha-tools-export] select,[data-ha-tools-export] button { font:inherit;min-width:44px;min-height:44px;max-width:100%; }
+[data-ha-tools-export] input:not([type=checkbox]),[data-ha-tools-export] select { width:100%;color:inherit;background:var(--secondary-background-color,var(--card-background-color,#f5f5f5));border:1px solid var(--divider-color,#aaa);border-radius:6px;padding:8px; }
+[data-ha-tools-export] input[type=checkbox] { width:24px;height:24px;flex:none;margin:10px; }
+[data-ha-tools-export] button { padding:8px 12px;white-space:normal;overflow-wrap:anywhere;cursor:pointer;border:1px solid var(--divider-color,#aaa);border-radius:6px;color:inherit;background:var(--secondary-background-color,var(--card-background-color,#f5f5f5)); }
+[data-ha-tools-export] :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
+[data-ha-tools-export] button:disabled { cursor:default;opacity:.6; }
+[data-ha-tools-export] .ht-export-actions { display:flex;flex-wrap:wrap;gap:8px;margin-top:16px; }
+[data-ha-tools-export] pre { max-width:100%;min-width:0;max-height:320px;overflow:auto;white-space:pre;margin:0;padding:12px;border:1px solid var(--divider-color,#aaa);background:var(--secondary-background-color,var(--card-background-color,#f5f5f5)); }
+[data-ha-tools-export] ul { padding-inline-start:22px;margin:0; }
+@container (max-width:499px) { [data-ha-tools-export] .ht-export-fields { grid-template-columns:minmax(0,1fr); } }
+@container (max-width:319px) { [data-ha-tools-export] [role=dialog] { padding:10px; } [data-ha-tools-export] .ht-export-actions button { flex:1 1 100%; } }
+`;
+  let container, nodes, L, ui, opener, alive = false, destroyed = false, serial = 0;
+  let pending = null, handoff = null, ready = null, observed = null;
+  const listeners = [];
+  const on = (target, event, handler, capture = false) => {
+    target.addEventListener(event, handler, capture);
+    listeners.push(() => target.removeEventListener(event, handler, capture));
+  };
+  const contextKeys = ['role', 'userId', 'connectionId', 'datasetId', 'revision'];
+  function readContext() {
+    try {
+      const value = getContext();
+      if (!value || contextKeys.some(k => !['string', 'number'].includes(typeof value[k]) || String(value[k]).trim() === '' || (typeof value[k] === 'number' && !Number.isFinite(value[k])))) return null;
+      return Object.freeze(Object.fromEntries([...contextKeys, 'connected', 'canExport', 'sourceConfirmed'].map(k => [k, value[k]])));
+    } catch { return null; }
+  }
+  const same = (a, b) => !!a && !!b && [...contextKeys, 'connected', 'canExport', 'sourceConfirmed'].every(k => a[k] === b[k]);
+  const available = c => !!c && c.connected === true && c.canExport === true && c.sourceConfirmed === true;
+  const draft = () => Object.freeze({ filename: nodes.filename.value, format: nodes.format.value, includePrivate: nodes.private.checked });
+  const sameDraft = (a, b) => a.filename === b.filename && a.format === b.format && a.includePrivate === b.includePrivate;
+  function validation(value) {
+    if (!formats.includes(value.format)) return 'invalidFormat';
+    const name = value.filename;
+    if (!name || [...name].length > 128 || name !== name.trim() || /[\p{Cc}\p{Cf}/\\<>:"|?*]/u.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(name)) return 'invalidName';
+    if (!name.endsWith(`.${value.format}`) || name.length <= value.format.length + 1) return 'extension';
+    return null;
+  }
+  function status(code, message) {
+    if (!alive) return;
+    const result = ui.status(code); // exact existing W4 labels/icons/codes
+    nodes.status.className = `ht-result-state ht-result-state--${result.code}`;
+    nodes.status.dataset.resultState = result.code;
+    nodes.status.replaceChildren();
+    const icon = doc.createElement('span'); icon.setAttribute('aria-hidden', 'true'); icon.textContent = result.icon;
+    nodes.status.append(icon, doc.createTextNode(` ${result.label}`));
+    nodes.message.textContent = ` ${L[message]}`;
+    nodes.save.disabled = !ready || !!pending || !!handoff;
+    nodes.refresh.disabled = !!pending || !!handoff;
+  }
+  function stop(job) {
+    if (!job) return;
+    if (job.timer !== null) clearTimer(job.timer);
+    job.timer = null; job.controller.abort();
+  }
+  function discard(resetPrivate = false) {
+    serial++; stop(pending); pending = null; ready = null;
+    if (alive) {
+      nodes.preview.textContent = ''; nodes.included.replaceChildren(); nodes.excluded.replaceChildren(); nodes['source-limit'].textContent = '';
+      if (resetPrivate) nodes.private.checked = false;
+    }
+  }
+  function contextChanged() {
+    if (!alive) return;
+    observed = readContext(); discard(true);
+    // Once a handoff began we cannot retract a browser download. Ignore its late
+    // callback and retain the prohibition on a second write until it settles.
+    if (handoff) handoff.controller.abort();
+    status(root.isConnected && available(observed) ? 'unconfirmed' : 'no_data', 'context');
+  }
+  function validContext(original) {
+    const current = readContext();
+    if (!root.isConnected || !same(original, current) || !available(current)) { contextChanged(); return false; }
+    return true;
+  }
+  function changeDraft() {
+    if (!alive) return;
+    if (!same(observed, readContext())) { contextChanged(); return; }
+    discard();
+    const error = validation(draft()); status(error ? 'error' : 'not_checked', error || 'changed');
+  }
+  function fillList(node, items) {
+    node.replaceChildren(...items.map(text => { const li = doc.createElement('li'); li.textContent = text; return li; }));
+  }
+  async function refresh() {
+    if (!alive || pending || handoff) return;
+    const current = readContext();
+    if (!same(observed, current)) { observed = current; discard(true); }
+    const value = draft(), error = validation(value);
+    discard();
+    if (error) { status('error', error); return; }
+    if (!root.isConnected || !available(current)) { status(!root.isConnected || current?.connected === false ? 'no_data' : 'unconfirmed', 'unavailable'); return; }
+    observed = current;
+    const job = { id: serial, context: current, draft: value, started: clock(), controller: new globalThis.AbortController(), timer: null };
+    pending = job; status('not_checked', 'busy');
+    const timeout = () => {
+      if (!alive || pending !== job) return;
+      discard(); status('unconfirmed', 'timeout');
+    };
+    job.timer = setTimer(timeout, 10000);
+    try {
+      const payload = await buildPayload(Object.freeze({ context: current, draft: value, policy, signal: job.controller.signal }));
+      if (!alive || pending !== job || job.id !== serial) return;
+      if (clock() - job.started >= 10000) { timeout(); return; }
+      if (!validContext(current)) return;
+      clearTimer(job.timer); job.timer = null;
+      if (!sameDraft(value, draft())) { changeDraft(); return; }
+      const { serialized, confirmed, sourceConfirmed, status: resultState, included, excluded, sourceLimit } = payload || {};
+      if (resultState === 'no_data' || serialized === '') { pending = null; status('no_data', 'noData'); return; }
+      if (confirmed !== true || sourceConfirmed !== true || !['success', 'partial'].includes(resultState) || typeof serialized !== 'string' || !strings(included) || !strings(excluded) || typeof sourceLimit !== 'string' || !sourceLimit.trim()) {
+        pending = null; status('unconfirmed', 'unconfirmed'); return;
+      }
+      // Freeze the only serialized bytes and build the only Blob NOW; Save never
+      // re-runs serialization or builds a second payload from potentially newer data.
+      ready = Object.freeze({ serialized, blob: new globalThis.Blob([serialized], { type: mime[value.format] }), context: current, draft: value });
+      nodes.preview.textContent = ready.serialized;
+      fillList(nodes.included, [...included]); fillList(nodes.excluded, [...excluded]);
+      nodes['source-limit'].textContent = sourceLimit;
+      pending = null; status(resultState, 'changed'); nodes.message.textContent = '';
+    } catch {
+      if (!alive || pending !== job || job.id !== serial) return;
+      if (clock() - job.started >= 10000) { timeout(); return; }
+      if (!validContext(current)) return;
+      discard(); status('error', 'buildError');
+    }
+  }
+  async function save() {
+    if (!alive || !ready || pending || handoff) return;
+    if (!validContext(ready.context)) return;
+    const value = draft(), error = validation(value);
+    if (error || !sameDraft(value, ready.draft) || nodes.preview.textContent !== ready.serialized) {
+      discard(); status(error ? 'error' : 'unconfirmed', error || 'changed'); return;
+    }
+    const snapshot = ready; ready = null; // consume intent BEFORE invoking adapter
+    const job = { id: serial, context: snapshot.context, controller: new globalThis.AbortController() };
+    handoff = job; status('unconfirmed', 'saving');
+    // choices cannot initiate another preview while the adapter result is unknown
+    for (const key of ['filename', 'format', 'private']) nodes[key].disabled = true;
+    try {
+      const result = await performDownload(Object.freeze({ serialized: snapshot.serialized, blob: snapshot.blob, filename: snapshot.draft.filename, format: snapshot.draft.format, context: snapshot.context, signal: job.controller.signal }));
+      if (!alive || handoff !== job || job.id !== serial || !validContext(job.context)) return;
+      status(result?.outcome === 'saved' ? 'success' : 'unconfirmed', result?.outcome === 'saved' ? 'saved' : result?.outcome === 'initiated' ? 'initiated' : 'unknown');
+    } catch {
+      if (alive && handoff === job && job.id === serial && validContext(job.context)) status('unconfirmed', 'unknown');
+    } finally {
+      if (handoff === job) {
+        handoff = null;
+        if (alive) {
+          for (const key of ['filename', 'format', 'private']) nodes[key].disabled = false;
+          nodes.refresh.disabled = false; nodes.save.disabled = true;
+          if (job.id !== serial) status('unconfirmed', 'unknown');
+        }
+      }
+    }
+  }
+  function focusable() {
+    return Array.from(nodes.dialog.querySelectorAll('input,select,button,[tabindex="0"]')).filter(el => !el.disabled);
+  }
+  function keydown(event) {
+    if (!alive) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
+    if (event.key === 'Tab') {
+      const items = focusable(), first = items[0], last = items.at(-1);
+      const active = nodes.dialog.getRootNode().activeElement || root.activeElement || doc.activeElement;
+      if (event.shiftKey && (active === first || !nodes.dialog.contains(active))) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (active === last || !nodes.dialog.contains(active))) { event.preventDefault(); first?.focus(); }
+    }
+  }
+  function cancel() {
+    if (!alive) return;
+    discard(true); if (handoff) handoff.controller.abort();
+    alive = false; listeners.splice(0).forEach(off => off()); container.remove();
+    container = null; nodes = null; observed = null;
+    // A pending handoff remains latched until settled: reopening never repeats it.
+    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus();
+    opener = null;
+  }
+  function open({ opener: target } = {}) {
+    if (destroyed) throw new Error('Export dialog destroyed');
+    if (alive) return;
+    const language = String(getLanguage());
+    L = copy[language.startsWith('pl') ? 'pl' : 'en'];
+    ui = createUiV3({ language });
+    opener = target || root.activeElement || doc.activeElement;
+    container = doc.createElement('div'); container.setAttribute('data-ha-tools-export', '');
+    // The own shadow boundary contains CSS and local IDs; adjacent W4 status
+    // elements retain their existing styling. Consumers can query this open root.
+    const shadow = container.attachShadow({ mode: 'open' });
+    if (root.host?.classList.contains('bento-dark')) container.classList.add('bento-dark');
+    const style = doc.createElement('style'); style.textContent = ':host{display:block;min-width:0;max-width:100%;}' + css + '\n' + ui.css;
+    shadow.append(style);
+    const shell = doc.createElement('div'); shell.setAttribute('data-ha-tools-export', ''); shadow.append(shell);
+    nodes = {};
+    const make = (tag, key, parent, text) => { const node = doc.createElement(tag); if (key) { node.dataset.export = key; nodes[key] = node; } if (text) node.textContent = text; parent.append(node); return node; };
+    const dialog = make('section', 'dialog', shell); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+    const title = make('h2', 'title', dialog, L.title);
+    // Locally unique IDs, no random or global counters/persistent state.
+    const prefix = `ht-export-${String(clock()).replace(/\W/g, '')}`;
+    title.id = prefix + '-title'; dialog.setAttribute('aria-labelledby', title.id);
+    const fields = make('div', null, dialog); fields.className = 'ht-export-fields';
+    const filenameLabel = make('label', null, fields); make('span', null, filenameLabel, L.filename);
+    const filename = make('input', 'filename', filenameLabel); filename.type = 'text'; filename.value = defaultFilename; filename.autocomplete = 'off';
+    const formatLabel = make('label', null, fields); make('span', null, formatLabel, L.format);
+    const format = make('select', 'format', formatLabel);
+    formats.forEach(value => { const option = make('option', null, format, value.toUpperCase()); option.value = value; }); format.value = defaultFormat;
+    const privateLabel = make('label', null, dialog); privateLabel.className = 'ht-export-private';
+    const privateInput = make('input', 'private', privateLabel); privateInput.type = 'checkbox'; privateInput.checked = false; make('span', null, privateLabel, L.private);
+    const statusLine = make('p', null, dialog); statusLine.setAttribute('role', 'status'); statusLine.setAttribute('aria-live', 'polite');
+    make('span', 'status', statusLine); make('span', 'message', statusLine);
+    for (const key of ['included', 'excluded']) { make('h3', null, dialog, L[key]); make('ul', key, dialog); }
+    make('h3', null, dialog, L.source); make('p', 'source-limit', dialog);
+    const previewHeading = make('h3', null, dialog, L.preview); previewHeading.id = prefix + '-preview';
+    const preview = make('pre', 'preview', dialog); preview.tabIndex = 0; preview.setAttribute('aria-labelledby', previewHeading.id);
+    const actions = make('div', null, dialog); actions.className = 'ht-export-actions';
+    for (const key of ['refresh', 'save', 'cancel']) { const button = make('button', key, actions, L[key]); button.type = 'button'; }
+    root.append(container); alive = true; observed = readContext();
+    for (const [key, event] of [['filename', 'input'], ['format', 'change'], ['private', 'change']]) on(nodes[key], event, changeDraft);
+    on(nodes.refresh, 'click', refresh); on(nodes.save, 'click', save); on(nodes.cancel, 'click', cancel);
+    on(doc, 'keydown', keydown, true);
+    on(doc, 'focusin', event => {
+      if (alive && !event.composedPath().includes(nodes.dialog)) focusable()[0]?.focus();
+    }, true);
+    // The consumer supplies exact opener even when its shadow DOM hides activeElement.
+    filename.focus();
+    if (handoff) {
+      for (const key of ['filename', 'format', 'private']) nodes[key].disabled = true;
+      preview.focus();
+      status('unconfirmed', 'saving');
+    } else { status('not_checked', 'changed'); void refresh(); }
+  }
+  function destroy() { cancel(); destroyed = true; }
+  return Object.freeze({ open, cancel, contextChanged, destroy });
+}
+// END HA TOOLS EXPORT V3
+
+  // BEGIN SMART REPORTS EXPORT V3 source-sha256=570a233a9854b836d86500788946f6c3c4a2dbe6601cd5d2393e9e9f6fcfb1c1
+// Smart Reports reviewed export boundary. Pure schema-directed projection;
+// never traverse unknown input keys, arbitrary config, profiles or raw errors.
+function projectSmartReportV3(report, includePrivate = false) {
+  const ids = new Map(), labels = new Map(), zones = new Map();
+  const alias = (map, value, prefix) => {
+    if (typeof value !== 'string' || !value) return null;
+    if (!map.has(value)) map.set(value, `${prefix}-${map.size + 1}`);
+    return map.get(value);
+  };
+  const identity = value => typeof value !== 'string' ? null : includePrivate ? value : alias(ids, value, 'source');
+  const label = (value, owner) => typeof value !== 'string' ? null : includePrivate ? value
+    : owner?.statistic_id ? identity(owner.statistic_id) : value === 'Grid import' ? value : alias(labels, value, 'label');
+  const number = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+  const boolean = value => typeof value === 'boolean' ? value : null;
+  const choice = values => value => value == null ? null : values.includes(value) ? value : 'unknown';
+  const status = choice(['ready','partial','no_data','idle','loading','not_configured','unsupported','permission_denied','error','invalid','noncomparable','unavailable','unknown']);
+  const reason = choice(['request_failed','loading','not_configured','no_data','missing_statistics','missing_rate','missing_currency','energy_data_unavailable',
+    'currency_mismatch','partial_cost','unsupported_source','partial_energy','incompatible_energy_metadata','incompatible_currency_metadata',
+    'invalid_bucket','outside_requested_window','missing_change','incomplete_coverage','historical_flat_rate_unavailable',
+    'tariff_authority_unavailable','tariff_unconfirmed','invalid_profile','invalid_root_sources','nonaligned_window','nonaligned_boundary',
+    'invalid_measurement','nonfinite_measurement','missing_measurement','invalid_timestamp','outside_validity','ambiguous_rules','mixed_rate_bucket',
+    'nonfinite_cost','invalid_coverage','overlapping_measurement','nonfinite_total','ambiguous_local_cutoff','nonexistent_local_cutoff',
+    'unit_mismatch','nonfinite_delta','previous_zero','previous_nonpositive','crosses_local_midnight','nested_parent_missing','invalid_relationship',
+    'unsupported','unavailable','unknown','authority_changed','read_failed','timeout','readback_failed']);
+  const provenance = choice(['explicit','energy_dashboard','legacy_energy_entity','card_config','shared_backend','complete_comparable_measurements','unavailable','unknown','recorder_available_samples']);
+  const method = choice(['cost_statistics','flat_rate_estimate','configured_tariff','unavailable']);
+  const unit = value => typeof value === 'string' && (/^[A-Z]{3}$/.test(value) || ['Wh','kWh','MWh','m³','m3','ft³','gal','L','l','W','kW','h','%'].includes(value)) ? value : value == null ? null : 'unknown';
+  const stamp = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)) ? value : null;
+  const date = value => typeof value === 'string' && /^\d{4}-\d\d-\d\d$/.test(value) ? value : null;
+  const timezone = value => { if (typeof value !== 'string') return null; try { new Intl.DateTimeFormat('en', {timeZone:value}); return value; } catch { return null; } };
+  const zone = value => alias(zones,value,'zone'); // profile identifiers are never an opt-in field
+  const fields = (names, type) => Object.fromEntries(names.split(' ').map(name => [name,type]));
+  const local = fields('year month day hour minute second',number);
+  const period = {key:choice(['1d','7d','30d']),start:stamp,end:stamp,time_zone:timezone,actual_hours:number,local_start:local,local_cutoff:local};
+  const interval = {from:stamp,to:stamp,reason};
+  const coverage = { ...fields('observed_hours expected_hours observed_source_hours expected_source_hours',number),first_sample:stamp,last_sample:stamp,complete:boolean,measured_subset:boolean,unmeasured_intervals:[interval] };
+  const source = {statistic_id:identity,label,role:choice(['total','cost','device','priced_energy']),value:number,recorded_value:number,coverage,unit,status,provenance,included_in_stat:identity,reason};
+  const total = {label,status,value:number,unit,source_statistic_ids:[identity]};
+  const subtotal = {value:number,unit,status,...fields('sources_with_data complete_sources configured_sources',number),source_statistic_ids:[identity]};
+  const day = {start:stamp,end:stamp,value:number,recorded_value:number,unit,status,observed_source_hours:number,expected_source_hours:number};
+  const measuredBySource = (value, owner) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    // Dynamic map keys are restricted to this record's explicit source IDs.
+    return Object.fromEntries((Array.isArray(owner?.source_statistic_ids) ? owner.source_statistic_ids : [])
+      .filter(id => typeof id === 'string' && Object.hasOwn(value,id)).map(id => [identity(id),number(value[id])]));
+  };
+  const record = { ...source, side:choice(['current','previous']),day_index:number,day_allocation_reason:reason,local_date:date,from:stamp,to:stamp,
+    source_statistic_ids:[identity],source_kwh:measuredBySource,available:boolean,measurement_available:boolean,zone,zones:[zone],
+    ...fields('kwh energyRate variableRate energyCost variableCost usageCost',number),currency:unit,price_basis:choice(['gross','net']),revision:number };
+  const tariffDay = {from:stamp,to:stamp,...fields('kwh energyCost recorded_kwh recorded_energy_cost expected_hours measured_hours observed_hours',number),
+    measurement_available:boolean,available:boolean,status,records:[record]};
+  const tariff = {records:[record],daily:[tariffDay],coverage,revision:number,provenance,currency:unit,price_basis:choice(['gross','net']),
+    tariff_timezone:timezone,tariff_clock:{mode:choice(['civil','fixed']),offsetMinutes:number},
+    ...fields('fixed_monthly variable_cost usage_cost measured_energy_cost measured_kwh',number),current_profile_validity:{available:boolean,reason,checked_at:stamp}};
+  const cost = { ...tariff,value:number,currency:unit,method,rate:number,source_statistic_ids:[identity],reason };
+  const warning = value => {
+    const prefix = 'included_in_stat is only valid for device sources: ';
+    if (typeof value === 'string' && value.startsWith(prefix)) return prefix + identity(value.slice(prefix.length));
+    return choice(['nested_parent_missing','invalid_relationship'])(value);
+  };
+  const snapshotDay = {index:number,start:stamp,end:stamp,energy:day,cost:day};
+  const snapshot = {period,source_mode:choice(['explicit','energy_dashboard']),status,total,cost,recorded_total:subtotal,recorded_cost:subtotal,
+    total_sources:[source],cost_sources:[source],devices:[source],warnings:[warning],daily:[snapshotDay],records:[record],
+    coverage:fields('missing_energy_days missing_cost_days observed_energy_source_hours expected_energy_source_hours observed_cost_source_hours expected_cost_source_hours',number)};
+  const metric = {...fields('current previous delta percent',number),unit,comparable:boolean,reason,provenance};
+  const metadata = {has_sum:boolean,unit_class:choice(['energy','currency']),name:label};
+  const scope = {statistic_id:identity,role:source.role,unit,provenance,included_in_stat:identity,energy_statistic_ids:[identity],
+    metadata:(value,owner)=>value && typeof value === 'object' ? {has_sum:boolean(value.has_sum),unit_class:metadata.unit_class(value.unit_class),name:label(value.name,owner)} : null};
+  const comparison = {status,reason,shift_days:number,requested_local_start:local,requested_local_cutoff:local,scope:[scope],current:snapshot,previous:snapshot,
+    metrics:{energy:metric,cost:metric},daily:[{index:number,current:snapshotDay,previous:snapshotDay}],records:[record]};
+  const schema = {schema_version:number,generated_at:stamp,period,source_mode:snapshot.source_mode,comparison,
+    energy:{status,total,cost,tariff,recorded_total:subtotal,recorded_cost:subtotal,daily:[day],total_sources:[source],cost_sources:[source],devices:[source],warnings:[warning]}};
+  function project(value, shape, owner) {
+    if (value == null) return null;
+    if (typeof shape === 'function') return shape(value,owner);
+    if (Array.isArray(shape)) return Array.isArray(value) ? value.map(item => project(item,shape[0],item)) : [];
+    if (typeof value !== 'object' || Array.isArray(value)) return null;
+    const output = {};
+    // Only the reviewed schema can introduce keys. No rest/spread of raw objects.
+    for (const [key,type] of Object.entries(shape)) if (Object.hasOwn(value,key) && value[key] !== undefined) output[key]=project(value[key],type,value);
+    return output;
+  }
+  return project(report,schema);
+}
+// END SMART REPORTS EXPORT V3
+
   class HASmartReports extends HTMLElement {
     constructor() {
       super();
@@ -1190,6 +1582,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
     connectedCallback() {
       this._connected = true;
+      this._bindReviewedExportEvents();
+      this._observeReviewedExportSource();
       this._tariffGuard?.resume();
       this._tariffGuard?.observe();
       this._renderScaffold();
@@ -1200,6 +1594,9 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
     disconnectedCallback() {
       this._connected = false;
+      this._exportDialog?.destroy(); this._exportDialog = null;
+      this._unbindReviewedExportEvents();
+      this._observeReviewedExportSource();
       this._tariffGuard?.suspend();
       this._tariffGuard?.observe();
       if (this._refreshTimer !== null) clearTimeout(this._refreshTimer);
@@ -1213,6 +1610,9 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       this._language = language;
       if (this._hass && (this._hass.user?.id !== hass?.user?.id || this._hass.connection !== hass?.connection)) this._deviceQuery = '';
       this._hass = hass;
+      if (this._connected) this._bindReviewedExportEvents();
+      this._observeReviewedExportSource();
+      if (languageChanged) this._exportDialog?.cancel();
       if (this._config.energy_cost_mode === 'configured_tariff') this._tariffController().reset();
       else this._tariffGuard?.observe();
       this._syncTheme();
@@ -1252,6 +1652,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         currency,
         compare_previous_period: next.compare_previous_period === true,
       };
+      this._observeReviewedExportSource();
       this._tariffGuard?.observe();
       if (this._scaffoldRendered) {
         this._syncSupport();
@@ -1352,6 +1753,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         }
       }
       this.classList.toggle('bento-dark', dark);
+      this.shadowRoot.querySelector('[data-ha-tools-export]')?.classList.toggle('bento-dark',dark);
     }
 
     _syncSupport() {
@@ -1439,7 +1841,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       };
     }
 
-    _invalidateEnergyRequest() { this._energyRequestGeneration += 1; }
+    _invalidateEnergyRequest() { this._energyRequestGeneration += 1; this._invalidateReviewedExport(true); }
 
     _isCurrentEnergyRequest(generation) { return this._connected && this.isConnected && this._activeTab === 'energy' && generation === this._energyRequestGeneration; }
 
@@ -1871,6 +2273,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     }
 
     async _loadEnergy() {
+      const exportAssociation = this._observeReviewedExportSource();
+      const requestHass = this._hass, requestCall = requestHass?.callWS;
       if (this._config.energy_cost_mode === 'configured_tariff') this._tariffController().reset();
       const compare = this._config.compare_previous_period === true;
       if (compare) this._tariffController();
@@ -1878,8 +2282,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       const generation = ++this._energyRequestGeneration;
       const period = this._periodDescriptor();
       const pairedPeriod = compare ? this._previousPeriodDescriptor(period) : null;
-      const current = () => this._isCurrentEnergyRequest(generation) && (!compare || this._tariffGuard.current(ticket));
-      const read = payload => compare ? this._tariffGuard.call(ticket, payload) : this._hass.callWS(payload);
+      const current = () => exportAssociation === this._observeReviewedExportSource() && this._isCurrentEnergyRequest(generation) && (!compare || this._tariffGuard.current(ticket));
+      const read = payload => compare ? this._tariffGuard.call(ticket, payload) : requestCall.call(requestHass,payload);
       const mode = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'energy_dashboard';
       const previous = this._energyViewState;
       const reportConfig = JSON.stringify([this._config.energy_source_mode, this._config.energy_total_statistics, this._config.energy_device_statistics, this._config.energy_cost_statistics, this._config.energy_entity, this._config.energy_price, this._config.currency, this._config.energy_cost_mode, this._config.tariff_profile, compare]);
@@ -2434,8 +2838,12 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     }
 
     _setEnergyViewState(state) {
-      if (JSON.stringify(state) === JSON.stringify(this._energyViewState)) return;
+      const association = this._observeReviewedExportSource();
+      const sameSource = this._exportSourceAssociation === association;
+      this._exportSourceAssociation = association;
+      if (sameSource && JSON.stringify(state) === JSON.stringify(this._energyViewState)) return;
       this._energyViewState = state;
+      this._invalidateReviewedExport();
       if (this._scaffoldRendered && this._activeTab === 'energy') this._renderEnergyState();
     }
 
@@ -2644,7 +3052,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
     _csvCell(value) {
       let text = value == null ? '' : String(value); let forceQuote = false;
-      if (/^[=+\-@]/.test(text)) { text = `'${text}`; forceQuote = true; }
+      if (typeof value === 'string' && /^(?:[\t\r\n]|[\u0000-\u0020]*[=+\-@])/.test(text)) { text = `'${text}`; forceQuote = true; }
       return forceQuote || /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     }
 
@@ -2688,11 +3096,158 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       return `${rows.map((row) => row.map((value) => this._csvCell(value)).join(',')).join('\n')}\n`;
     }
 
+
+    _exportObjectIdentity(value) {
+      if (!value || !['object','function'].includes(typeof value)) return 'none';
+      this._exportObjects ||= new WeakMap();
+      if (!this._exportObjects.has(value)) this._exportObjects.set(value, String(this._exportObjectSequence = (this._exportObjectSequence || 0) + 1));
+      return this._exportObjects.get(value);
+    }
+
+    _readExportAssociation() {
+      const h = this._hass;
+      // Association stays local. Never put config, user, groups or connection data in a file.
+      return JSON.stringify([h?.user?.id, h?.user?.is_admin, h?.user?.is_owner, h?.user?.is_active,
+        h?.user?.groups, h?.user?.group_ids, this._exportObjectIdentity(h?.connection), this._exportObjectIdentity(h?.callWS),
+        h?.connection?.connected, this._exportConnectionOffline, this._exportBrowserOffline, navigator.onLine,
+        this._connected, this._activeTab, this._period, this._config, h?.language, h?.locale, h?.config]);
+    }
+
+    _invalidateReviewedExport(unavailable = false) {
+      this._exportRevision = (this._exportRevision || 0) + 1;
+      if (unavailable) this._exportSourceAssociation = null;
+      this._exportDialog?.contextChanged();
+    }
+
+    _observeReviewedExportSource() {
+      const association = this._readExportAssociation();
+      if (this._exportObservedAssociation !== association) {
+        this._exportObservedAssociation = association;
+        this._energyRequestGeneration += 1;
+        this._invalidateReviewedExport(true);
+      }
+      return association;
+    }
+
+    _bindReviewedExportEvents() {
+      const next = this._hass?.connection;
+      if (!this._exportBrowserEvent) {
+        this._exportBrowserOffline = navigator.onLine === false;
+        this._exportBrowserEvent = event => {
+          this._exportBrowserOffline = event.type === 'offline';
+          this._observeReviewedExportSource();
+        };
+        window.addEventListener('offline', this._exportBrowserEvent);
+        window.addEventListener('online', this._exportBrowserEvent);
+      }
+      if (this._exportConnection !== next) {
+        for (const type of ['ready','disconnected','reconnect-error']) this._exportConnection?.removeEventListener?.(type,this._exportConnectionEvent);
+        this._exportConnection = next;
+        this._exportConnectionOffline = next?.connected === false;
+        this._exportConnectionEvent = event => {
+          this._exportConnectionOffline = event.type !== 'ready';
+          // An event is an epoch boundary even when the transport reuses its object.
+          this._energyRequestGeneration += 1;
+          this._invalidateReviewedExport(true);
+          this._observeReviewedExportSource();
+        };
+        for (const type of ['ready','disconnected','reconnect-error']) next?.addEventListener?.(type,this._exportConnectionEvent);
+      }
+    }
+
+    _unbindReviewedExportEvents() {
+      window.removeEventListener('offline',this._exportBrowserEvent);
+      window.removeEventListener('online',this._exportBrowserEvent);
+      for (const type of ['ready','disconnected','reconnect-error']) this._exportConnection?.removeEventListener?.(type,this._exportConnectionEvent);
+      this._exportBrowserEvent = null; this._exportConnection = null;
+    }
+
+    _reviewedExportContext() {
+      const association = this._observeReviewedExportSource();
+      const source = JSON.stringify(this._energyViewState);
+      if (source !== this._exportObservedData) {
+        this._exportObservedData = source;
+        this._exportRevision = (this._exportRevision || 0) + 1;
+      }
+      const h = this._hass;
+      const connected = this._connected && this.isConnected && navigator.onLine !== false && !this._exportBrowserOffline
+        && !this._exportConnectionOffline && h?.connection?.connected !== false;
+      // Smart Reports already grants household users read access. Export adds no admin gate.
+      const canExport = !!h?.user?.id && h.user.is_active !== false && typeof h.callWS === 'function' && this._activeTab === 'energy';
+      return { role: JSON.stringify([h?.user?.is_admin === true,h?.user?.is_owner === true,h?.user?.groups || [],h?.user?.group_ids || []]),
+        userId: h?.user?.id || 'unavailable', connectionId:this._exportObjectIdentity(h?.connection || h?.callWS),
+        datasetId:'smart-energy', revision:this._exportRevision || 1, connected, canExport,
+        sourceConfirmed:this._exportSourceAssociation === association && ['ready','partial','no_data'].includes(this._energyViewState?.status) };
+    }
+
+    _projectReviewedExport(report, includePrivate) {
+      return projectSmartReportV3(report, includePrivate === true);
+    }
+
+    _buildReviewedExport({draft,signal}) {
+      if (signal.aborted || !this._reviewedExportContext().sourceConfirmed) return {status:'no_data'};
+      // No new backend reads: project only the materialized current report.
+      const report = this._projectReviewedExport(this._buildExportDocument(this._now()),draft.includePrivate);
+      if (signal.aborted || !this._reviewedExportContext().sourceConfirmed) return {status:'no_data'};
+      const pl = languageOf(this._hass).startsWith('pl');
+      const included = [pl ? 'Pełny raport pomiarów: wszystkie źródła i urządzenia, także ukryte wyszukiwaniem; wartości zero, ujemne i braki null.'
+        : 'Full measured report: all sources and devices, including those hidden by search; zero, negative and missing null values.',
+        pl ? 'Zachowane zakresy, strefy czasu, pokrycie, taryfy, stawki, opłaty oraz obie migawki porównania, jeśli włączone.'
+        : 'Preserved ranges, timezones, coverage, tariffs, rates, fees and both comparison snapshots when enabled.',
+        draft.includePrivate ? (pl ? 'Sprawdzone nazwy źródeł/urządzeń i identyfikatory statystyk.' : 'Reviewed source/device names and statistic IDs.')
+          : (pl ? 'Spójne aliasy źródeł, urządzeń, nazw i relacji.' : 'Consistent aliases for sources, devices, names and relationships.')];
+      const excluded = [pl ? 'Tokeny, użytkownicy, adresy, konfiguracja, profile i szkice taryf oraz surowe błędy.'
+        : 'Tokens, users, addresses, configuration, tariff profiles/drafts and raw errors.',
+        pl ? 'Nieznane pola spoza jawnych schematów. Identyfikatory stref taryfowych zastąpione aliasami.'
+          : 'Unknown fields outside explicit schemas. Tariff zone identifiers are aliased.',
+        draft.includePrivate ? (pl ? 'Żadne inne pola prywatne nie są objęte zgodą.' : 'Consent covers no other private fields.')
+          : (pl ? 'Prywatne nazwy i identyfikatory statystyk.' : 'Private names and statistic IDs.')];
+      const sourceLimit = pl ? 'Tylko wczytany zakres Recorder. Retencja lub braki pomiarów pozostają widoczne; bez ekstrapolacji i bez obcięcia rekordów. Opłata stała jest osobna. CSV zawiera również pełny bezpieczny dokument w wierszu reviewed_full_document.'
+        : 'Loaded Recorder range only. Retention or measurement gaps remain explicit; no extrapolation or record truncation. Fixed fee stays separate. CSV also carries the complete safe document in reviewed_full_document.';
+      const partial = report.energy.status !== 'ready' || report.energy.cost.value === null || report.energy.devices.some(d => d.status !== 'ready')
+        || !!report.energy.warnings.length || (!!report.comparison && report.comparison.status !== 'ready') || report.energy.tariff?.coverage?.complete === false;
+      const resultState = report.energy.status === 'no_data' ? 'no_data' : partial ? 'partial' : 'success';
+      report.export_scope = {policy:'smart-measured-report-v1',result_state:resultState,include_private:draft.includePrivate === true,
+        included,excluded,source_limit:sourceLimit,truncated:false,search_applied:false,
+        counts:{total_sources:report.energy.total_sources.length,cost_sources:report.energy.cost_sources.length,devices:report.energy.devices.length,
+          tariff_records:report.energy.tariff?.records?.length || 0,comparison_records:report.comparison?.records?.length || 0,
+          current_records:report.comparison?.current?.records?.length || 0,previous_records:report.comparison?.previous?.records?.length || 0}};
+      const serialized = draft.format === 'json' ? JSON.stringify(report,null,2) + '\n' : this._buildReviewedCsv(report);
+      // A confirmed no-data REPORT is a partial document, not a fabricated successful measurement.
+      return {serialized,confirmed:true,sourceConfirmed:true,status:resultState === 'success' ? 'success' : 'partial',included,excluded,sourceLimit};
+    }
+
+    _buildReviewedCsv(report) {
+      const csv = this._buildCsv(report);
+      const row = [report.schema_version,report.generated_at,report.period.key,report.period.start,report.period.end,report.period.time_zone,
+        'export','reviewed_full_document','','',JSON.stringify(report),'',report.export_scope.result_state,report.source_mode,'',''];
+      // The legacy domain rows remain available; this row makes CSV lossless for
+      // tariff daily records, fixed fees, coverage and paired data, with no limits.
+      return csv + row.map(value => this._csvCell(value)).join(',') + '\n';
+    }
+
     _downloadExport(format) {
       this._tariffGuard?.observe();
-      const state = this._energyViewState || {}; if (!['ready', 'partial', 'no_data'].includes(state.status)) return;
-      const report = this._buildExportDocument(this._now()); this._lastExportDocument = report; this._lastDownloadedExport = report; const isJson = format === 'json'; const contents = isJson ? `${JSON.stringify(report, null, 2)}\n` : this._buildCsv(report); const blob = new Blob([contents], { type: isJson ? 'application/json' : 'text/csv' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `smart-report-${report.period.key}.${isJson ? 'json' : 'csv'}`; anchor.click(); URL.revokeObjectURL(url);
+      const context = this._reviewedExportContext();
+      if (!context.connected || !context.canExport || !context.sourceConfirmed) return;
+      if (this.shadowRoot.querySelector('[data-ha-tools-export]')) return;
+      this._exportDialog?.destroy();
+      this._exportDialog = createExportDialog({root:this.shadowRoot,createUiV3,getLanguage:()=>languageOf(this._hass),
+        getContext:()=>this._reviewedExportContext(),formats:['json','csv'],defaultFormat:format,
+        defaultFilename:`smart-report-${this._period}.${format}`,
+        policy:{id:'smart-measured-report-v1',allowlistedFields:['schema_version','generated_at','period','source_mode','energy','comparison','export_scope'],
+          neverInclude:['tokens','users','addresses','raw_config','profiles','drafts','raw_errors']},
+        buildPayload:options=>this._buildReviewedExport(options),
+        performDownload:({blob,filename,signal})=>{
+          if (signal.aborted) return {outcome:'unknown'};
+          const url = URL.createObjectURL(blob), anchor = document.createElement('a');
+          anchor.href=url;anchor.download=filename;
+          try { anchor.click(); } finally { setTimeout(()=>URL.revokeObjectURL(url),1000); }
+          return {outcome:'initiated'};
+        }});
+      this._exportDialog.open({opener:this.shadowRoot.getElementById(format === 'json' ? 'exportJsonBtn' : 'exportCsvBtn')});
     }
+
   }
 
   class HASmartReportsEditor extends HTMLElement {
