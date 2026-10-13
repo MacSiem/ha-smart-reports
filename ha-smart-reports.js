@@ -923,6 +923,22 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "invalid_root_sources": "Niepoprawne źródła główne",
     "invalid_measurement": "Niepoprawny pomiar",
     "ambiguous_rules": "Niejednoznaczne reguły",
+    "Compare previous local-calendar period": "Porównaj poprzedni okres kalendarza lokalnego",
+    "Previous period comparison": "Porównanie z poprzednim okresem",
+    "Current period": "Bieżący okres",
+    "Previous period": "Poprzedni okres",
+    "Missing energy days": "Dni z brakami energii",
+    "Missing cost days": "Dni z brakami kosztu",
+    "Role": "Rola",
+    "Recorded value": "Zarejestrowana wartość",
+    "complete_comparable_measurements": "Pełne porównywalne pomiary",
+    "ambiguous_local_cutoff": "Niejednoznaczna lokalna godzina odcięcia",
+    "nonexistent_local_cutoff": "Lokalna godzina odcięcia nie istnieje",
+    "historical_flat_rate_unavailable": "Brak potwierdzonej historycznej stawki stałej",
+    "previous_zero": "Poprzednia wartość wynosi zero — procent nieznany",
+    "previous_nonpositive": "Poprzednia wartość jest ujemna — procent nieznany",
+    "nonfinite_delta": "Zmiana poza zakresem liczbowym",
+    "unit_mismatch": "Niezgodne jednostki",
 
     "Search devices or sources": "Szukaj urządzenia lub źródła",
     "Name or entity/statistic ID": "Nazwa lub identyfikator encji/statystyki",
@@ -1221,6 +1237,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           ? next.energy_price
           : null,
         currency,
+        compare_previous_period: next.compare_previous_period === true,
       };
       this._tariffGuard?.observe();
       if (this._scaffoldRendered) {
@@ -1473,10 +1490,166 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       return { key: window.key, start: window.start.toISOString(), end: window.end.toISOString(), time_zone: window.time_zone };
     }
 
-    async _dashboardSources(generation) {
+    _strictLocalInstant(parts, timeZone) {
+      // Reuse the calendar converter, then verify all offsets observed around it.
+      // An iterative converter alone can silently choose one side of a DST fold.
+      const initial = this._zonedDateTimeToUtc(parts, timeZone).getTime();
+      const target = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+      const offsets = new Set();
+      for (let minutes = -2160; minutes <= 2160; minutes += 30) {
+        const stamp = initial + minutes * 60000;
+        const local = this._partsInZone(new Date(stamp), timeZone);
+        offsets.add(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - stamp);
+      }
+      const matches = [...offsets].map(offset => target - offset).filter(stamp => {
+        const actual = this._partsInZone(new Date(stamp), timeZone);
+        return ['year','month','day','hour','minute','second'].every(key => actual[key] === parts[key]);
+      });
+      return matches.length === 1 ? { value: new Date(matches[0]).toISOString(), reason: null }
+        : { value: null, reason: matches.length ? 'ambiguous_local_cutoff' : 'nonexistent_local_cutoff' };
+    }
+
+    _comparisonPeriod(period) {
+      return { ...period, actual_hours: (Date.parse(period.end) - Date.parse(period.start)) / 3600000,
+        local_start: this._partsInZone(new Date(period.start), period.time_zone),
+        local_cutoff: this._partsInZone(new Date(period.end), period.time_zone) };
+    }
+
+    _previousPeriodDescriptor(period) {
+      const days = period.key === '1d' ? 1 : period.key === '30d' ? 30 : 7;
+      const shift = parts => ({ ...parts, ...this._addCalendarDays(parts, -days) });
+      const first = this._partsInZone(new Date(period.start), period.time_zone);
+      const last = this._partsInZone(new Date(period.end), period.time_zone);
+      const endpoints = [first, last, shift(first), shift(last)].map(parts => this._strictLocalInstant(parts, period.time_zone));
+      const failed = endpoints.find(endpoint => endpoint.reason);
+      if (failed) return { period: null, reason: failed.reason, shift_days: days,
+        requested_local_start: shift(first), requested_local_cutoff: shift(last) };
+      return { period: this._comparisonPeriod({ key: period.key, start: endpoints[2].value, end: endpoints[3].value, time_zone: period.time_zone }), reason: null, shift_days: days };
+    }
+
+    _freezeComparison(value) {
+      if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+        for (const child of Object.values(value)) this._freezeComparison(child);
+        Object.freeze(value);
+      }
+      return value;
+    }
+
+    _comparisonDelta(current, previous, unit, previousUnit, complete, reason) {
+      const finite = value => typeof value === 'number' && Number.isFinite(value);
+      const comparable = complete && unit && unit === previousUnit && finite(current) && finite(previous);
+      let delta = comparable ? current - previous : null;
+      if (!finite(delta)) delta = null;
+      let percent = comparable && delta !== null && previous > 0 ? (delta / previous) * 100 : null;
+      if (!finite(percent)) percent = null;
+      return { current: finite(current) ? current : null, previous: finite(previous) ? previous : null, unit: unit || null,
+        delta, percent, comparable: !!comparable && delta !== null,
+        reason: !comparable ? reason || (unit !== previousUnit ? 'unit_mismatch' : 'incomplete_coverage') : delta === null ? 'nonfinite_delta' : previous === 0 ? 'previous_zero' : previous < 0 ? 'previous_nonpositive' : percent === null ? 'nonfinite_delta' : null,
+        provenance: comparable && delta !== null ? 'complete_comparable_measurements' : 'unavailable' };
+    }
+
+    _comparisonSnapshot(state, selection, statistics, metadata, side) {
+      const period = this._comparisonPeriod(state.period);
+      const energyDays = state.daily || [];
+      const costDays = state.cost.method === 'configured_tariff' ? (state.cost.daily || []).map(day => ({
+        start: day.from, end: day.to, value: day.energyCost, recorded_value: day.recorded_energy_cost,
+        unit: state.cost.currency, status: day.available ? 'ready' : day.status,
+        observed_source_hours: day.observed_hours, expected_source_hours: day.expected_hours,
+      })) : this._dailyEnergySeries(period, this._config.energy_cost_mode === 'flat_rate_estimate' ? [] : state.cost_sources, statistics, metadata, 'cost', this._hass.config?.currency);
+      const finite = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+      const daily = energyDays.map((energy, index) => ({ index, start: energy.start, end: energy.end,
+        energy: { ...energy, value: finite(energy.value), recorded_value: finite(energy.recorded_value) },
+        cost: costDays.find(day => day.start === energy.start) || { start: energy.start, end: energy.end, value: null, recorded_value: null,
+          unit: state.cost.currency, status: 'no_data', observed_source_hours: 0, expected_source_hours: (Date.parse(energy.end)-Date.parse(energy.start))/3600000 },
+      }));
+      const records = [];
+      const references = [...selection.totals, ...selection.costs, ...selection.devices];
+      const summaries = new Map([...state.total_sources, ...state.cost_sources, ...state.devices].map(source => [`${source.role}:${source.statistic_id}`, source]));
+      for (const source of references) {
+        const summary = summaries.get(`${source.role}:${source.statistic_id}`);
+        const buckets = Array.isArray(statistics[source.statistic_id]) ? statistics[source.statistic_id] : [];
+        for (let from = Date.parse(period.start); from < Date.parse(period.end);) {
+          const to = Math.min(Date.parse(period.end), (Math.floor(from / 3600000) + 1) * 3600000);
+          const samples = buckets.filter(bucket => numericTime(bucket.end) > from && numericTime(bucket.start) < to);
+          const measured = this._summarizeSeries(samples, metadata[source.statistic_id], { start: new Date(from), end: new Date(to) }, source.role, this._hass.config?.currency);
+          const parts = this._partsInZone(new Date(from), period.time_zone);
+          records.push({ side, day_index: daily.findIndex(day => Date.parse(day.start) <= from && Date.parse(day.end) > from),
+            local_date: `${parts.year}-${String(parts.month).padStart(2,'0')}-${String(parts.day).padStart(2,'0')}`,
+            from: new Date(from).toISOString(), to: new Date(to).toISOString(), statistic_id: source.statistic_id, role: source.role,
+            source_statistic_ids: [source.statistic_id], label: summary?.label || source.statistic_id,
+            value: finite(measured.value), recorded_value: finite(measured.recorded_value), unit: measured.unit,
+            status: measured.status, reason: measured.reason || (measured.status !== 'ready' ? 'incomplete_coverage' : null),
+            coverage: measured.coverage, provenance: source.provenance, included_in_stat: source.included_in_stat || null });
+          from = to;
+        }
+      }
+      if (state.cost.method === 'configured_tariff') for (const record of state.cost.records || []) {
+        records.push({ side, day_index: daily.findIndex(day => Date.parse(day.start) <= Date.parse(record.from) && Date.parse(day.end) > Date.parse(record.from)),
+          role: 'priced_energy', statistic_id: null, ...record });
+      }
+      // Safe allowlisted export snapshots, never profile, draft, config or tickets.
+      const safeCost = { value: finite(state.cost.value), currency: state.cost.currency || null, method: state.cost.method,
+        reason: state.cost.reason || null, rate: finite(state.cost.rate), source_statistic_ids: [...(state.cost.source_statistic_ids || [])],
+        ...(state.cost.method === 'configured_tariff' ? { records: state.cost.records, daily: (state.cost.daily || []).map(({ records, ...day }) => day),
+          coverage: state.cost.coverage, revision: state.cost.revision, provenance: state.cost.provenance,
+          price_basis: state.cost.price_basis, tariff_timezone: state.cost.tariff_timezone, tariff_clock: state.cost.tariff_clock,
+          measured_energy_cost: state.cost.measured_energy_cost, variable_cost: state.cost.variable_cost, usage_cost: state.cost.usage_cost,
+          fixed_monthly: state.cost.fixed_monthly, current_profile_validity: state.cost.current_profile_validity } : {}) };
+      return { period, source_mode: state.source_mode, status: state.status,
+        total: { ...state.total, value: finite(state.total.value) }, cost: safeCost,
+        recorded_total: state.recorded_total, recorded_cost: state.recorded_cost,
+        total_sources: state.total_sources.map(source => this._exportSource(source)), cost_sources: state.cost_sources.map(source => this._exportSource(source)),
+        devices: state.devices.map(source => this._exportSource(source)), warnings: [...state.warnings], daily, records,
+        coverage: { missing_energy_days: daily.filter(day => day.energy.status !== 'ready').length,
+          missing_cost_days: daily.filter(day => day.cost.status !== 'ready' || day.cost.value === null).length,
+          observed_energy_source_hours: state.total_sources.reduce((sum, source) => sum + (source.coverage?.observed_hours || 0), 0),
+          expected_energy_source_hours: state.total_sources.length * period.actual_hours,
+          observed_cost_source_hours: state.cost.coverage?.observed_hours ?? state.cost_sources.reduce((sum, source) => sum + (source.coverage?.observed_hours || 0), 0),
+          expected_cost_source_hours: state.cost.coverage?.expected_hours ?? state.cost_sources.length * period.actual_hours } };
+    }
+
+    _buildPeriodComparison(state, descriptor, selection, statistics, previousStatistics, metadata, snapshot) {
+      const current = this._comparisonSnapshot(state, selection, statistics, metadata, 'current');
+      const previousState = descriptor.period ? this._materializeEnergyPeriod(descriptor.period, selection, previousStatistics || {}, metadata, snapshot, true) : null;
+      const previous = previousState ? this._comparisonSnapshot(previousState, selection, previousStatistics || {}, metadata, 'previous') : null;
+      const scope = [...selection.totals, ...selection.costs, ...selection.devices].map(source => ({ statistic_id: source.statistic_id, role: source.role,
+        unit: this._metadataUnit(metadata[source.statistic_id]), provenance: source.provenance, included_in_stat: source.included_in_stat || null,
+        energy_statistic_ids: [...(source.energy_statistic_ids || [])], metadata: {
+          has_sum: metadata[source.statistic_id]?.has_sum === true,
+          unit_class: typeof metadata[source.statistic_id]?.unit_class === 'string' ? metadata[source.statistic_id].unit_class : null,
+          name: typeof metadata[source.statistic_id]?.name === 'string' ? metadata[source.statistic_id].name : null,
+        } }));
+      const sameScope = !!previous && current.source_mode === previous.source_mode && ['total_sources','cost_sources','devices'].every(key =>
+        JSON.stringify(current[key].map(source => [source.statistic_id,source.role,source.unit,source.included_in_stat]).sort()) ===
+        JSON.stringify(previous[key].map(source => [source.statistic_id,source.role,source.unit,source.included_in_stat]).sort()));
+      const energyComplete = sameScope && current.total_sources.every(source => source.status === 'ready') && previous.total_sources.every(source => source.status === 'ready')
+        && current.coverage.missing_energy_days === 0 && previous.coverage.missing_energy_days === 0;
+      const costComplete = sameScope && current.cost.method === previous.cost.method && ['cost_statistics','configured_tariff'].includes(current.cost.method)
+        && current.coverage.missing_energy_days === 0 && previous.coverage.missing_energy_days === 0
+        && current.coverage.missing_cost_days === 0 && previous.coverage.missing_cost_days === 0
+        && (current.cost.method !== 'configured_tariff' || (current.cost.coverage?.complete && previous.cost.coverage?.complete
+          && current.cost.price_basis === previous.cost.price_basis && current.cost.revision === previous.cost.revision
+          && current.cost.tariff_timezone === previous.cost.tariff_timezone && JSON.stringify(current.cost.tariff_clock) === JSON.stringify(previous.cost.tariff_clock)));
+      const metrics = {
+        energy: this._comparisonDelta(current.total.value, previous?.total.value, current.total.unit, previous?.total.unit, energyComplete, descriptor.reason),
+        cost: this._comparisonDelta(current.cost.value, previous?.cost.value, current.cost.currency, previous?.cost.currency, costComplete,
+          descriptor.reason || (current.cost.currency !== previous?.cost.currency ? 'currency_mismatch' : previous?.cost.reason || current.cost.reason)),
+      };
+      return this._freezeComparison({ status: descriptor.reason ? 'noncomparable' : metrics.energy.comparable && metrics.cost.comparable ? 'ready' : 'partial',
+        reason: descriptor.reason || null, shift_days: descriptor.shift_days,
+        requested_local_start: descriptor.requested_local_start || null, requested_local_cutoff: descriptor.requested_local_cutoff || null,
+        scope, current, previous, metrics, daily: current.daily.map((day, index) => ({ index, current: day, previous: previous?.daily[index] || null })),
+        records: [...current.records, ...(previous?.records || [])].sort((a,b) => a.day_index - b.day_index
+          || a.role.localeCompare(b.role) || String(a.statistic_id || '').localeCompare(String(b.statistic_id || ''))
+          || (Date.parse(a.from) - Date.parse(a.side === 'current' ? current.period.start : previous.period.start))
+            - (Date.parse(b.from) - Date.parse(b.side === 'current' ? current.period.start : previous.period.start))
+          || a.side.localeCompare(b.side)) });
+    }
+
+    async _dashboardSources(generation, read = payload => this._hass.callWS(payload)) {
       let prefs;
       try {
-        prefs = await this._hass.callWS({ type: 'energy/get_prefs' });
+        prefs = await read({ type: 'energy/get_prefs' });
       } catch (error) {
         // Core reports an unconfigured Energy Dashboard as not_found / No prefs.
         // This applies only to preference discovery, never Recorder failures.
@@ -1521,7 +1694,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       const uniqueTotals = uniqueById(totals);
       if (uniqueTotals.some((total) => costCoverage.get(total.statistic_id) !== true)) {
         try {
-          const info = await this._hass.callWS({ type: 'energy/info' });
+          const info = await read({ type: 'energy/info' });
           if (!this._isCurrentEnergyRequest(generation)) return null;
           const mapping = info && info.cost_sensors && typeof info.cost_sensors === 'object' ? info.cost_sensors : {};
           const discovered = [...uniqueCosts];
@@ -1680,26 +1853,58 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
     async _loadEnergy() {
       if (this._config.energy_cost_mode === 'configured_tariff') this._tariffController().reset();
+      const compare = this._config.compare_previous_period === true;
+      if (compare) this._tariffController();
+      const ticket = compare ? this._tariffGuard.snapshot() : null;
       const generation = ++this._energyRequestGeneration;
       const period = this._periodDescriptor();
+      const pairedPeriod = compare ? this._previousPeriodDescriptor(period) : null;
+      const current = () => this._isCurrentEnergyRequest(generation) && (!compare || this._tariffGuard.current(ticket));
+      const read = payload => compare ? this._tariffGuard.call(ticket, payload) : this._hass.callWS(payload);
       const mode = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'energy_dashboard';
       const previous = this._energyViewState;
-      const reportConfig = JSON.stringify([this._config.energy_source_mode, this._config.energy_total_statistics, this._config.energy_device_statistics, this._config.energy_cost_statistics, this._config.energy_entity, this._config.energy_price, this._config.currency, this._config.energy_cost_mode, this._config.tariff_profile]);
+      const reportConfig = JSON.stringify([this._config.energy_source_mode, this._config.energy_total_statistics, this._config.energy_device_statistics, this._config.energy_cost_statistics, this._config.energy_entity, this._config.energy_price, this._config.currency, this._config.energy_cost_mode, this._config.tariff_profile, compare]);
       const sameWindow = this._energyReportConfig === reportConfig && previous && ['ready', 'partial', 'no_data'].includes(previous.status) && previous.source_mode === mode && previous.period && previous.period.key === period.key && previous.period.start === period.start && previous.period.end === period.end && previous.period.time_zone === period.time_zone;
-      if (!sameWindow) this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
+      if (!sameWindow || compare) this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
       try {
-        const selection = mode === 'explicit' ? this._explicitSources() : await this._dashboardSources(generation);
-        if (!selection || !this._isCurrentEnergyRequest(generation)) return;
+        const selection = mode === 'explicit' ? this._explicitSources() : await this._dashboardSources(generation, read);
+        if (!selection || !current()) return;
         if (selection.totals.length === 0) {
           this._setEnergyViewState({ status: 'not_configured', period, source_mode: selection.source_mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'not_configured' }, devices: [], total_sources: [], cost_sources: [], warnings: [...(selection.warnings || [])] });
           return;
         }
         const ids = selection.ordered.map((source) => source.statistic_id);
-        const metadataResponse = await this._hass.callWS({ type: 'recorder/get_statistics_metadata', statistic_ids: ids });
-        if (!this._isCurrentEnergyRequest(generation)) return;
-        const statisticsResponse = new Date(period.end) <= new Date(period.start) ? {} : await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: period.start, end_time: period.end, statistic_ids: ids, period: 'hour', types: ['change'] });
-        if (!this._isCurrentEnergyRequest(generation)) return;
+        const metadataResponse = await read({ type: 'recorder/get_statistics_metadata', statistic_ids: ids });
+        if (!current()) return;
+        const statisticsResponse = new Date(period.end) <= new Date(period.start) ? {} : await read({ type: 'recorder/statistics_during_period', start_time: period.start, end_time: period.end, statistic_ids: ids, period: 'hour', types: ['change'] });
+        if (!current()) return;
         const metadataById = this._metadataMap(metadataResponse); const statisticsById = statisticsResponse && typeof statisticsResponse === 'object' ? statisticsResponse : {};
+        let priorStatistics = null;
+        if (pairedPeriod?.period) {
+          const prior = pairedPeriod.period;
+          priorStatistics = new Date(prior.end) <= new Date(prior.start) ? {} : await read({ type: 'recorder/statistics_during_period', start_time: prior.start, end_time: prior.end, statistic_ids: ids, period: 'hour', types: ['change'] });
+          if (!current()) return;
+        }
+        let tariffSnapshot = null;
+        if (this._config.energy_cost_mode === 'configured_tariff') {
+          const host = this._tariffController();
+          if (!Object.hasOwn(this._config,'tariff_profile')) await host.load();
+          if (!current()) return;
+          tariffSnapshot = host.snapshot();
+        }
+        const state = this._materializeEnergyPeriod(period, selection, statisticsById, metadataById, tariffSnapshot);
+        if (compare) state.comparison = this._buildPeriodComparison(state, pairedPeriod, selection, statisticsById, priorStatistics, metadataById, tariffSnapshot);
+        if (!current()) return;
+        this._tariffPricingContext = this._config.energy_cost_mode === 'configured_tariff' ? { generation, period, roots: selection.totals, statistics: statisticsById, metadata: metadataById,
+          ...(compare ? { selection, pairedPeriod, priorStatistics } : {}) } : null;
+        this._energyReportConfig = reportConfig;
+        this._setEnergyViewState(state);
+      } catch (error) {
+        if (current()) this._setEnergyViewState(this._errorState(error, period));
+      }
+    }
+
+    _materializeEnergyPeriod(period, selection, statisticsById, metadataById, tariffSnapshot, historical = false) {
         const window = { start: new Date(period.start), end: new Date(period.end) };
         const expectedCurrency = this._hass && this._hass.config && this._hass.config.currency;
         const roleReferences = [...selection.totals, ...selection.costs, ...selection.devices];
@@ -1729,12 +1934,10 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           cost = { ...cost, value: null, method: 'unavailable', reason };
         }
         if (this._config.energy_cost_mode === 'configured_tariff') {
-          const host = this._tariffController();
-          if (!Object.hasOwn(this._config,'tariff_profile')) await host.load();
-          if (!this._isCurrentEnergyRequest(generation)) return;
-          cost = this._priceConfiguredTariff(period, selection.totals, statisticsById, metadataById, host.snapshot());
-          this._tariffPricingContext = { generation, period, roots: selection.totals, statistics: statisticsById, metadata: metadataById };
-        } else this._tariffPricingContext = null;
+          cost = this._priceConfiguredTariff(period, selection.totals, statisticsById, metadataById, tariffSnapshot);
+        } else if (historical && cost.method === 'flat_rate_estimate') {
+          cost = { value: null, currency: cost.currency, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'historical_flat_rate_unavailable' };
+        }
         const deviceModel = this._buildDeviceRows(deviceSources);
         const deviceDataStatus = deviceSources.some((source) => source.status !== 'ready') ? 'partial' : 'ready';
         const warnings = [...(selection.warnings || [])];
@@ -1742,11 +1945,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         const recordedTotal = this._recordedSubtotal(totalSources, 'kWh');
         const recordedCost = this._recordedSubtotal(costSources, expectedCurrency);
         const daily = this._dailyEnergySeries(period, totalSources, statisticsById, metadataById);
-        this._energyReportConfig = reportConfig;
-        this._setEnergyViewState({ status, period, source_mode: selection.source_mode, total: completeTotal, cost, recorded_total: recordedTotal, recorded_cost: recordedCost, daily, devices: deviceModel.rows, total_sources: totalSources, cost_sources: costSources, device_data_status: deviceDataStatus, device_relationship_status: deviceModel.relationship_status, top_ranking_available: deviceModel.top_ranking_available, warnings });
-      } catch (error) {
-        if (this._isCurrentEnergyRequest(generation)) this._setEnergyViewState(this._errorState(error, period));
-      }
+        return { status, period, source_mode: selection.source_mode, total: completeTotal, cost, recorded_total: recordedTotal, recorded_cost: recordedCost, daily, devices: deviceModel.rows, total_sources: totalSources, cost_sources: costSources, device_data_status: deviceDataStatus, device_relationship_status: deviceModel.relationship_status, top_ranking_available: deviceModel.top_ranking_available, warnings };
     }
 
     _priceConfiguredTariff(period, roots, statistics, metadata, snapshot) {
@@ -1860,6 +2059,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         getContext: () => ({ config: this._config, period: this._period, tab: this._activeTab, connected: this._connected }) });
       this._tariffGuard.subscribe(() => {
         this._invalidateEnergyRequest(); this._energyReportConfig = null; this._tariffPricingContext = null; this._deviceQuery = ''; this._costSelectedDay = null; this._costDataPage = 0; this._costChartPage = 0;
+        this._comparisonSelectedDay = null; this._comparisonDataPage = 0; this._comparisonChartPage = 0;
         this._tariffSettingsSection?.replaceChildren(); this._tariffSettingsSection = null;
         this._energyViewState = { status: 'idle' };
         // Clear cached priced/private source DOM immediately; do not dispatch a retry.
@@ -1872,8 +2072,11 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           // Settings readback updates the settled snapshot without another recorder request.
           const context = this._tariffPricingContext;
           if (context && context.generation === this._energyRequestGeneration) {
-            const cost = this._priceConfiguredTariff(context.period, context.roots, context.statistics, context.metadata, this._tariffHost.snapshot());
-            this._setEnergyViewState({ ...this._energyViewState, cost });
+            const snapshot = this._tariffHost.snapshot();
+            const cost = this._priceConfiguredTariff(context.period, context.roots, context.statistics, context.metadata, snapshot);
+            const state = { ...this._energyViewState, cost };
+            if (context.selection) state.comparison = this._buildPeriodComparison(state, context.pairedPeriod, context.selection, context.statistics, context.priorStatistics, context.metadata, snapshot);
+            this._setEnergyViewState(state);
           } else this._renderEnergyState();
         } });
       return this._tariffHost;
@@ -1983,7 +2186,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       section.appendChild(panel);container.appendChild(section);
     }
 
-    _dailyEnergySeries(period, sources, statistics, metadata) {
+    _dailyEnergySeries(period, sources, statistics, metadata, role = 'total', expectedCurrency = null) {
       const start = asDate(period.start); const end = asDate(period.end);
       if (!start || !end || end <= start) return [];
       const days = []; let parts = this._partsInZone(start, period.time_zone);
@@ -1995,12 +2198,12 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         const summaries = sources.map(source => {
           if (!['ready', 'partial', 'no_data'].includes(source.status)) return { status: source.status, recorded_value: null, coverage: null };
           const buckets = (statistics[source.statistic_id] || []).filter(bucket => numericTime(bucket.start) >= dayStart.getTime() && numericTime(bucket.end) <= dayEnd.getTime());
-          return this._summarizeSeries(buckets, metadata[source.statistic_id], { start: dayStart, end: dayEnd }, 'total');
+          return this._summarizeSeries(buckets, metadata[source.statistic_id], { start: dayStart, end: dayEnd }, role, expectedCurrency);
         });
         const measured = summaries.filter(source => typeof source.recorded_value === 'number' && Number.isFinite(source.recorded_value));
         const value = measured.reduce((sum, source) => sum + source.recorded_value, 0);
         const complete = sources.length > 0 && summaries.every(source => source.status === 'ready');
-        days.push({ start: dayStart.toISOString(), end: dayEnd.toISOString(), value: complete ? value : null, recorded_value: measured.length && Number.isFinite(value) ? value : null, unit: 'kWh', status: complete ? 'ready' : (measured.length ? 'partial' : 'no_data'), observed_source_hours: summaries.reduce((sum, source) => sum + (source.coverage ? source.coverage.observed_hours : 0), 0), expected_source_hours: sources.length * (dayEnd - dayStart) / 3600000 });
+        days.push({ start: dayStart.toISOString(), end: dayEnd.toISOString(), value: complete && Number.isFinite(value) ? value : null, recorded_value: measured.length && Number.isFinite(value) ? value : null, unit: role === 'cost' ? expectedCurrency : 'kWh', status: complete && Number.isFinite(value) ? 'ready' : (measured.length ? 'partial' : 'no_data'), observed_source_hours: summaries.reduce((sum, source) => sum + (source.coverage ? source.coverage.observed_hours : 0), 0), expected_source_hours: sources.length * (dayEnd - dayStart) / 3600000 });
         if (bounds.end >= end) break;
         parts = this._addCalendarDays(parts, 1);
       }
@@ -2016,6 +2219,105 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       }
       container.appendChild(nav);
       if (this._focusedEnergyView) nav.querySelector(`[data-energy-view="${this._focusedEnergyView}"]`)?.focus();
+    }
+
+    _renderComparisonToggle(container) {
+      const label = document.createElement('label'); label.className = 'comparison-toggle section';
+      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = this._config.compare_previous_period === true;
+      checkbox.dataset.comparePreviousPeriod = '';
+      const text = document.createElement('span'); text.textContent = this._t('Compare previous local-calendar period');
+      checkbox.addEventListener('change', () => {
+        this._config = { ...this._config, compare_previous_period: checkbox.checked };
+        this._comparisonSelectedDay = null; this._comparisonDataPage = 0; this._comparisonChartPage = 0;
+        this._invalidateEnergyRequest(); this._energyReportConfig = null; this._tariffGuard?.observe(); this._scheduleRefresh(true);
+      });
+      label.append(checkbox, text); container.appendChild(label);
+    }
+
+    _renderPeriodComparison(container, pair) {
+      const section = document.createElement('section'); section.className = 'comparison section'; section.dataset.comparison = '';
+      // Scoped styles keep the existing Smart19 settings and chart CSS intact.
+      const style = document.createElement('style'); style.textContent = `
+        .comparison-toggle{display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer}.comparison-toggle input{width:20px;height:20px;accent-color:var(--sr-primary)}
+        .comparison{border:1px solid var(--sr-border);border-radius:12px;padding:16px;min-width:0}.comparison p,.comparison dd{overflow-wrap:anywhere}.comparison-context{font-size:12px;line-height:1.6}.comparison .summary{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))}
+        .comparison-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}.comparison-day{font:inherit;background:var(--sr-card);color:var(--sr-text);border:1px solid var(--sr-border);border-radius:8px;padding:10px;text-align:left;display:grid;gap:6px;min-width:0;min-height:44px;cursor:pointer}.comparison-day[aria-pressed=true]{outline:2px solid var(--sr-primary);outline-offset:1px}.comparison-day strong,.comparison-day small{overflow-wrap:anywhere}.comparison-day[data-availability=partial]{border-style:dashed}.comparison-day[data-availability=gap]{opacity:.8}
+        .comparison-track{height:10px;position:relative;border-radius:4px;background:var(--sr-border);overflow:hidden;display:block}.comparison-track.signed:after{content:'';position:absolute;left:50%;height:100%;border-left:1px solid var(--sr-text)}.comparison-fill{position:absolute;top:0;height:100%;background:var(--sr-primary);max-width:100%}.comparison-day[data-side=previous] .comparison-fill{background:var(--sr-text);opacity:.65}.comparison-day[data-availability=partial] .comparison-fill{background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,var(--sr-card) 4px,var(--sr-card) 6px)}
+        .comparison-record{border-bottom:1px solid var(--sr-border);padding:12px 0}.comparison-record dl{display:grid;grid-template-columns:minmax(90px,1fr) minmax(0,3fr);gap:6px}.comparison-record dd{margin:0}.comparison button:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}@media(max-width:420px){.comparison-pair{grid-template-columns:minmax(0,1fr)}.comparison-record dl{grid-template-columns:minmax(0,1fr)}}`;
+      section.appendChild(style);
+      const heading = document.createElement('h3'); heading.textContent = this._t('Previous period comparison'); section.appendChild(heading);
+      for (const [side,snapshot] of [['current',pair.current],['previous',pair.previous]]) {
+        const context = document.createElement('p'); context.className = 'muted comparison-context'; context.dataset.comparisonPeriod = side;
+        context.textContent = snapshot ? `${this._t(side === 'current' ? 'Current period' : 'Previous period')}: ${this._formatPeriodDate(snapshot.period.start,snapshot.period.time_zone)} → ${this._formatPeriodDate(snapshot.period.end,snapshot.period.time_zone)} · ${snapshot.period.time_zone} · ${this._formatNumber(snapshot.period.actual_hours,2)} h · UTC ${snapshot.period.start} → ${snapshot.period.end} · ${this._t('Missing energy days')}: ${snapshot.coverage.missing_energy_days} · ${this._t('Missing cost days')}: ${snapshot.coverage.missing_cost_days} · ${this._t('source hours')}: ${this._formatNumber(snapshot.coverage.observed_energy_source_hours,2)}/${this._formatNumber(snapshot.coverage.expected_energy_source_hours,2)}`
+          : `${this._t('Previous period')}: — · ${this._t(pair.reason || 'unavailable')} · ${JSON.stringify(pair.requested_local_cutoff)}`;
+        section.appendChild(context);
+      }
+      const scope = document.createElement('p'); scope.className = 'muted comparison-context'; scope.textContent = `${this._t('Source evidence')}: ${pair.scope.map(source => `${source.role}: ${source.statistic_id} (${source.unit || '—'})`).join(' · ')}`; section.appendChild(scope);
+      const metrics = document.createElement('div'); metrics.className = 'summary';
+      for (const [key,label] of [['energy','Measured energy'],['cost','Priced energy']]) {
+        const metric = pair.metrics[key];
+        metrics.appendChild(this._metric(label, `${this._formatNumber(metric.delta,2)} ${metric.unit || ''} · ${this._formatNumber(metric.percent,2)}%`));
+        const reason = document.createElement('p'); reason.className = 'muted comparison-context'; reason.dataset.comparisonReason = key;
+        reason.textContent = `${this._t(label)}: ${this._t(metric.reason || 'ready')} · ${this._t(metric.provenance)}`; metrics.appendChild(reason);
+      }
+      section.appendChild(metrics);
+      const note = document.createElement('p'); note.className = 'muted'; note.textContent = this._t('Recorded values cover available samples only; gaps are not zero.'); section.appendChild(note);
+      const nav = document.createElement('nav'); nav.className = 'report-views'; nav.setAttribute('role','tablist'); nav.setAttribute('aria-label',this._t('Previous period comparison'));
+      const rerender = selector => { this._renderEnergyState(); this.shadowRoot.querySelector(selector)?.focus(); };
+      for (const [key,label] of [['chart','Chart'],['data','Data']]) {
+        const button = document.createElement('button'); button.type='button'; button.className='action'; button.dataset.comparisonView=key;
+        button.textContent=this._t(label); button.setAttribute('role','tab'); button.setAttribute('aria-selected',String((this._comparisonView || 'chart')===key));
+        button.addEventListener('click',()=>{this._comparisonView=key;rerender(`[data-comparison-view="${key}"]`);}); nav.appendChild(button);
+      } section.appendChild(nav);
+      const panel=document.createElement('div'); panel.setAttribute('role','tabpanel');
+      const selected=pair.daily.find(day=>day.current.start===this._comparisonSelectedDay);
+      if(!selected)this._comparisonSelectedDay=null;
+      if(selected){const detail=document.createElement('p');detail.dataset.comparisonSelectedDay=selected.current.start;
+        detail.textContent=`${this._t('Current period')}: ${selected.current.start} → ${selected.current.end} · ${this._t('Previous period')}: ${selected.previous?.start || '—'} → ${selected.previous?.end || '—'}`;panel.appendChild(detail);
+        const clear=document.createElement('button');clear.type='button';clear.className='action';clear.dataset.comparisonClear='';clear.textContent=this._t('All hours');
+        clear.addEventListener('click',()=>{this._comparisonSelectedDay=null;this._comparisonDataPage=0;rerender('[data-comparison-view][aria-selected="true"]');});panel.appendChild(clear);}
+      const paginate=(count,size,property,attribute)=>{
+        const pages=Math.max(1,Math.ceil(count/size));this[property]=Math.max(0,Math.min(pages-1,this[property] || 0));
+        const controls=document.createElement('nav');controls.className='tariff-pagination';controls.setAttribute('aria-label',this._t(attribute==='comparisonDataPage'?'Hourly records':'Daily overview'));
+        const status=document.createElement('span');status.textContent=`${this._t('Page')} ${this[property]+1}/${pages}`;controls.appendChild(status);
+        for(const [direction,label,offset] of [['previous','Previous',-1],['next','Next',1]]){const button=document.createElement('button');button.type='button';button.className='action';button.dataset[attribute]=direction;button.textContent=this._t(label);button.disabled=offset<0?this[property]===0:this[property]===pages-1;
+          button.addEventListener('click',()=>{this[property]+=offset;rerender(`[data-${attribute==='comparisonDataPage'?'comparison-data-page':'comparison-chart-page'}="${direction}"]:not([disabled]),[data-comparison-view][aria-selected="true"]`);});controls.appendChild(button);}
+        panel.appendChild(controls);return this[property]*size;
+      };
+      if((this._comparisonView || 'chart')==='data'){
+        const records=selected?pair.records.filter(record=>record.day_index===selected.index):pair.records;
+        const offset=paginate(records.length,50,'_comparisonDataPage','comparisonDataPage');
+        for(const record of records.slice(offset,offset+50)){
+          const row=document.createElement('article');row.className='comparison-record';row.dataset.comparisonRecord=record.from;row.dataset.comparisonDay=pair.daily[record.day_index]?.current.start || '';row.dataset.side=record.side;
+          const title=document.createElement('h4');title.textContent=`${this._t(record.side==='current'?'Current period':'Previous period')} · ${this._formatPeriodDate(record.from,pair.current.period.time_zone)} → ${this._formatPeriodDate(record.to,pair.current.period.time_zone)}`;row.appendChild(title);
+          const dl=document.createElement('dl');const priced=record.role==='priced_energy';
+          const fields = [['Sources',(record.source_statistic_ids || []).join(', ')],['Role',record.role],['Recorded value',`${this._formatNumber(priced?record.energyCost:record.recorded_value,2)} ${priced?record.currency:record.unit || ''}`],['Status',record.reason || record.status || (record.available?'ready':'partial')],['source hours',record.coverage?`${record.coverage.observed_hours}/${record.coverage.expected_hours}`:priced?`${record.available?1:0}/1`:'—'],['UTC interval',`${record.from} → ${record.to}`]];
+          if(priced)fields.push(['Measured energy',`${this._formatNumber(record.kwh,2)} kWh`],['Energy / kWh',`${this._formatNumber(record.energyRate,4)} ${record.currency || '—'}/kWh`],['Zone',(record.zones || []).join(', ') || '—'],['Revision',String(record.revision ?? '—')]);
+          for(const [label,value] of fields){const dt=document.createElement('dt');dt.textContent=this._t(label);const dd=document.createElement('dd');dd.textContent=value;dl.append(dt,dd);}row.appendChild(dl);panel.appendChild(row);
+        }
+      }else{
+        const offset=paginate(pair.daily.length,7,'_comparisonChartPage','comparisonChartPage');
+        for(const [key,label] of [['energy','Measured energy'],['cost','Priced energy']]){
+          const chart=document.createElement('section');chart.className='comparison-chart';const unit=key==='energy'?'kWh':pair.current.cost.currency || pair.previous?.cost.currency || '—';
+          chart.setAttribute('aria-label',`${this._t(label)} (${unit})`);const axis=document.createElement('h4');axis.textContent=`${this._t(label)} · ${unit}`;chart.appendChild(axis);
+          const values=pair.daily.flatMap(day=>[day.current[key].recorded_value,day.previous?.[key].recorded_value]).filter(value=>typeof value==='number'&&Number.isFinite(value));
+          const scale=values.reduce((max,value)=>Math.max(max,Math.abs(value)),0);const signed=values.some(value=>value<0);
+          for(const day of pair.daily.slice(offset,offset+7)){
+            const group=document.createElement('div');group.className='comparison-pair';
+            for(const side of ['current','previous']){
+              const snapshot=day[side],metric=snapshot?.[key],value=metric?.recorded_value ?? null;
+              const button=document.createElement('button');button.type='button';button.className='comparison-day';button.dataset.comparisonDay=day.current.start;button.dataset.comparisonMetric=key;button.dataset.side=side;
+              button.dataset.availability=value===null?'gap':metric.status==='ready'?'ready':'partial';button.setAttribute('aria-pressed',String(selected?.index===day.index));
+              const date=document.createElement('span');date.textContent=`${this._t(side==='current'?'Current period':'Previous period')} · ${snapshot?this._formatPeriodDate(snapshot.start,pair.current.period.time_zone):'—'}`;
+              const amount=document.createElement('strong');amount.textContent=`${this._formatNumber(value,2)} ${metric?.unit || unit}`;
+              const status=document.createElement('small');status.textContent=`${this._t(metric?.status || 'no_data')} · ${this._formatNumber(metric?.observed_source_hours,2)}/${this._formatNumber(metric?.expected_source_hours,2)} ${this._t('source hours')}`;
+              const track=document.createElement('span');track.className=`comparison-track${signed?' signed':''}`;track.setAttribute('aria-hidden','true');
+              if(typeof value==='number'&&Number.isFinite(value)){const fill=document.createElement('span');fill.className='comparison-fill';const width=scale?Math.min(signed?50:100,Math.abs(value)/scale*(signed?50:100)):0;fill.style.width=`${width}%`;fill.style.left=`${signed?(value<0?50-width:50):0}%`;track.appendChild(fill);}
+              button.title=snapshot?`${snapshot.start} → ${snapshot.end}`:pair.reason || 'unavailable';button.append(date,amount,status,track);
+              button.addEventListener('click',()=>{this._comparisonSelectedDay=day.current.start;this._comparisonDataPage=0;rerender(`[data-comparison-day="${day.current.start}"][data-comparison-metric="${key}"][data-side="${side}"]`);});group.appendChild(button);
+            }chart.appendChild(group);
+          }panel.appendChild(chart);
+        }
+      }section.appendChild(panel);container.appendChild(section);
     }
 
     _filteredDevices(devices) {
@@ -2135,6 +2437,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       const tariffMarkup = this._config.energy_cost_mode === 'configured_tariff' ? this._tariffController().markup() : null;
       this.shadowRoot.getElementById('exportJsonBtn').disabled = !exportable; this.shadowRoot.getElementById('exportCsvBtn').disabled = !exportable; container.replaceChildren();
       this._renderTariffSettings(container, tariffMarkup);
+      this._renderComparisonToggle(container);
       if (state.status === 'loading' || state.status === 'idle') { container.appendChild(this._stateBlock('Loading recorder statistics…', 'This report uses recorded changes for the selected local-calendar period.', '', 'status')); return; }
       if (state.status === 'not_configured') {
         const block = this._stateBlock('Configure Energy Dashboard or select explicit statistics.', 'Smart Reports does not discover sensors by substring and does not use live entity states.', '', 'status');
@@ -2157,6 +2460,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       context.dataset.periodEnd = period.end || '';
       context.title = `${this._t('Exact recorder window')}: ${period.start || '—'} → ${period.end || '—'}`;
       container.appendChild(context);
+      if (state.comparison) this._renderPeriodComparison(container, state.comparison);
       if (state.status === 'no_data') {
         container.appendChild(this._stateBlock('No recorded energy change in this period.', 'Measured zero is rendered separately; this state means no recorder samples were available.', '', 'status'));
         if (period.start === period.end) { const note = document.createElement('p'); note.className = 'muted section'; note.textContent = this._t('Today starts reporting after its first completed hour.'); container.appendChild(note); }
@@ -2293,7 +2597,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       this._tariffGuard?.observe();
       const state = this._energyViewState || {}; const period = state.period || this._periodDescriptor(); const total = state.total || {}; const cost = state.cost || {}; const generated = asDate(nowValue) || new Date();
       return {
-        schema_version: 2,
+        schema_version: state.comparison && this._config.compare_previous_period === true ? 3 : 2,
+        ...(state.comparison && this._config.compare_previous_period === true ? { comparison: state.comparison } : {}),
         generated_at: generated.toISOString(),
         period: { key: period.key || this._period, start: period.start || null, end: period.end || null, time_zone: period.time_zone || this._timeZone() },
         source_mode: state.source_mode || (this._config.energy_source_mode === 'explicit' ? 'explicit' : 'energy_dashboard'),
@@ -2346,6 +2651,20 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       }
       for (const day of report.energy.daily || []) rows.push([...base, 'energy', 'recorded_day', '', `${day.start} / ${day.end}`, day.recorded_value, 'kWh', day.status, 'recorder_available_samples', '', `${day.observed_source_hours}/${day.expected_source_hours} source hours`]);
       for (const device of report.energy.devices) rows.push([...base, 'energy', 'device', device.statistic_id, device.label, device.value, device.unit, device.status, device.provenance, device.included_in_stat, '']);
+      if (report.comparison) {
+        const pair = report.comparison;
+        for (const [side, snapshot] of [['current', pair.current], ['previous', pair.previous]]) {
+          const pairedBase = [report.schema_version, report.generated_at, snapshot?.period.key || report.period.key,
+            snapshot?.period.start || null, snapshot?.period.end || null, snapshot?.period.time_zone || report.period.time_zone];
+          rows.push([...pairedBase, 'comparison', 'comparison_snapshot', '', side, JSON.stringify(snapshot), '', snapshot?.status || pair.status, snapshot?.source_mode || '', '', pair.reason || '']);
+        }
+        for (const [key, metric] of Object.entries(pair.metrics)) rows.push([...base, 'comparison', 'comparison_metric', '', key, JSON.stringify(metric), metric.unit, metric.comparable ? 'ready' : 'partial', metric.provenance, '', metric.reason]);
+        rows.push([...base, 'comparison', 'comparison_scope', '', '', JSON.stringify(pair.scope), '', pair.status, '', '', JSON.stringify({ reason: pair.reason, shift_days: pair.shift_days, requested_local_start: pair.requested_local_start, requested_local_cutoff: pair.requested_local_cutoff })]);
+        for (const record of pair.records) {
+          const p = (record.side === 'current' ? pair.current : pair.previous).period;
+          rows.push([report.schema_version, report.generated_at, p.key, p.start, p.end, p.time_zone, 'comparison', 'comparison_record', record.statistic_id || (record.source_statistic_ids || []).join('|'), record.side, JSON.stringify(record), record.unit || record.currency, record.status || (record.available ? 'ready' : 'partial'), record.provenance || pair[record.side].cost.provenance, record.included_in_stat || '', record.reason || '']);
+        }
+      }
       return `${rows.map((row) => row.map((value) => this._csvCell(value)).join(',')).join('\n')}\n`;
     }
 
