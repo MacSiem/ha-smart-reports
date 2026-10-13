@@ -56,7 +56,7 @@ for (const [now, reason] of [['2026-03-30T00:00:00Z','nonexistent_local_cutoff']
     const f = await fixture({ zone:'Europe/Warsaw', now, key:'1d' }); try {
       const pair=f.card._energyViewState.comparison; assert.equal(pair.status,'noncomparable'); assert.equal(pair.reason,reason);
       assert.equal(pair.previous,null); assert.equal(pair.metrics.energy.percent,null);
-      assert.equal(callsOf(f.hass,'recorder/statistics_during_period').length,1); assert.ok(f.card.shadowRoot.textContent.includes(reason));
+      assert.equal(callsOf(f.hass,'recorder/statistics_during_period').length,1); assert.ok(f.card.shadowRoot.textContent.includes(f.card._t(reason)));
     } finally { f.close(); }
   });
 }
@@ -140,7 +140,7 @@ test('opt-in safe full JSON/CSV includes both ranges, all source rows, coverage 
 
 for(const edge of ['user','groups','active','config','callWS','connection','source','period','disconnect','offline'])test(`late previous response fenced on ${edge}`,async()=>{
  const f=await fixture({enabled:false});let release;try{const old=f.hass.callWS;let reads=0;f.hass.callWS=function(m){if(m.type==='recorder/statistics_during_period'&&++reads===2)return new Promise(r=>release=r);return old.call(this,m);};f.card._config.compare_previous_period=true;
- const pending=f.card._loadEnergy();while(!release)await delay(1);
+ const pending=f.card._loadEnergy();for(let waiting=0;!release&&waiting<1000;waiting++)await delay(1);assert.equal(typeof release,'function','prior request must be dispatched before testing its late response');
  if(edge==='user')f.hass.user.id='other';if(edge==='groups')f.hass.user.groups=[{id:'household'}];if(edge==='active')f.hass.user.is_active=false;if(edge==='config')f.hass.config.currency='EUR';if(edge==='callWS')f.hass.callWS=async()=>({});if(edge==='connection')f.hass.connection={connected:true};if(edge==='source')f.card._config.energy_total_statistics=['sensor.other'];if(edge==='period')f.card._period='1d';if(edge==='disconnect')f.card.remove();if(edge==='offline')f.window.dispatchEvent(new f.window.Event('offline'));
  f.card._tariffGuard.observe();release({});await pending;assert.equal(f.card._energyViewState.comparison,undefined);assert.equal(f.card.shadowRoot.querySelector('[data-comparison]'),null);
  }finally{release?.({});f.close();}
@@ -148,6 +148,42 @@ for(const edge of ['user','groups','active','config','callWS','connection','sour
 
 test('overlapping refresh cannot duplicate an occupied prior raw wire and cannot settle old pair',async()=>{
  const f=await fixture({enabled:false});let release;try{const old=f.hass.callWS;let reads=0;f.hass.callWS=function(m){if(m.type==='recorder/statistics_during_period'&&++reads===2)return new Promise(r=>release=r);return old.call(this,m);};f.card._config.compare_previous_period=true;
- const pending=f.card._loadEnergy();while(!release)await delay(1);const calls=f.hass.calls.length;await f.card._loadEnergy();assert.equal(f.hass.calls.length,calls);assert.equal(f.card._tariffGuard.occupied(),true);release({});await pending;assert.equal(f.card._energyViewState.comparison,undefined);
+ const pending=f.card._loadEnergy();for(let waiting=0;!release&&waiting<1000;waiting++)await delay(1);assert.equal(typeof release,'function','prior request must be dispatched before testing its late response');const calls=f.hass.calls.length;await f.card._loadEnergy();assert.equal(f.hass.calls.length,calls);assert.equal(f.card._tariffGuard.occupied(),true);release({});await pending;assert.equal(f.card._energyViewState.comparison,undefined);
  }finally{release?.({});f.close();}
+});
+
+for (const zone of ['Asia/Kolkata','Asia/Kathmandu']) test(`daily drilldown retains whole UTC readings without assigning midnight crossings in ${zone}`, async () => {
+ const profile={schema:1,currency:'PLN',timezone:zone,clock:{mode:'civil'},priceBasis:'gross',defaultZone:'mine',zones:[{id:'mine',energyRate:2,variableRate:0}]};
+ const f=await fixture({zone,config:{energy_cost_mode:'configured_tariff',tariff_profile:profile},alter:(m,data)=>{
+  const start=Math.ceil(Date.parse(m.start_time)/3600000)*3600000,end=Math.floor(Date.parse(m.end_time)/3600000)*3600000;
+  for(const id of Object.keys(data))data[id]=calendarSeries(start,end,Array((end-start)/3600000).fill(1));return data;
+ }});
+ try {
+  const pair=f.card._energyViewState.comparison;
+  const localDate=stamp=>new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(stamp));
+  for(const snap of [pair.current,pair.previous]) {
+   const crossing=snap.records.filter(row=>row.role==='total'&&row.status==='ready'&&localDate(Date.parse(row.from))!==localDate(Date.parse(row.to)-1));
+   assert.ok(crossing.length>0,'fixture contains measured whole hours spanning midnight');
+   for(const row of crossing){assert.equal(row.recorded_value,1);assert.equal(Date.parse(row.to)-Date.parse(row.from),3600000);assert.equal(row.day_index,-1);assert.equal(row.day_allocation_reason,'crosses_local_midnight');}
+   for(const day of snap.daily) {
+    const roots=snap.records.filter(row=>row.role==='total'&&row.day_index===day.index&&typeof row.recorded_value==='number');
+    assert.equal(roots.reduce((sum,row)=>sum+row.recorded_value,0),day.energy.recorded_value ?? 0,'daily chart matches exact same measured records');
+    const priced=snap.records.filter(row=>row.role==='priced_energy'&&row.day_index===day.index&&row.available);
+    assert.equal(priced.reduce((sum,row)=>sum+row.energyCost,0),day.cost.recorded_value ?? 0,'daily cost matches whole priced rows');
+   }
+  }
+  const report=f.card._buildExportDocument();assert.equal(report.comparison.records.length,pair.records.length);
+  assert.ok(report.comparison.records.some(row=>row.day_allocation_reason==='crosses_local_midnight'&&row.recorded_value===1));
+ } finally {f.close();}
+});
+
+test('comparison labels identify deltas and Data explains source roles and status in Polish',async()=>{
+ const f=await fixture();try{
+  f.hass.locale.language='pl';f.card.hass=f.hass;
+  assert.ok(f.card.shadowRoot.textContent.includes('Zmiana zmierzonej energii'));
+  assert.ok(f.card.shadowRoot.textContent.includes('Zmiana kosztu energii'));
+  f.card.shadowRoot.querySelector('[data-comparison-view="data"]').click();
+  const labels=[...f.card.shadowRoot.querySelectorAll('.comparison-record dd')].map(dd=>dd.textContent);
+  assert.ok(labels.includes('suma'));assert.ok(labels.includes('gotowe'));assert.equal(labels.includes('total'),false);assert.equal(labels.includes('ready'),false);
+ }finally{f.close();}
 });
