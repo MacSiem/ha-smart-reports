@@ -178,7 +178,7 @@ for (const zone of ['Asia/Kolkata','Asia/Kathmandu']) test(`daily drilldown reta
 });
 
 test('comparison labels identify deltas and Data explains source roles and status in Polish',async()=>{
- const f=await fixture();try{
+ const f=await fixture({config:{energy_device_statistics:[],energy_cost_statistics:[]}});try{
   f.hass.language='pl';f.card.hass=f.hass;
   assert.ok(f.card.shadowRoot.textContent.includes('Zmiana zmierzonej energii'));
   assert.ok(f.card.shadowRoot.textContent.includes('Zmiana kosztu energii'));
