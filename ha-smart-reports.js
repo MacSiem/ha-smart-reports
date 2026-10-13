@@ -1096,7 +1096,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       complete_comparable_measurements: 'Complete comparable measurements', ambiguous_local_cutoff: 'Ambiguous local cutoff time',
       nonexistent_local_cutoff: 'Local cutoff time does not exist', historical_flat_rate_unavailable: 'Confirmed historical flat rate unavailable',
       previous_zero: 'Previous value is zero; percentage unavailable', previous_nonpositive: 'Previous value is negative; percentage unavailable',
-      nonfinite_delta: 'Change exceeds numeric range', unit_mismatch: 'Incompatible units' })[text] || (text === 'day_suffix' ? 'd' : text);
+      nonfinite_delta: 'Change exceeds numeric range', unit_mismatch: 'Incompatible units',
+      incomplete_coverage: 'Incomplete coverage', missing_rate: 'Missing rate', currency_mismatch: 'Incompatible currency' })[text] || (text === 'day_suffix' ? 'd' : text);
   }
 
   function uniqueById(items) {
