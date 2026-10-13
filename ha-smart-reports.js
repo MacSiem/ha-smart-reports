@@ -2282,7 +2282,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const generation = ++this._energyRequestGeneration;
       const period = this._periodDescriptor();
       const pairedPeriod = compare ? this._previousPeriodDescriptor(period) : null;
-      const current = () => exportAssociation === this._observeReviewedExportSource() && this._isCurrentEnergyRequest(generation) && (!compare || this._tariffGuard.current(ticket));
+      const current = () => this._isCurrentEnergyRequest(generation) && exportAssociation === this._observeReviewedExportSource() && (!compare || this._tariffGuard.current(ticket));
       const read = payload => compare ? this._tariffGuard.call(ticket, payload) : requestCall.call(requestHass,payload);
       const mode = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'energy_dashboard';
       const previous = this._energyViewState;
@@ -2841,7 +2841,10 @@ function projectSmartReportV3(report, includePrivate = false) {
       const association = this._observeReviewedExportSource();
       const sameSource = this._exportSourceAssociation === association;
       this._exportSourceAssociation = association;
-      if (sameSource && JSON.stringify(state) === JSON.stringify(this._energyViewState)) return;
+      if (JSON.stringify(state) === JSON.stringify(this._energyViewState)) {
+        if (!sameSource) this._invalidateReviewedExport();
+        return; // Identical measurements preserve the live DOM and focus.
+      }
       this._energyViewState = state;
       this._invalidateReviewedExport();
       if (this._scaffoldRendered && this._activeTab === 'energy') this._renderEnergyState();
