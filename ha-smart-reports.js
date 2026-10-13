@@ -1594,6 +1594,8 @@ function projectSmartReportV3(report, includePrivate = false) {
 
     disconnectedCallback() {
       this._connected = false;
+      this._navigationObserver?.disconnect(); this._navigationObserver = null;
+      this._pendingReportFocus = null;
       this._exportDialog?.destroy(); this._exportDialog = null;
       this._unbindReviewedExportEvents();
       this._observeReviewedExportSource();
@@ -1679,11 +1681,17 @@ function projectSmartReportV3(report, includePrivate = false) {
           .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:flex;gap:8px;overflow-x:auto;padding:16px 2px 8px;max-width:100%}.day-column{display:grid;gap:6px;text-align:center;flex:0 0 40px;color:var(--sr-muted);font-size:11px}.day-track{height:100px;display:flex;align-items:flex-end;background:var(--sr-border);border-radius:4px;overflow:hidden}.day-track .bar-fill{width:100%}.day-column.partial .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.day-column.partial .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.day-column.no_data .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere;min-height:44px;display:flex;align-items:center;padding:8px 0}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
           .tariff-evidence{display:grid;gap:12px;min-width:0}.tariff-evidence p,.tariff-evidence h4{overflow-wrap:anywhere}.tariff-day-chart{display:grid;gap:8px;margin-top:12px}.tariff-day-chart h4{margin:0;font-size:14px}.tariff-day{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;min-height:64px;min-width:44px;max-width:100%;padding:10px 12px;border:1px solid var(--sr-border);border-radius:10px;background:var(--sr-card);color:var(--sr-text);text-align:left;font:inherit}.tariff-day[aria-pressed=true]{border-color:var(--sr-primary);outline:1px solid var(--sr-primary)}.tariff-day strong{overflow-wrap:anywhere}.tariff-day small{grid-column:1/-1;color:var(--sr-muted);font-size:11px}.tariff-day-track{grid-column:1/-1;position:relative;height:8px;background:var(--sr-border);border-radius:4px;overflow:hidden}.tariff-day-track.signed{background:linear-gradient(to right,var(--sr-border) calc(50% - 1px),var(--sr-text) 50%,var(--sr-border) calc(50% + 1px))}.tariff-day-fill{position:absolute;top:0;height:100%;background:var(--sr-primary);border-radius:3px}.tariff-day[data-availability=partial] .tariff-day-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.tariff-day[data-availability=gap] .tariff-day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.tariff-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.tariff-pagination span{flex:1;min-width:0}.tariff-evidence button{min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}.tariff-data-row{border:1px solid var(--sr-border);border-radius:10px;padding:12px;margin-top:8px;min-width:0;overflow-wrap:anywhere}.tariff-data-row h4{font-size:13px;margin:0 0 8px}.tariff-data-row dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 12px;margin:0;font-size:12px}.tariff-data-row dt{color:var(--sr-muted)}.tariff-data-row dd{margin:0}.tariff-day:focus-visible{outline:3px solid var(--sr-primary);outline-offset:2px}
           .device-search-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0}.device-search-form label{flex:1;min-width:min(100%,180px);display:grid;gap:6px;font-size:13px}.device-search{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);font:inherit}.device-search-clear{min-height:44px;min-width:44px}.device-search:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.device-search-count,.device-export-note{overflow-wrap:anywhere;line-height:1.5}.chart-row small{overflow-wrap:anywhere}
+          button,select,input:not([type="checkbox"]),summary,.fixed-link,.donate-section a{min-height:44px!important;min-width:44px;max-width:100%;box-sizing:border-box}
+          button,select{font:inherit;white-space:normal;overflow-wrap:anywhere}summary,.fixed-link,.donate-section a{display:flex;align-items:center}
+          button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--sr-primary)!important;outline-offset:2px}
+          .tabs{flex-wrap:wrap;overflow:visible}.tab{flex:1 1 auto}.header{flex-wrap:wrap}.header h2{overflow-wrap:anywhere;min-width:0}
+          .report-picker{display:block;width:100%;min-width:0;padding:10px;border:1px solid var(--sr-border);border-radius:8px;background:var(--sr-card);color:var(--sr-text);margin:0 0 12px}
+          .report-picker[data-report-picker="main"]{width:calc(100% - 32px);margin:0 16px 12px}[hidden]{display:none!important}
           :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
         </style>
         <ha-card class="card">
           <div class="header"><h2 id="title"></h2><span class="muted" id="recorderLabel">${this._t("Recorder-backed")}</span></div>
-          <nav class="tabs" id="tabs" aria-label="${this._t("Report sections")}">
+          <nav class="tabs" id="tabs" data-report-nav="main" role="tablist" aria-label="${this._t("Report sections")}">
             <button class="tab" type="button" data-tab="energy">${this._t("Energy")}</button>
             <button class="tab" type="button" data-tab="automations">${this._t("Automations")}</button>
             <button class="tab" type="button" data-tab="system">${this._t("System")}</button>
@@ -1772,6 +1780,86 @@ function projectSmartReportV3(report, includePrivate = false) {
       return result;
     }
 
+    _syncNavigation() {
+      if (!this._scaffoldRendered) return;
+      if (!this._navigationObserver && typeof ResizeObserver === 'function' && this._connected) {
+        this._navigationObserver = new ResizeObserver(() => this._syncNavigation());
+        this._navigationObserver.observe(this);
+      }
+      const width = this.getBoundingClientRect().width;
+      const compact = width > 0 && width < 280;
+      for (const group of this.shadowRoot.querySelectorAll('[data-report-nav]')) {
+        const key = group.dataset.reportNav;
+        const buttons = Array.from(group.querySelectorAll('button')).filter(button => !button.hidden);
+        let picker = group.previousElementSibling;
+        if (picker?.dataset.reportPicker !== key) {
+          picker = document.createElement('select'); picker.className = 'report-picker'; picker.dataset.reportPicker = key;
+          group.before(picker);
+          picker.addEventListener('change', () => {
+            const chosen = Array.from(group.querySelectorAll('button')).filter(button => !button.hidden)[Number(picker.selectedIndex)];
+            chosen?.click();
+            const current = this.shadowRoot.querySelector(`[data-report-picker="${key}"]`);
+            if (current && !current.hidden) current.focus({ preventScroll: true });
+          });
+        }
+        picker.setAttribute('aria-label', group.getAttribute('aria-label') || this._t('Report sections'));
+        const choices = buttons.map(button => ({value:button.dataset.tab || button.dataset.energyView || button.dataset.costView || button.dataset.comparisonView,label:button.textContent}));
+        const signature = JSON.stringify(choices);
+        if (picker.dataset.choices !== signature) {
+          picker.replaceChildren(...choices.map(choice => { const option = document.createElement('option'); option.value = choice.value; option.textContent = choice.label; return option; }));
+          picker.dataset.choices = signature;
+        }
+        const selected = buttons.find(button => button.getAttribute('aria-selected') === 'true') || buttons[0];
+        picker.selectedIndex = buttons.indexOf(selected);
+        const active = this.shadowRoot.activeElement;
+        const inGroup = group.contains(active);
+        // Reveal the destination before moving focus; hide the old representation last.
+        if (compact && buttons.length) {
+          picker.hidden = false;
+          if (inGroup) picker.focus({ preventScroll: true });
+          group.hidden = true;
+        } else {
+          group.hidden = buttons.length === 0;
+          if (active === picker || (inGroup && active.hidden)) selected?.focus({ preventScroll: true });
+          picker.hidden = true;
+        }
+      }
+    }
+
+    _focusReportControl(target) {
+      if (!target || target.disabled) return null;
+      const group = target.closest('[data-report-nav]');
+      if (group?.hidden) target = this.shadowRoot.querySelector(`[data-report-picker="${group.dataset.reportNav}"]`);
+      if (!target || target.closest('[hidden]')) return null;
+      target.focus({ preventScroll: true });
+      return target;
+    }
+
+    _rememberReportFocus(target) {
+      if (!target || !this.shadowRoot.getElementById('content')?.contains(target)) return null;
+      if (target.classList.contains('device-search')) return {search:true,start:target.selectionStart,end:target.selectionEnd,direction:target.selectionDirection};
+      const names = ['data-report-picker','data-report-control','data-energy-view','data-cost-view','data-cost-day','data-cost-metric','data-cost-page','data-cost-chart-page','data-cost-clear-day','data-comparison-view','data-comparison-day','data-comparison-metric','data-side','data-comparison-data-page','data-comparison-chart-page','data-comparison-clear','data-compare-previous-period'];
+      const attributes = names.filter(name => target.hasAttribute(name)).map(name => [name,target.getAttribute(name)]);
+      return attributes.length ? {tag:target.localName,attributes} : null;
+    }
+
+    _restoreReportFocus(snapshot, status) {
+      const root = this.shadowRoot;
+      let target = snapshot.search ? root.querySelector('.device-search') : Array.from(root.querySelectorAll(snapshot.tag)).find(node => snapshot.attributes.every(([name,value]) => node.getAttribute(name) === value));
+      if (target?.disabled) target = null;
+      if (target?.matches('[data-report-picker]') && target.hidden) {
+        target = root.querySelector(`[data-report-nav="${target.dataset.reportPicker}"] [aria-selected="true"]`);
+      }
+      const restored = this._focusReportControl(target);
+      if (restored) {
+        if (snapshot.search && snapshot.start != null) restored.setSelectionRange(snapshot.start,snapshot.end,snapshot.direction);
+        return;
+      }
+      const fallback = this._focusReportControl(root.querySelector('[data-energy-view][aria-selected="true"]')) || this._focusReportControl(root.getElementById('periodSelect'));
+      // Keep only control identity through loading. A user focus move cancels restoration.
+      if (status === 'loading' && fallback) this._pendingReportFocus = {snapshot,anchor:fallback};
+    }
+
     _syncTabs() {
       if (!this._scaffoldRendered) return;
       const available = this._availableTabs();
@@ -1781,6 +1869,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       for (const button of this.shadowRoot.querySelectorAll('[data-tab]')) {
         const tab = button.dataset.tab;
         button.hidden = !available.includes(tab);
+        button.setAttribute('role', 'tab');
         button.classList.toggle('active', tab === this._activeTab);
         button.setAttribute('aria-selected', String(tab === this._activeTab));
       }
@@ -1791,6 +1880,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       } else if (this._activeTab === 'energy') this._renderEnergyState();
       else if (this._activeTab === 'automations') this._renderAutomations();
       else this._renderSystem();
+      this._syncNavigation();
     }
 
     _selectTab(tab) {
@@ -2536,10 +2626,10 @@ function projectSmartReportV3(report, includePrivate = false) {
       for (const [key,label,unit] of [['variable_cost','Variable fees',cost.currency],['usage_cost','Energy and variable fees',cost.currency],['fixed_monthly','Fixed monthly fee (separate)',`${cost.currency || ''}/${this._t('month')}`]]) {
         const line = document.createElement('p');line.textContent = `${this._t(label)}: ${cost[key] == null ? '—' : this._formatNumber(cost[key],2)} ${unit || ''}`;section.appendChild(line);
       }
-      const views = document.createElement('div'); views.className='report-views';views.setAttribute('role','tablist');views.setAttribute('aria-label',this._t('Cost evidence'));
+      const views = document.createElement('div'); views.dataset.reportNav='cost'; views.className='report-views';views.setAttribute('role','tablist');views.setAttribute('aria-label',this._t('Cost evidence'));
       for (const [key,label] of [['chart','Chart'],['data','Data']]) {
         const button=document.createElement('button');button.type='button';button.className='action';button.dataset.costView=key;button.setAttribute('role','tab');button.setAttribute('aria-selected',String((this._costEvidenceView || 'chart')===key));button.textContent=this._t(label);
-        button.addEventListener('click',()=>{this._costEvidenceView=key;this._renderEnergyState();this.shadowRoot.querySelector(`[data-cost-view="${key}"]`)?.focus();});views.appendChild(button);
+        button.addEventListener('click',()=>{this._costEvidenceView=key;this._renderEnergyState();this._focusReportControl(this.shadowRoot.querySelector(`[data-cost-view="${key}"]`));});views.appendChild(button);
       }section.appendChild(views);
       const panel = document.createElement('div'); panel.setAttribute('role','tabpanel');
       const records = cost.records, daily = cost.daily || [];
@@ -2548,7 +2638,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const rerender = (selector, fallback) => {
         this._renderEnergyState();
         const target = this.shadowRoot.querySelector(selector);
-        (target && !target.disabled ? target : this.shadowRoot.querySelector(fallback || '[data-cost-view][aria-selected="true"]'))?.focus();
+        this._focusReportControl(target && !target.disabled ? target : this.shadowRoot.querySelector(fallback || '[data-cost-view][aria-selected="true"]'));
       };
       if (selected) {
         const detail = document.createElement('p'); detail.dataset.costSelectedDay = selected.from; detail.setAttribute('role','status');
@@ -2635,14 +2725,13 @@ function projectSmartReportV3(report, includePrivate = false) {
     }
 
     _renderEnergyViews(container) {
-      const nav = document.createElement('nav'); nav.className = 'report-views'; nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', this._t('Energy report views'));
+      const nav = document.createElement('nav'); nav.dataset.reportNav='energy'; nav.className = 'report-views'; nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', this._t('Energy report views'));
       for (const [key, label] of [['summary', 'Summary'], ['devices', 'Devices'], ['costs', 'Costs']]) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'action'; button.textContent = this._t(label); button.dataset.energyView = key; button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(this._energyView === key));
-        button.addEventListener('click', () => { this._energyView = key; this._renderEnergyState(); this.shadowRoot.querySelector('[data-energy-view][aria-selected="true"]')?.focus(); });
+        button.addEventListener('click', () => { this._energyView = key; this._renderEnergyState(); this._focusReportControl(this.shadowRoot.querySelector('[data-energy-view][aria-selected="true"]')); });
         nav.appendChild(button);
       }
       container.appendChild(nav);
-      if (this._focusedEnergyView) nav.querySelector(`[data-energy-view="${this._focusedEnergyView}"]`)?.focus();
     }
 
     _renderComparisonToggle(container) {
@@ -2686,8 +2775,8 @@ function projectSmartReportV3(report, includePrivate = false) {
       }
       section.appendChild(metrics);
       const note = document.createElement('p'); note.className = 'muted'; note.textContent = this._t('Recorded values cover available samples only; gaps are not zero.'); section.appendChild(note);
-      const nav = document.createElement('nav'); nav.className = 'report-views'; nav.setAttribute('role','tablist'); nav.setAttribute('aria-label',this._t('Previous period comparison'));
-      const rerender = selector => { this._renderEnergyState(); this.shadowRoot.querySelector(selector)?.focus(); };
+      const nav = document.createElement('nav'); nav.dataset.reportNav='comparison'; nav.className = 'report-views'; nav.setAttribute('role','tablist'); nav.setAttribute('aria-label',this._t('Previous period comparison'));
+      const rerender = selector => { this._renderEnergyState(); this._focusReportControl(this.shadowRoot.querySelector(selector)); };
       for (const [key,label] of [['chart','Chart'],['data','Data']]) {
         const button = document.createElement('button'); button.type='button'; button.className='action'; button.dataset.comparisonView=key;
         button.textContent=this._t(label); button.setAttribute('role','tab'); button.setAttribute('aria-selected',String((this._comparisonView || 'chart')===key));
@@ -2866,9 +2955,11 @@ function projectSmartReportV3(report, includePrivate = false) {
       if (!this._scaffoldRendered) return;
       const container = this.shadowRoot.getElementById('content'); const state = this._energyViewState || { status: 'idle' };
       const exportable = ['ready', 'partial', 'no_data'].includes(state.status);
-      const search = this.shadowRoot.activeElement;
-      const searchFocus = search?.classList.contains('device-search') ? {start:search.selectionStart,end:search.selectionEnd} : null;
-      this._focusedEnergyView = this.shadowRoot.activeElement && this.shadowRoot.activeElement.dataset.energyView;
+      const focused = this.shadowRoot.activeElement;
+      const remembered = this._rememberReportFocus(focused);
+      const focus = remembered || (focused === this._pendingReportFocus?.anchor ? this._pendingReportFocus.snapshot : null);
+      this._pendingReportFocus = null;
+      try {
       const tariffMarkup = this._config.energy_cost_mode === 'configured_tariff' ? this._tariffController().markup() : null;
       this.shadowRoot.getElementById('exportJsonBtn').disabled = !exportable; this.shadowRoot.getElementById('exportCsvBtn').disabled = !exportable; container.replaceChildren();
       this._renderTariffSettings(container, tariffMarkup);
@@ -2884,7 +2975,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       if (state.status === 'error') {
         const block = this._stateBlock('Couldn’t load energy statistics.', 'The previous period is not shown as current data.', 'error', 'alert');
         const details = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = this._t('Technical details'); const code = document.createElement('code'); code.textContent = state.code == null ? 'unknown_error' : String(state.code); details.append(summary, code); block.appendChild(details);
-        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'action'; retry.textContent = this._t('Retry'); retry.addEventListener('click', () => this._scheduleRefresh(true), { once: true }); block.appendChild(retry); container.appendChild(block); return;
+        const retry = document.createElement('button'); retry.type = 'button'; retry.dataset.reportControl = 'retry'; retry.className = 'action'; retry.textContent = this._t('Retry'); retry.addEventListener('click', () => this._scheduleRefresh(true), { once: true }); block.appendChild(retry); container.appendChild(block); return;
       }
       if (!['ready', 'partial', 'no_data'].includes(state.status)) return;
       const period = state.period || {}; const context = document.createElement('p'); context.className = 'muted report-context';
@@ -2923,7 +3014,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         if (shown.length) {
           container.appendChild(this._barChart(shown, 'Recorded energy by device', 'kWh', {scaleRows:this._energyView === 'devices' ? devices : shown,deviceContext:new Map(devices.map(row=>[row.statistic_id,row]))}));
           const note = document.createElement('p'); note.className = 'muted'; note.textContent = this._t('Device values have their own coverage; nested devices are included in their parent.'); container.appendChild(note);
-          if (this._energyView === 'summary' && devices.length > 6) { const all = document.createElement('button'); all.type = 'button'; all.className = 'action section'; all.textContent = this._t('See all devices'); all.addEventListener('click', () => { this._energyView = 'devices'; this._renderEnergyState(); }); container.appendChild(all); }
+          if (this._energyView === 'summary' && devices.length > 6) { const all = document.createElement('button'); all.type = 'button'; all.dataset.reportControl = 'all-devices'; all.className = 'action section'; all.textContent = this._t('See all devices'); all.addEventListener('click', () => { this._energyView = 'devices'; this._renderEnergyState(); }); container.appendChild(all); }
         } else { const empty = document.createElement('p'); empty.className = 'muted section'; empty.textContent = this._t(devices.length ? 'No matching devices' : 'No device statistics are configured.'); container.appendChild(empty); }
       }
       if (this._energyView !== 'devices') {
@@ -2931,7 +3022,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         else this._renderCostCoverage(container, state);
       }
       const evidence = document.createElement('details'); evidence.className = 'section source-evidence';
-      const evidenceHeading = document.createElement('summary'); evidenceHeading.textContent = this._t('Source evidence'); evidence.appendChild(evidenceHeading);
+      const evidenceHeading = document.createElement('summary'); evidenceHeading.dataset.reportControl = 'source-evidence'; evidenceHeading.textContent = this._t('Source evidence'); evidence.appendChild(evidenceHeading);
       const evidenceList = document.createElement('div'); evidenceList.className = 'list';
       const evidenceSources = [...(state.total_sources || []), ...(state.cost_sources || [])];
       if (this._energyView === 'devices' && String(this._deviceQuery || '').trim()) evidence.open = true;
@@ -2943,9 +3034,9 @@ function projectSmartReportV3(report, includePrivate = false) {
       }
       for (const warningText of state.warnings || []) { const warning = document.createElement('p'); warning.className = 'warning'; warning.textContent = this._warningText(warningText); evidenceList.appendChild(warning); }
       evidence.appendChild(evidenceList); container.appendChild(evidence);
-      if (searchFocus) {
-        const next = container.querySelector('.device-search'); next?.focus({preventScroll:true});
-        if (next && searchFocus.start != null) next.setSelectionRange(searchFocus.start,searchFocus.end);
+      } finally {
+        this._syncNavigation();
+        if (focus) this._restoreReportFocus(focus, state.status);
       }
     }
 
@@ -3259,14 +3350,21 @@ function projectSmartReportV3(report, includePrivate = false) {
 
   class HASmartReportsEditor extends HTMLElement {
     constructor() { super(); this.attachShadow({ mode: 'open' }); this._config = {}; }
-    setConfig(config) { this._config = config && typeof config === 'object' ? { ...config } : {}; this._render(); }
+    setConfig(config) {
+      const next = config && typeof config === 'object' ? { ...config } : {};
+      const same = JSON.stringify(next) === JSON.stringify(this._config);
+      this._config = next;
+      if (!same || !this.shadowRoot.firstChild) this._render();
+    }
     set hass(hass) {
       const language = languageOf(hass);
       const changed = language !== this._language;
       this._language = language; this._hass = hass;
-      if (changed) this._render();
+      if (changed) this._render(true);
     }
-    _render() {
+    _render(preserveDraft = false) {
+      const active = this.shadowRoot.activeElement;
+      const focus = active?.id ? {id:active.id,start:active.selectionStart,end:active.selectionEnd,direction:active.selectionDirection,value:active.value} : null;
       this.shadowRoot.replaceChildren();
       const style = document.createElement('style'); style.textContent = ':host{display:grid;gap:12px;padding:12px;color:var(--primary-text-color,#172033);font-family:system-ui,sans-serif}label{display:grid;gap:5px}input,select,textarea{min-height:44px;max-width:100%;min-width:0;box-sizing:border-box;font:inherit;padding:9px;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px;background:var(--card-background-color,#fff);color:inherit}input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--primary-color,#3b82f6);outline-offset:2px}[hidden]{display:none!important}';
       const field = (id, labelText, key) => { const label = document.createElement('label'); label.textContent = translate(this._hass, labelText); const input = document.createElement('input'); input.id = id; input.value = typeof this._config[key] === 'string' ? this._config[key] : ''; input.addEventListener('input', () => { this._config = { ...this._config, [key]: input.value }; this._dispatch(); }); label.appendChild(input); return label; };
@@ -3278,7 +3376,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const sources = document.createElement('section'); sources.style.cssText = 'display:grid;gap:12px'; sources.hidden = mode.value !== 'explicit';
       for (const [key, title] of [['energy_total_statistics', 'Total statistic IDs'], ['energy_device_statistics', 'Device statistic IDs'], ['energy_cost_statistics', 'Cost statistic IDs']]) {
         const label = document.createElement('label'); label.textContent = translate(this._hass, title);
-        const input = document.createElement('textarea'); input.rows = 3; input.style.cssText = 'font:inherit;width:100%;box-sizing:border-box;padding:9px;background:var(--card-background-color,#fff);color:inherit;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px';
+        const input = document.createElement('textarea'); input.id = `cf_${key}`; input.rows = 3; input.style.cssText = 'font:inherit;width:100%;box-sizing:border-box;padding:9px;background:var(--card-background-color,#fff);color:inherit;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px';
         input.value = (Array.isArray(this._config[key]) ? this._config[key] : []).map(value => typeof value === 'string' ? value : value && value.statistic_id).filter(value => typeof value === 'string').join('\n');
         input.addEventListener('change', () => {
           const previous = new Map((Array.isArray(this._config[key]) ? this._config[key] : []).filter(Boolean).map(value => [typeof value === 'string' ? value : value.statistic_id, value]));
@@ -3295,6 +3393,14 @@ function projectSmartReportV3(report, includePrivate = false) {
       costMode.value=['cost_statistics','flat_rate_estimate','configured_tariff'].includes(this._config.energy_cost_mode)?this._config.energy_cost_mode:'auto';costMode.addEventListener('change',()=>{this._config={...this._config,energy_cost_mode:costMode.value};this._dispatch();});costLabel.appendChild(costMode);
       this.shadowRoot.append(costLabel,rateLabel);
       mode.addEventListener('change', () => { this._config = { ...this._config, energy_source_mode: mode.value }; sources.hidden = mode.value !== 'explicit'; this._dispatch(); });
+      if (focus) {
+        const target = this.shadowRoot.getElementById(focus.id);
+        if (target && !target.closest('[hidden]')) {
+          if (preserveDraft) target.value = focus.value;
+          target.focus({preventScroll:true});
+          if (focus.start != null && typeof target.setSelectionRange === 'function') target.setSelectionRange(focus.start,focus.end,focus.direction);
+        }
+      }
     }
     _dispatch() { this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, bubbles: true, composed: true })); }
   }
