@@ -886,6 +886,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     'invalid_profile':'nieprawidłowa taryfa','mixed_rate_bucket':'zmiana stawki wewnątrz przedziału',
 
     'All hours':'Wszystkie godziny','Page':'Strona','Previous':'Poprzednia','Next':'Następna',
+    'Daily consumption views':'Widoki dziennego zużycia','Day details':'Szczegóły dnia','Clear day selection':'Wyczyść wybór dnia',
+    'Select a day for its interval and measurement coverage.':'Wybierz dzień, aby zobaczyć jego przedział i kompletność pomiarów.',
     'Hourly records':'Dane godzinowe','Daily overview':'Przegląd dzienny','UTC interval':'Przedział UTC',
     'Energy / kWh':'Energia / kWh','Zone':'Strefa','Status':'Stan',
     'Select a day to inspect its hours. Stripes show measured subsets; gaps are not zero.':'Wybierz dzień, aby zobaczyć godziny. Paski oznaczają zmierzoną część danych; brak danych nie oznacza zera.',
@@ -1678,7 +1680,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         <style>
           ${createUiV3({ language: languageOf(this._hass) }).css}
           :host{--sr-primary:var(--primary-color,#3b82f6);--sr-card:var(--card-background-color,var(--ha-card-background,#fff));--sr-text:var(--primary-text-color,#172033);--sr-muted:var(--secondary-text-color,#667085);--sr-border:var(--divider-color,#d9e0ea);--sr-good:#15803d;--sr-warn:#b45309;--sr-bad:#b42318;display:block;color:var(--sr-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}.card{background:var(--sr-card);border:1px solid var(--sr-border);border-radius:16px;overflow:hidden}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}h2,h3,p{margin:0}h2{font-size:20px}h3{font-size:15px}.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--sr-border);overflow-x:auto}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--sr-muted);padding:10px 12px}.tab.active{color:var(--sr-primary);border-bottom-color:var(--sr-primary);font-weight:650}.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 0}.toolbar-actions{display:flex;flex-wrap:wrap;gap:8px}.control,.action{min-height:44px;min-width:44px;max-width:100%;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);padding:8px 11px}.action.primary{background:var(--sr-primary);border-color:var(--sr-primary);color:#fff}.action:disabled{cursor:not-allowed;opacity:.45}.pane{padding:20px;min-height:220px}.state{display:grid;gap:12px;place-items:start;padding:22px;border:1px solid var(--sr-border);border-radius:12px}.state[role="status"]{border-left:4px solid var(--sr-primary)}.state.partial{border-left-color:var(--sr-warn)}.state.error{border-left-color:var(--sr-bad)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{border:1px solid var(--sr-border);border-radius:12px;padding:14px}.metric-label,.muted{color:var(--sr-muted);font-size:12px}.metric-value{margin-top:5px;font-size:23px;font-weight:720}.section{margin-top:18px}.list{display:grid;gap:8px;margin-top:10px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--sr-border);padding:9px 2px}.row.child{padding-left:24px}.row-name{overflow-wrap:anywhere}.status-ready{color:var(--sr-good)}.warning{color:var(--sr-warn)}.fixed-link{color:var(--sr-primary)}.donate-section{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;border-top:1px solid var(--sr-border);padding:13px 18px;color:var(--sr-muted);font-size:12px}.donate-section a{color:var(--sr-primary);text-decoration:none;min-height:44px;display:inline-flex;align-items:center}[hidden]{display:none!important}@media(max-width:520px){.header,.toolbar{align-items:stretch;flex-direction:column}.toolbar-actions{width:100%}.action{flex:1}}
-          .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:flex;gap:8px;overflow-x:auto;padding:16px 2px 8px;max-width:100%}.day-column{display:grid;gap:6px;text-align:center;flex:0 0 40px;color:var(--sr-muted);font-size:11px}.day-track{height:100px;display:flex;align-items:flex-end;background:var(--sr-border);border-radius:4px;overflow:hidden}.day-track .bar-fill{width:100%}.day-column.partial .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.day-column.partial .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.day-column.no_data .day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere;min-height:44px;display:flex;align-items:center;padding:8px 0}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
+          .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:grid;gap:12px;min-width:0;margin-top:14px}.daily-history h3,.daily-history p{overflow-wrap:anywhere}.daily-list{display:grid;gap:8px}.daily-day{display:grid;gap:6px;width:100%;text-align:left;line-height:1.4}.daily-day[aria-pressed="true"]{border-color:var(--sr-primary);box-shadow:inset 3px 0 var(--sr-primary)}.daily-label{font-size:12px;color:var(--sr-muted)}.daily-value{font-size:16px;font-variant-numeric:tabular-nums}.daily-coverage{font-size:12px;color:var(--sr-muted)}.daily-track{display:block;height:9px;background:var(--sr-border);border-radius:4px;overflow:hidden}.daily-track .bar-fill{display:block;min-width:0}.daily-day[data-availability="partial"] .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.daily-day[data-availability="no_data"] .daily-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.daily-detail{border:1px solid var(--sr-border);border-left:3px solid var(--sr-primary);border-radius:10px;padding:12px;display:grid;gap:8px;overflow-wrap:anywhere;line-height:1.5}.daily-detail h4{margin:0}.daily-detail p{font-size:12px}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere;min-height:44px;display:flex;align-items:center;padding:8px 0}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
           .tariff-evidence{display:grid;gap:12px;min-width:0}.tariff-evidence p,.tariff-evidence h4{overflow-wrap:anywhere}.tariff-day-chart{display:grid;gap:8px;margin-top:12px}.tariff-day-chart h4{margin:0;font-size:14px}.tariff-day{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;min-height:64px;min-width:44px;max-width:100%;padding:10px 12px;border:1px solid var(--sr-border);border-radius:10px;background:var(--sr-card);color:var(--sr-text);text-align:left;font:inherit}.tariff-day[aria-pressed=true]{border-color:var(--sr-primary);outline:1px solid var(--sr-primary)}.tariff-day strong{overflow-wrap:anywhere}.tariff-day small{grid-column:1/-1;color:var(--sr-muted);font-size:11px}.tariff-day-track{grid-column:1/-1;position:relative;height:8px;background:var(--sr-border);border-radius:4px;overflow:hidden}.tariff-day-track.signed{background:linear-gradient(to right,var(--sr-border) calc(50% - 1px),var(--sr-text) 50%,var(--sr-border) calc(50% + 1px))}.tariff-day-fill{position:absolute;top:0;height:100%;background:var(--sr-primary);border-radius:3px}.tariff-day[data-availability=partial] .tariff-day-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.tariff-day[data-availability=gap] .tariff-day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.tariff-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.tariff-pagination span{flex:1;min-width:0}.tariff-evidence button{min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}.tariff-data-row{border:1px solid var(--sr-border);border-radius:10px;padding:12px;margin-top:8px;min-width:0;overflow-wrap:anywhere}.tariff-data-row h4{font-size:13px;margin:0 0 8px}.tariff-data-row dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 12px;margin:0;font-size:12px}.tariff-data-row dt{color:var(--sr-muted)}.tariff-data-row dd{margin:0}.tariff-day:focus-visible{outline:3px solid var(--sr-primary);outline-offset:2px}
           .device-search-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0}.device-search-form label{flex:1;min-width:min(100%,180px);display:grid;gap:6px;font-size:13px}.device-search{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);font:inherit}.device-search-clear{min-height:44px;min-width:44px}.device-search:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.device-search-count,.device-export-note{overflow-wrap:anywhere;line-height:1.5}.chart-row small{overflow-wrap:anywhere}
           button,select,input:not([type="checkbox"]),summary,.fixed-link,.donate-section a{min-height:44px!important;min-width:44px;max-width:100%;box-sizing:border-box}
@@ -1803,7 +1805,7 @@ function projectSmartReportV3(report, includePrivate = false) {
           });
         }
         picker.setAttribute('aria-label', group.getAttribute('aria-label') || this._t('Report sections'));
-        const choices = buttons.map(button => ({value:button.dataset.tab || button.dataset.energyView || button.dataset.costView || button.dataset.comparisonView,label:button.textContent}));
+        const choices = buttons.map(button => ({value:button.dataset.tab || button.dataset.energyView || button.dataset.costView || button.dataset.comparisonView || button.dataset.dailyView,label:button.textContent}));
         const signature = JSON.stringify(choices);
         if (picker.dataset.choices !== signature) {
           picker.replaceChildren(...choices.map(choice => { const option = document.createElement('option'); option.value = choice.value; option.textContent = choice.label; return option; }));
@@ -1838,7 +1840,7 @@ function projectSmartReportV3(report, includePrivate = false) {
     _rememberReportFocus(target) {
       if (!target || !this.shadowRoot.getElementById('content')?.contains(target)) return null;
       if (target.classList.contains('device-search')) return {search:true,start:target.selectionStart,end:target.selectionEnd,direction:target.selectionDirection};
-      const names = ['data-report-picker','data-report-control','data-energy-view','data-cost-view','data-cost-day','data-cost-metric','data-cost-page','data-cost-chart-page','data-cost-clear-day','data-comparison-view','data-comparison-day','data-comparison-metric','data-side','data-comparison-data-page','data-comparison-chart-page','data-comparison-clear','data-compare-previous-period'];
+      const names = ['data-daily-view','data-daily-day','data-daily-page','data-daily-clear','data-report-picker','data-report-control','data-energy-view','data-cost-view','data-cost-day','data-cost-metric','data-cost-page','data-cost-chart-page','data-cost-clear-day','data-comparison-view','data-comparison-day','data-comparison-metric','data-side','data-comparison-data-page','data-comparison-chart-page','data-comparison-clear','data-compare-previous-period'];
       const attributes = names.filter(name => target.hasAttribute(name)).map(name => [name,target.getAttribute(name)]);
       return attributes.length ? {tag:target.localName,attributes} : null;
     }
@@ -2889,20 +2891,80 @@ function projectSmartReportV3(report, includePrivate = false) {
     _renderDailyChart(container, state) {
       const days = state.daily || [];
       if (!days.length) return;
-      const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = this._t('Recorded consumption by day'); container.appendChild(heading);
-      const chart = document.createElement('section'); chart.className = 'daily-history'; chart.setAttribute('role', 'region'); chart.setAttribute('aria-label', this._t('Recorded consumption by day')); chart.tabIndex = 0;
-      const max = Math.max(0, ...days.map(day => day.recorded_value || 0));
-      for (const day of days) {
-        const item = document.createElement('div'); item.className = `day-column ${day.status}`;
-        const text = `${this._formatPeriodDate(day.start, state.period.time_zone)} · ${this._formatNumber(day.recorded_value, 2)} kWh · ${this._t(day.status)} · ${this._formatNumber(day.observed_source_hours, Number.isInteger(day.observed_source_hours) ? 0 : 2)} / ${this._formatNumber(day.expected_source_hours, Number.isInteger(day.expected_source_hours) ? 0 : 2)} ${this._t('source hours')}`;
-        item.setAttribute('role', 'img'); item.setAttribute('aria-label', text); item.title = text;
-        const value = document.createElement('small'); value.textContent = this._formatNumber(day.recorded_value, 2);
-        const track = document.createElement('div'); track.className = 'day-track'; const bar = document.createElement('div'); bar.className = 'bar-fill'; bar.style.height = `${max > 0 && day.recorded_value != null ? Math.max(0, Math.min(100, day.recorded_value / max * 100)) : 0}%`; track.appendChild(bar);
-        const label = document.createElement('small'); label.textContent = new Intl.DateTimeFormat(languageOf(this._hass), { day: 'numeric', month: 'numeric', timeZone: state.period.time_zone }).format(new Date(day.start));
-        item.append(value, track, label); chart.appendChild(item);
+      const zone = state.period.time_zone;
+      const windowKey = JSON.stringify([state.period.start, state.period.end, zone]);
+      if (this._dailyWindow !== windowKey) {
+        this._dailyWindow = windowKey;
+        this._dailySelectedDay = null;
+        this._dailyPage = 0;
       }
-      container.appendChild(chart);
-      const note = document.createElement('p'); note.className = 'muted'; note.textContent = this._t('Striped days have incomplete history; empty days are not measured zero.'); container.appendChild(note);
+      const selected = days.find(day => day.start === this._dailySelectedDay);
+      if (!selected) this._dailySelectedDay = null;
+      const view = this._dailyView || 'chart';
+      const pages = Math.max(1, Math.ceil(days.length / 7));
+      this._dailyPage = Math.max(0, Math.min(pages - 1, this._dailyPage || 0));
+      const section = document.createElement('section'); section.className = 'daily-history section';
+      section.setAttribute('aria-label', this._t('Recorded consumption by day'));
+      const heading = document.createElement('h3'); heading.textContent = this._t('Recorded consumption by day'); section.appendChild(heading);
+      const note = document.createElement('p'); note.className = 'muted';
+      note.textContent = `${this._t('Select a day for its interval and measurement coverage.')} ${this._t('Striped days have incomplete history; empty days are not measured zero.')}`; section.appendChild(note);
+      const rerender = selector => {
+        this._renderEnergyState();
+        const target = this.shadowRoot.querySelector(selector);
+        this._focusReportControl(target && !target.disabled ? target : this.shadowRoot.querySelector('[data-daily-view][aria-selected="true"]'));
+      };
+      const views = document.createElement('div'); views.className = 'report-views'; views.dataset.reportNav = 'daily';
+      views.setAttribute('role', 'tablist'); views.setAttribute('aria-label', this._t('Daily consumption views'));
+      for (const [key, label] of [['chart', 'Chart'], ['data', 'Data']]) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'action'; button.dataset.dailyView = key;
+        button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(view === key)); button.textContent = this._t(label);
+        button.addEventListener('click', () => { this._dailyView = key; rerender(`[data-daily-view="${key}"]`); }); views.appendChild(button);
+      }
+      section.appendChild(views);
+      const panel = document.createElement('div'); panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-label', this._t(view === 'chart' ? 'Chart' : 'Data'));
+      const list = document.createElement('div'); list.className = 'daily-list';
+      const maximum = Math.max(0, ...days.map(day => day.recorded_value || 0));
+      const energy = day => `${this._formatNumber(day.recorded_value, 2)} ${day.unit}`;
+      const coverage = day => `${this._t(day.status)} · ${this._formatNumber(day.observed_source_hours, Number.isInteger(day.observed_source_hours) ? 0 : 2)} / ${this._formatNumber(day.expected_source_hours, Number.isInteger(day.expected_source_hours) ? 0 : 2)} ${this._t('source hours')}`;
+      for (const day of days.slice(this._dailyPage * 7, (this._dailyPage + 1) * 7)) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'action daily-day';
+        button.dataset.dailyDay = day.start; button.dataset.availability = day.status; button.setAttribute('aria-pressed', String(day === selected));
+        const date = document.createElement('span'); date.className = 'daily-label';
+        date.textContent = new Intl.DateTimeFormat(languageOf(this._hass), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: zone }).format(new Date(day.start));
+        const value = document.createElement('strong'); value.className = 'daily-value'; value.textContent = energy(day);
+        const status = document.createElement('span'); status.className = 'daily-coverage'; status.textContent = coverage(day);
+        button.append(date, value, status);
+        if (view === 'chart') {
+          const track = document.createElement('span'); track.className = 'daily-track'; track.setAttribute('aria-hidden', 'true');
+          const fill = document.createElement('span'); fill.className = 'bar-fill';
+          fill.style.width = `${maximum > 0 && day.recorded_value != null ? Math.max(0, Math.min(100, day.recorded_value / maximum * 100)) : 0}%`;
+          track.appendChild(fill); button.appendChild(track);
+        }
+        button.addEventListener('click', () => { this._dailySelectedDay = day.start; rerender(`[data-daily-day="${day.start}"]`); });
+        list.appendChild(button);
+      }
+      panel.appendChild(list);
+      const nav = document.createElement('nav'); nav.className = 'tariff-pagination'; nav.setAttribute('aria-label', this._t('Daily overview'));
+      const page = document.createElement('span'); page.textContent = `${this._t('Page')} ${this._dailyPage + 1}/${pages}`; nav.appendChild(page);
+      for (const [key, label, offset] of [['previous', 'Previous', -1], ['next', 'Next', 1]]) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'action'; button.dataset.dailyPage = key; button.textContent = this._t(label);
+        button.disabled = this._dailyPage + offset < 0 || this._dailyPage + offset >= pages;
+        button.addEventListener('click', () => { this._dailyPage += offset; rerender(`[data-daily-page="${key}"]`); }); nav.appendChild(button);
+      }
+      panel.appendChild(nav);
+      if (selected) {
+        const detail = document.createElement('section'); detail.className = 'daily-detail'; detail.dataset.dailyDetail = selected.start; detail.setAttribute('role', 'status');
+        const title = document.createElement('h4'); title.textContent = this._t('Day details'); detail.appendChild(title);
+        for (const text of [
+          `${this._formatPeriodDate(selected.start, zone)} – ${this._formatPeriodDate(selected.end, zone)} · ${zone}`,
+          `${energy(selected)} · ${coverage(selected)}`,
+          `${this._t('UTC interval')}: ${selected.start} → ${selected.end}`,
+        ]) { const line = document.createElement('p'); line.textContent = text; detail.appendChild(line); }
+        const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'action'; clear.dataset.dailyClear = ''; clear.textContent = this._t('Clear day selection');
+        clear.addEventListener('click', () => { this._dailySelectedDay = null; rerender(`[data-daily-day="${selected.start}"]`); }); detail.appendChild(clear);
+        panel.appendChild(detail);
+      }
+      section.appendChild(panel); container.appendChild(section);
     }
 
     _renderCostCoverage(container, state) {
@@ -2989,6 +3051,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       if (state.comparison) this._renderPeriodComparison(container, state.comparison);
       if (state.status === 'no_data') {
         container.appendChild(this._stateBlock('No recorded energy change in this period.', 'Measured zero is rendered separately; this state means no recorder samples were available.', '', 'status', 'no_data'));
+        this._renderDailyChart(container, state);
         if (period.start === period.end) { const note = document.createElement('p'); note.className = 'muted section'; note.textContent = this._t('Today starts reporting after its first completed hour.'); container.appendChild(note); }
         return;
       }
