@@ -930,6 +930,13 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "Missing energy days": "Dni z brakami energii",
     "Missing cost days": "Dni z brakami kosztu",
     "Role": "Rola",
+    "Change in measured energy": "Zmiana zmierzonej energii",
+    "Change in energy cost": "Zmiana kosztu energii",
+    "Daily allocation": "Przypisanie do dnia",
+    "Whole reading in this day": "Cały pomiar w tym dniu",
+    "device": "urządzenie",
+    "priced_energy": "koszt zmierzonej energii",
+    "crosses_local_midnight": "Pełna godzina przecina lokalną północ; zachowana w Wszystkie godziny, bez dzielenia pomiaru",
     "Recorded value": "Zarejestrowana wartość",
     "complete_comparable_measurements": "Pełne porównywalne pomiary",
     "ambiguous_local_cutoff": "Niejednoznaczna lokalna godzina odcięcia",
@@ -1084,7 +1091,12 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     return ({ missing_measurement: 'Missing measurement', shared_backend: 'Shared tariff settings', card_config: 'Card settings',
       gross: 'Gross', net: 'Net', nonaligned_window: 'Window does not cover complete hours',
       tariff_authority_unavailable: 'Tariff settings unavailable', tariff_unconfirmed: 'Tariff settings unconfirmed',
-      invalid_profile: 'Invalid tariff', mixed_rate_bucket: 'Rate changes within this interval' })[text] || (text === 'day_suffix' ? 'd' : text);
+      invalid_profile: 'Invalid tariff', mixed_rate_bucket: 'Rate changes within this interval',
+      priced_energy: 'Priced energy', crosses_local_midnight: 'Whole hour crosses local midnight; retained in All hours without splitting the reading',
+      complete_comparable_measurements: 'Complete comparable measurements', ambiguous_local_cutoff: 'Ambiguous local cutoff time',
+      nonexistent_local_cutoff: 'Local cutoff time does not exist', historical_flat_rate_unavailable: 'Confirmed historical flat rate unavailable',
+      previous_zero: 'Previous value is zero; percentage unavailable', previous_nonpositive: 'Previous value is negative; percentage unavailable',
+      nonfinite_delta: 'Change exceeds numeric range', unit_mismatch: 'Incompatible units' })[text] || (text === 'day_suffix' ? 'd' : text);
   }
 
   function uniqueById(items) {
@@ -1563,6 +1575,12 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           unit: state.cost.currency, status: 'no_data', observed_source_hours: 0, expected_source_hours: (Date.parse(energy.end)-Date.parse(energy.start))/3600000 },
       }));
       const records = [];
+      // Daily charts retain only whole readings contained in one local day.
+      // Crossing measurements remain intact in All hours and full exports.
+      const dayAllocation = (from, to) => {
+        const day_index = daily.findIndex(day => Date.parse(day.start) <= from && Date.parse(day.end) >= to);
+        return { day_index, day_allocation_reason: day_index < 0 ? 'crosses_local_midnight' : null };
+      };
       const references = [...selection.totals, ...selection.costs, ...selection.devices];
       const summaries = new Map([...state.total_sources, ...state.cost_sources, ...state.devices].map(source => [`${source.role}:${source.statistic_id}`, source]));
       for (const source of references) {
@@ -1573,7 +1591,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           const samples = buckets.filter(bucket => numericTime(bucket.end) > from && numericTime(bucket.start) < to);
           const measured = this._summarizeSeries(samples, metadata[source.statistic_id], { start: new Date(from), end: new Date(to) }, source.role, this._hass.config?.currency);
           const parts = this._partsInZone(new Date(from), period.time_zone);
-          records.push({ side, day_index: daily.findIndex(day => Date.parse(day.start) <= from && Date.parse(day.end) > from),
+          records.push({ side, ...dayAllocation(from, to),
             local_date: `${parts.year}-${String(parts.month).padStart(2,'0')}-${String(parts.day).padStart(2,'0')}`,
             from: new Date(from).toISOString(), to: new Date(to).toISOString(), statistic_id: source.statistic_id, role: source.role,
             source_statistic_ids: [source.statistic_id], label: summary?.label || source.statistic_id,
@@ -1584,8 +1602,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         }
       }
       if (state.cost.method === 'configured_tariff') for (const record of state.cost.records || []) {
-        records.push({ side, day_index: daily.findIndex(day => Date.parse(day.start) <= Date.parse(record.from) && Date.parse(day.end) > Date.parse(record.from)),
-          role: 'priced_energy', statistic_id: null, ...record });
+        records.push({ side, role: 'priced_energy', statistic_id: null, ...record,
+          ...dayAllocation(Date.parse(record.from), Date.parse(record.to)) });
       }
       // Safe allowlisted export snapshots, never profile, draft, config or tickets.
       const safeCost = { value: finite(state.cost.value), currency: state.cost.currency || null, method: state.cost.method,
@@ -2222,6 +2240,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     }
 
     _renderComparisonToggle(container) {
+      const style = document.createElement('style'); style.textContent = `.comparison-toggle{display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer;overflow-wrap:anywhere}.comparison-toggle input{flex-shrink:0;width:20px;height:20px;accent-color:var(--sr-primary)}`;
+      container.appendChild(style);
       const label = document.createElement('label'); label.className = 'comparison-toggle section';
       const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = this._config.compare_previous_period === true;
       checkbox.dataset.comparePreviousPeriod = '';
@@ -2238,11 +2258,10 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       const section = document.createElement('section'); section.className = 'comparison section'; section.dataset.comparison = '';
       // Scoped styles keep the existing Smart19 settings and chart CSS intact.
       const style = document.createElement('style'); style.textContent = `
-        .comparison-toggle{display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer}.comparison-toggle input{width:20px;height:20px;accent-color:var(--sr-primary)}
-        .comparison{border:1px solid var(--sr-border);border-radius:12px;padding:16px;min-width:0}.comparison p,.comparison dd{overflow-wrap:anywhere}.comparison-context{font-size:12px;line-height:1.6}.comparison .summary{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))}
+        .comparison{container-type:inline-size;container-name:smart-comparison;border:1px solid var(--sr-border);border-radius:12px;padding:16px;min-width:0}.comparison p,.comparison dd{overflow-wrap:anywhere}.comparison-context{font-size:12px;line-height:1.6}.comparison .summary{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))}
         .comparison-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}.comparison-day{font:inherit;background:var(--sr-card);color:var(--sr-text);border:1px solid var(--sr-border);border-radius:8px;padding:10px;text-align:left;display:grid;gap:6px;min-width:0;min-height:44px;cursor:pointer}.comparison-day[aria-pressed=true]{outline:2px solid var(--sr-primary);outline-offset:1px}.comparison-day strong,.comparison-day small{overflow-wrap:anywhere}.comparison-day[data-availability=partial]{border-style:dashed}.comparison-day[data-availability=gap]{opacity:.8}
         .comparison-track{height:10px;position:relative;border-radius:4px;background:var(--sr-border);overflow:hidden;display:block}.comparison-track.signed:after{content:'';position:absolute;left:50%;height:100%;border-left:1px solid var(--sr-text)}.comparison-fill{position:absolute;top:0;height:100%;background:var(--sr-primary);max-width:100%}.comparison-day[data-side=previous] .comparison-fill{background:var(--sr-text);opacity:.65}.comparison-day[data-availability=partial] .comparison-fill{background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,var(--sr-card) 4px,var(--sr-card) 6px)}
-        .comparison-record{border-bottom:1px solid var(--sr-border);padding:12px 0}.comparison-record dl{display:grid;grid-template-columns:minmax(90px,1fr) minmax(0,3fr);gap:6px}.comparison-record dd{margin:0}.comparison button:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}@media(max-width:420px){.comparison-pair{grid-template-columns:minmax(0,1fr)}.comparison-record dl{grid-template-columns:minmax(0,1fr)}}`;
+        .comparison-record{border-bottom:1px solid var(--sr-border);padding:12px 0}.comparison-record dl{display:grid;grid-template-columns:minmax(90px,1fr) minmax(0,3fr);gap:6px}.comparison-record dd{margin:0}.comparison button:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}@container smart-comparison (max-width:500px){.comparison-pair{grid-template-columns:minmax(0,1fr)}.comparison-record dl{grid-template-columns:minmax(0,1fr)}}`;
       section.appendChild(style);
       const heading = document.createElement('h3'); heading.textContent = this._t('Previous period comparison'); section.appendChild(heading);
       for (const [side,snapshot] of [['current',pair.current],['previous',pair.previous]]) {
@@ -2251,9 +2270,9 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           : `${this._t('Previous period')}: — · ${this._t(pair.reason || 'unavailable')} · ${JSON.stringify(pair.requested_local_cutoff)}`;
         section.appendChild(context);
       }
-      const scope = document.createElement('p'); scope.className = 'muted comparison-context'; scope.textContent = `${this._t('Source evidence')}: ${pair.scope.map(source => `${source.role}: ${source.statistic_id} (${source.unit || '—'})`).join(' · ')}`; section.appendChild(scope);
+      const scope = document.createElement('p'); scope.className = 'muted comparison-context'; scope.textContent = `${this._t('Source evidence')}: ${pair.scope.map(source => `${this._t(source.role)}: ${source.statistic_id} (${source.unit || '—'})`).join(' · ')}`; section.appendChild(scope);
       const metrics = document.createElement('div'); metrics.className = 'summary';
-      for (const [key,label] of [['energy','Measured energy'],['cost','Priced energy']]) {
+      for (const [key,label] of [['energy','Change in measured energy'],['cost','Change in energy cost']]) {
         const metric = pair.metrics[key];
         metrics.appendChild(this._metric(label, `${this._formatNumber(metric.delta,2)} ${metric.unit || ''} · ${this._formatNumber(metric.percent,2)}%`));
         const reason = document.createElement('p'); reason.className = 'muted comparison-context'; reason.dataset.comparisonReason = key;
@@ -2290,7 +2309,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
           const row=document.createElement('article');row.className='comparison-record';row.dataset.comparisonRecord=record.from;row.dataset.comparisonDay=pair.daily[record.day_index]?.current.start || '';row.dataset.side=record.side;
           const title=document.createElement('h4');title.textContent=`${this._t(record.side==='current'?'Current period':'Previous period')} · ${this._formatPeriodDate(record.from,pair.current.period.time_zone)} → ${this._formatPeriodDate(record.to,pair.current.period.time_zone)}`;row.appendChild(title);
           const dl=document.createElement('dl');const priced=record.role==='priced_energy';
-          const fields = [['Sources',(record.source_statistic_ids || []).join(', ')],['Role',record.role],['Recorded value',`${this._formatNumber(priced?record.energyCost:record.recorded_value,2)} ${priced?record.currency:record.unit || ''}`],['Status',record.reason || record.status || (record.available?'ready':'partial')],['source hours',record.coverage?`${record.coverage.observed_hours}/${record.coverage.expected_hours}`:priced?`${record.available?1:0}/1`:'—'],['UTC interval',`${record.from} → ${record.to}`]];
+          const fields = [['Sources',(record.source_statistic_ids || []).join(', ')],['Role',this._t(record.role)],['Recorded value',`${this._formatNumber(priced?record.energyCost:record.recorded_value,2)} ${priced?record.currency:record.unit || ''}`],['Status',this._t(record.reason || record.status || (record.available?'ready':'partial'))],['Daily allocation',this._t(record.day_allocation_reason || 'Whole reading in this day')],['source hours',record.coverage?`${record.coverage.observed_hours}/${record.coverage.expected_hours}`:priced?`${record.available?1:0}/1`:'—'],['UTC interval',`${record.from} → ${record.to}`]];
           if(priced)fields.push(['Measured energy',`${this._formatNumber(record.kwh,2)} kWh`],['Energy / kWh',`${this._formatNumber(record.energyRate,4)} ${record.currency || '—'}/kWh`],['Zone',(record.zones || []).join(', ') || '—'],['Revision',String(record.revision ?? '—')]);
           for(const [label,value] of fields){const dt=document.createElement('dt');dt.textContent=this._t(label);const dd=document.createElement('dd');dd.textContent=value;dl.append(dt,dd);}row.appendChild(dl);panel.appendChild(row);
         }
@@ -2312,7 +2331,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
               const status=document.createElement('small');status.textContent=`${this._t(metric?.status || 'no_data')} · ${this._formatNumber(metric?.observed_source_hours,2)}/${this._formatNumber(metric?.expected_source_hours,2)} ${this._t('source hours')}`;
               const track=document.createElement('span');track.className=`comparison-track${signed?' signed':''}`;track.setAttribute('aria-hidden','true');
               if(typeof value==='number'&&Number.isFinite(value)){const fill=document.createElement('span');fill.className='comparison-fill';const width=scale?Math.min(signed?50:100,Math.abs(value)/scale*(signed?50:100)):0;fill.style.width=`${width}%`;fill.style.left=`${signed?(value<0?50-width:50):0}%`;track.appendChild(fill);}
-              button.title=snapshot?`${snapshot.start} → ${snapshot.end}`:pair.reason || 'unavailable';button.append(date,amount,status,track);
+              button.title=snapshot?`${snapshot.start} → ${snapshot.end}`:this._t(pair.reason || 'unavailable');button.append(date,amount,status,track);
               button.addEventListener('click',()=>{this._comparisonSelectedDay=day.current.start;this._comparisonDataPage=0;rerender(`[data-comparison-day="${day.current.start}"][data-comparison-metric="${key}"][data-side="${side}"]`);});group.appendChild(button);
             }chart.appendChild(group);
           }panel.appendChild(chart);
