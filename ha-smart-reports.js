@@ -2064,7 +2064,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       const max = Math.max(0, ...days.map(day => day.recorded_value || 0));
       for (const day of days) {
         const item = document.createElement('div'); item.className = `day-column ${day.status}`;
-        const text = `${this._formatPeriodDate(day.start, state.period.time_zone)} · ${this._formatNumber(day.recorded_value, 2)} kWh · ${this._t(day.status)} · ${this._formatNumber(day.observed_source_hours, 0)} / ${this._formatNumber(day.expected_source_hours, 0)} ${this._t('source hours')}`;
+        const text = `${this._formatPeriodDate(day.start, state.period.time_zone)} · ${this._formatNumber(day.recorded_value, 2)} kWh · ${this._t(day.status)} · ${this._formatNumber(day.observed_source_hours, Number.isInteger(day.observed_source_hours) ? 0 : 2)} / ${this._formatNumber(day.expected_source_hours, Number.isInteger(day.expected_source_hours) ? 0 : 2)} ${this._t('source hours')}`;
         item.setAttribute('role', 'img'); item.setAttribute('aria-label', text); item.title = text;
         const value = document.createElement('small'); value.textContent = this._formatNumber(day.recorded_value, 2);
         const track = document.createElement('div'); track.className = 'day-track'; const bar = document.createElement('div'); bar.className = 'bar-fill'; bar.style.height = `${max > 0 && day.recorded_value != null ? Math.max(0, Math.min(100, day.recorded_value / max * 100)) : 0}%`; track.appendChild(bar);
