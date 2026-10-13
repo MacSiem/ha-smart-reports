@@ -3,7 +3,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {mountCard,makeHass,metadata,explicitConfig}=require('./helpers/smart-reports-harness.cjs');
 const expected={idle:'not_checked',loading:'not_checked',not_configured:'not_checked',unsupported:'error',permission_denied:'error',error:'error',no_data:'no_data',partial:'partial'};
-const labels={en:{not_checked:'– Not checked',error:'✕ Error',no_data:'∅ No data',partial:'½ Partial'},pl:{not_checked:'– Niesprawdzony',error:'✕ Błąd',no_data:'∅ Brak danych',partial:'½ Częściowo'}};
+const labels={en:{not_checked:'– Not checked',error:'✕ Error',no_data:'∅ No data',partial:'½ Partial'},pl:{not_checked:'– Nie sprawdzono',error:'✕ Błąd',no_data:'∅ Brak danych',partial:'½ Częściowo'}};
 for(const language of ['en','pl']) for(const [state,result] of Object.entries(expected)) test(`${language}: ${state} has the exact family outcome beside its useful explanation`,async()=>{
  const hass=makeHass({metadataById:{'sensor.grid_import':metadata()}});hass.language=language;
  const f=await mountCard({hass,config:explicitConfig()});
