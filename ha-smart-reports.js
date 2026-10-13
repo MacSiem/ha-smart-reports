@@ -1034,6 +1034,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "outside_requested_window": "poza wybranym zakresem",
     "missing_change": "brak danych zmiany",
     "incomplete_coverage": "niepełne pokrycie okresu",
+    "Boundary intervals without a complete hourly measurement": "Przedziały graniczne bez pełnego pomiaru godzinowego",
     "invalid_relationship": "nieprawidłowe powiązanie urządzeń",
     "nested_parent_missing": "brak nadrzędnego źródła urządzenia",
     "currency_mismatch": "niezgodna waluta",
@@ -1742,7 +1743,17 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       if (!model.valid) return unavailable(snapshot?.reason || 'invalid_profile');
       const start = numericTime(period.start), end = numericTime(period.end), hour = 3600000;
       if (!roots.length || new Set(roots.map(s => s.statistic_id)).size !== roots.length || roots.some(s => s.role !== 'total' || s.included_in_stat)) return unavailable('invalid_root_sources');
-      if (start === null || end === null || end <= start || start % hour || end % hour || (end - start) / hour > 744) return unavailable('nonaligned_window');
+      if (start === null || end === null || end <= start || (end - start) / hour > 744) return unavailable('nonaligned_window');
+      const firstHour = Math.ceil(start / hour) * hour, lastHour = Math.floor(end / hour) * hour;
+      // Recorder measures complete UTC hours. Non-hour local midnight boundaries
+      // stay unknown; neither prorate a reading nor shorten the requested period.
+      const unmeasuredIntervals = [];
+      const boundary = (from, to) => Object.freeze({ from: new Date(from).toISOString(), to: new Date(to).toISOString(), reason: 'nonaligned_boundary' });
+      if (firstHour >= lastHour && (start % hour || end % hour)) unmeasuredIntervals.push(boundary(start, end));
+      else {
+        if (firstHour > start) unmeasuredIntervals.push(boundary(start, firstHour));
+        if (lastHour < end) unmeasuredIntervals.push(boundary(lastHour, end));
+      }
       const common = new Map(), fatal = new Map(), ids = roots.map(s => s.statistic_id);
       for (const source of roots) {
         const id = source.statistic_id, md = metadata[id], unit = this._metadataUnit(md);
@@ -1750,10 +1761,10 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         const series = statistics[id];
         if (series != null && !Array.isArray(series)) { fatal.set(id, 'invalid_measurement'); continue; }
         const sorted = (series || []).map(b => ({ from: numericTime(b?.start), to: numericTime(b?.end), change: b?.change })).sort((a,b) => a.from - b.from);
-        if (sorted.some((b,i) => b.from === null || b.to === null || b.to - b.from !== hour || b.from % hour || b.from < start || b.to > end ||
+        if (sorted.some((b,i) => b.from === null || b.to === null || b.to - b.from !== hour || b.from % hour || b.from < Math.floor(start / hour) * hour || b.to > Math.ceil(end / hour) * hour ||
           (i && b.from < sorted[i-1].to) || (b.change != null && (typeof b.change !== 'number' || !Number.isFinite(b.change) || b.change < 0)))) { fatal.set(id, 'invalid_measurement'); continue; }
         const factor = unit === 'Wh' ? 0.001 : unit === 'MWh' ? 1000 : 1;
-        for (const b of sorted) if (typeof b.change === 'number') {
+        for (const b of sorted) if (b.from >= firstHour && b.to <= lastHour && typeof b.change === 'number') {
           const kwh = b.change * factor;
           if (!Number.isFinite(kwh)) { fatal.set(id, 'nonfinite_measurement'); break; }
           if (!common.has(b.from)) common.set(b.from, new Map()); common.get(b.from).set(id, kwh);
@@ -1762,14 +1773,14 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       // No root overlap assumption is inferred from devices or residual values.
       // Each complete common hour is measured once across the explicitly selected roots.
       const measured = [];
-      if (!fatal.size) for (let from = start; from < end; from += hour) {
+      if (!fatal.size) for (let from = firstHour; from < lastHour; from += hour) {
         const contributions = common.get(from);
         if (contributions?.size === roots.length) measured.push({ from, to: from + hour, kwh: [...contributions.values()].reduce((a,b) => a+b,0) });
       }
       const priced = model.priceBuckets(measured, { from: start, to: end });
       const byHour = new Map(priced.rows.map(row => [row.from, row])), measuredByHour = new Map(measured.map(row => [row.from,row]));
       const records = [];
-      for (let from = start; from < end; from += hour) {
+      for (let from = firstHour; from < lastHour; from += hour) {
         const p = byHour.get(from), available = p?.available === true;
         const contributions = common.get(from), reason = available ? null : p?.reason || (fatal.size ? [...fatal.values()][0] : 'missing_measurement');
         records.push(Object.freeze({ from: new Date(from).toISOString(), to: new Date(from + hour).toISOString(),
@@ -1792,7 +1803,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
         current_profile_validity: Object.freeze({ available: current.available, reason: current.reason || null, checked_at: this._now().toISOString() }),
         coverage: Object.freeze({ observed_hours: ready.length, expected_hours: (end-start)/hour,
           observed_source_hours: observedSourceHours, expected_source_hours: roots.length * (end-start)/hour,
-          complete: priced.complete, measured_subset: !priced.complete && ready.length > 0 }) });
+          complete: priced.complete, measured_subset: !priced.complete && ready.length > 0,
+          unmeasured_intervals: Object.freeze(unmeasuredIntervals) }) });
     }
 
     _tariffDailyRecords(period, records) {
@@ -1870,6 +1882,11 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       const text = document.createElement('p'); text.className = 'muted';
       text.textContent = `${this._t('Measured hours')}: ${cost.coverage.observed_hours}/${cost.coverage.expected_hours} · ${cost.currency || '—'} · ${this._t(cost.price_basis || '—')} · ${cost.tariff_timezone || '—'} · ${this._t('Revision')}: ${cost.revision ?? '—'} · ${this._t(cost.provenance || 'unavailable')} · ${this._t('Current profile validity')}: ${this._t(cost.current_profile_validity?.available ? 'ready' : cost.current_profile_validity?.reason || cost.reason || 'unavailable')}`;
       section.appendChild(text);
+      for (const interval of cost.coverage.unmeasured_intervals || []) {
+        const gap = document.createElement('p'); gap.className = 'warning'; gap.dataset.tariffBoundary = '';
+        gap.textContent = `${this._t('Boundary intervals without a complete hourly measurement')}: ${this._formatPeriodDate(interval.from, this._energyViewState.period.time_zone)} – ${this._formatPeriodDate(interval.to, this._energyViewState.period.time_zone)}`;
+        section.appendChild(gap);
+      }
       const note = document.createElement('p'); note.textContent = this._t('Energy cost only; variable and fixed fees are separate. This is not a complete electricity bill.'); section.appendChild(note);
       if (cost.value === null) {
         const subset = document.createElement('p'); subset.setAttribute('role','status');
