@@ -19,14 +19,15 @@ test('daily chart and Data keep actual recorder values, zero, missing, partial a
  const f=await fixture();try{
  const days=f.c._energyViewState.daily;assert.equal(days.length,7);assert.ok(days.some(d=>d.expected_source_hours===25));assert.ok(days.some(d=>d.recorded_value===0));assert.ok(days.some(d=>d.status==='no_data'));assert.ok(days.some(d=>d.status==='partial'));
  const chart=dayNodes(f);assert.equal(chart.length,7);
- for(const day of days){const n=chart.find(n=>n.dataset.dailyDay===day.start);assert.ok(n);assert.ok(n.textContent.includes(`${f.c._formatNumber(day.recorded_value,2)} kWh`));assert.ok(n.textContent.includes(f.c._t(day.status)));assert.equal(n.dataset.availability,day.status);}
+ for(const day of days){const n=chart.find(n=>n.dataset.dailyDay===day.start);assert.ok(n);assert.ok(n.textContent.includes(`${f.c._formatNumber(day.recorded_value,2)} kWh`));assert.ok(n.textContent.includes(f.c._t(day.status==='ready'?'Complete history':day.status==='partial'?'Partial history':'No measurements')));assert.equal(n.dataset.availability,day.status);}
+ const maximum=Math.max(...days.map(d=>d.recorded_value||0));for(const day of days){const bar=chart.find(n=>n.dataset.dailyDay===day.start).querySelector('.bar-fill');assert.equal(parseFloat(bar.style.width),day.recorded_value?day.recorded_value/maximum*100:0);}
  const texts=chart.map(n=>n.textContent);f.root.querySelector('[data-daily-view="data"]').click();assert.deepEqual(dayNodes(f).map(n=>n.textContent),texts);assert.equal(f.root.querySelector('.daily-track'),null);
  }finally{f.close();}
 });
 test('day selection exposes exact interval/coverage without fetching or changing full JSON/CSV',async()=>{
  const f=await fixture();try{const stamp=new Date('2026-10-26T12:00:00Z'),before=JSON.stringify(f.c._buildExportDocument(stamp)),csv=f.c._buildCsv(JSON.parse(before)),calls=f.hass.calls.length;
  const day=f.c._energyViewState.daily.find(d=>d.expected_source_hours===25);f.root.querySelector(`[data-daily-day="${day.start}"]`).click();
- const detail=f.root.querySelector('[data-daily-detail]');assert.ok(detail);for(const text of[day.start,day.end,'Europe/Warsaw','25 / 25','25.00 kWh'])assert.ok(detail.textContent.includes(text),text);
+ const detail=f.root.querySelector('[data-daily-detail]');assert.ok(detail);assert.equal(detail.previousElementSibling.dataset.dailyDay,day.start);for(const text of[day.start,day.end,'Europe/Warsaw','25 / 25','25.00 kWh'])assert.ok(detail.textContent.includes(text),text);
  assert.equal(f.root.querySelector(`[data-daily-day="${day.start}"]`).getAttribute('aria-pressed'),'true');
  f.root.querySelector('[data-daily-view="data"]').click();assert.equal(f.root.querySelector('[data-daily-detail]').dataset.dailyDetail,day.start);f.root.querySelector('[data-daily-clear]').click();assert.equal(f.root.querySelector('[data-daily-detail]'),null);
  assert.equal(f.hass.calls.length,calls);assert.equal(JSON.stringify(f.c._buildExportDocument(stamp)),before);assert.equal(f.c._buildCsv(f.c._buildExportDocument(stamp)),csv);

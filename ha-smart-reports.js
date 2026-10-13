@@ -886,6 +886,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     'invalid_profile':'nieprawidłowa taryfa','mixed_rate_bucket':'zmiana stawki wewnątrz przedziału',
 
     'All hours':'Wszystkie godziny','Page':'Strona','Previous':'Poprzednia','Next':'Następna',
+    'Complete history':'Kompletna historia','Partial history':'Niepełna historia','No measurements':'Brak pomiarów',
     'Daily consumption views':'Widoki dziennego zużycia','Day details':'Szczegóły dnia','Clear day selection':'Wyczyść wybór dnia',
     'Select a day for its interval and measurement coverage.':'Wybierz dzień, aby zobaczyć jego przedział i kompletność pomiarów.',
     'Hourly records':'Dane godzinowe','Daily overview':'Przegląd dzienny','UTC interval':'Przedział UTC',
@@ -2925,7 +2926,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const list = document.createElement('div'); list.className = 'daily-list';
       const maximum = Math.max(0, ...days.map(day => day.recorded_value || 0));
       const energy = day => `${this._formatNumber(day.recorded_value, 2)} ${day.unit}`;
-      const coverage = day => `${this._t(day.status)} · ${this._formatNumber(day.observed_source_hours, Number.isInteger(day.observed_source_hours) ? 0 : 2)} / ${this._formatNumber(day.expected_source_hours, Number.isInteger(day.expected_source_hours) ? 0 : 2)} ${this._t('source hours')}`;
+      const coverage = day => `${this._t(day.status === 'ready' ? 'Complete history' : day.status === 'partial' ? 'Partial history' : 'No measurements')} · ${this._formatNumber(day.observed_source_hours, Number.isInteger(day.observed_source_hours) ? 0 : 2)} / ${this._formatNumber(day.expected_source_hours, Number.isInteger(day.expected_source_hours) ? 0 : 2)} ${this._t('source hours')}`;
       for (const day of days.slice(this._dailyPage * 7, (this._dailyPage + 1) * 7)) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'action daily-day';
         button.dataset.dailyDay = day.start; button.dataset.availability = day.status; button.setAttribute('aria-pressed', String(day === selected));
@@ -2962,7 +2963,8 @@ function projectSmartReportV3(report, includePrivate = false) {
         ]) { const line = document.createElement('p'); line.textContent = text; detail.appendChild(line); }
         const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'action'; clear.dataset.dailyClear = ''; clear.textContent = this._t('Clear day selection');
         clear.addEventListener('click', () => { this._dailySelectedDay = null; rerender(`[data-daily-day="${selected.start}"]`); }); detail.appendChild(clear);
-        panel.appendChild(detail);
+        const selectedButton = Array.from(list.querySelectorAll('[data-daily-day]')).find(button => button.dataset.dailyDay === selected.start);
+        if (selectedButton) selectedButton.after(detail); else panel.appendChild(detail);
       }
       section.appendChild(panel); container.appendChild(section);
     }
