@@ -2027,7 +2027,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
     _coverageText(source) {
       const coverage = source.coverage;
-      return coverage ? `${this._formatNumber(coverage.observed_hours, 0)} / ${this._formatNumber(coverage.expected_hours, 0)} h · ${this._t(source.status)}` : this._t(source.status || 'no_data');
+      const hours = value => this._formatNumber(value, Number.isInteger(value) ? 0 : 2);
+      return coverage ? `${hours(coverage.observed_hours)} / ${hours(coverage.expected_hours)} h · ${this._t(source.status)}` : this._t(source.status || 'no_data');
     }
 
     _barChart(rows, label, unit, {scaleRows = rows, deviceContext = null} = {}) {
