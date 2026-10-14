@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
+const installNativeDialog=require('./native-dialog.cjs');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SOURCE_PATH = process.env.SMART_REPORTS_SOURCE_PATH
@@ -40,6 +41,7 @@ function loadRuntime(sourcePath = SOURCE_PATH) {
     pretendToBeVisual: true,
     url: 'http://localhost/lovelace/demo',
   });
+  installNativeDialog(dom.window);
   stubBrowser(dom.window);
   dom.window.eval(fs.readFileSync(sourcePath, 'utf8'));
   return dom;

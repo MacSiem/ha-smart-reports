@@ -115,3 +115,16 @@ test('W6 late recorder result after user change cannot become exportable',async(
   assert.notEqual(f.card._energyViewState.total?.value,999);assert.equal(f.card._reviewedExportContext().sourceConfirmed,false);
  }finally{f.close();}
 });
+
+
+test('native export survives actual content repaint with frozen bytes and caret; cancel restores current opener',async()=>{
+ const f=await setup();try{
+  let downloads=0;f.window.HTMLAnchorElement.prototype.click=function(){downloads++;};
+  await open(f);const host=f.card.shadowRoot.querySelector('[data-ha-tools-export]'),native=dialog(f.card).querySelector('dialog');assert(native);assert(native.matches(':modal'));
+  const name=node(f.card,'filename');name.value='native-reviewed.json';name.dispatchEvent(new f.window.Event('input'));node(f.card,'refresh').click();await delay();const frozen=node(f.card,'preview').textContent;assert(frozen.length);
+  name.focus();name.setSelectionRange(2,7);const oldButton=f.card.shadowRoot.querySelector('#exportJsonBtn');const observer=new f.window.MutationObserver(()=>{});observer.observe(f.card.shadowRoot,{childList:true,subtree:true});
+  f.card._renderEnergyState();const removed=observer.takeRecords().some(change=>Array.from(change.removedNodes).some(node=>node===host||node.contains?.(host)));observer.disconnect();
+  assert.equal(removed,false);assert.equal(oldButton.isConnected,false);assert.equal(f.card.shadowRoot.querySelector('[data-ha-tools-export]'),host);assert(native.matches(':modal'));assert.equal(dialog(f.card).querySelector('dialog'),native);assert.equal(node(f.card,'filename'),name);assert.equal(name.value,'native-reviewed.json');assert.equal(name.selectionStart,2);assert.equal(name.selectionEnd,7);assert.equal(dialog(f.card).activeElement,name);assert.equal(node(f.card,'preview').textContent,frozen);assert.equal(downloads,0);
+  native.dispatchEvent(new f.window.Event('cancel',{cancelable:true}));await delay();assert.equal(native.open,false);assert.equal(dialog(f.card),undefined);assert.equal(f.card.shadowRoot.activeElement.id,'exportJsonBtn');await open(f);assert(dialog(f.card).querySelector('dialog').matches(':modal'));assert.equal(node(f.card,'private').checked,false);assert.equal(downloads,0);
+ }finally{f.close();}
+});
