@@ -4,6 +4,8 @@ All notable changes to **Smart Reports** are documented here.
 
 ## [4.2.0] - 2026-10-15
 
+- Keep a validated comparison currency when current cost hours are missing; show incomplete history rather than an incompatible-currency error, without inventing totals or percentages.
+
 - Keep current values and report tabs above comparison details; show previous amounts beside headline values and use compact paired daily bars. Full ranges and hourly evidence stay available in expandable details.
 - Clarify the optional shared-tariff backend floor and the update requirement when Email & Reports also provides the Smart card.
 
