@@ -67,6 +67,21 @@ Daily bars use local calendar dates, including DST days. Striped days have
 incomplete history; empty days are not measured zero. Device values may have
 different coverage, and nested devices remain included in their parent.
 
+Each daily history, cost evidence and previous-period comparison has Chart and
+Data views of the same snapshot. The table retains ranges, units, timezone,
+coverage and missing values. Switching presentation does not fetch new data.
+
+Enable **Compare previous period** to compare the selected range with its
+calendar equivalent. It is off by default (`compare_previous_period: false`).
+Both ranges, source scope and timezone stay visible. Incomplete history,
+incompatible sources and ambiguous calendar boundaries keep percentage changes
+unavailable; a missing day is never a measured zero.
+
+Device search matches names and statistic IDs locally. It filters the displayed
+ranking, preserves parent relationships and leaves report totals unchanged.
+Clear restores the full ranking. Exports include all devices in the snapshot,
+including those hidden by search.
+
 The visual editor offers Energy Dashboard or Explicit statistics and separate
 total/device/cost IDs. Existing labels and parent relationships remain intact
 when their IDs remain selected. Advanced relationships and a flat-rate estimate
@@ -120,6 +135,19 @@ Recorded cost can cover a shorter period than energy. The current tariff is
 not multiplied by past partial energy; a flat-rate estimate still requires a
 complete energy total.
 
+With `energy_cost_mode: configured_tariff`, costs use measured hourly energy
+and the configured rate for each matching time zone, date and tariff zone.
+Custom profiles support currency, timezone, schedules, weekdays, seasons and
+dated exceptions. Energy charges, variable charges and fixed monthly fees remain
+separate. Zero rates are valid. Missing measurements, missing rates or an
+unavailable tariff service keep the result incomplete or unavailable; there is
+no assumed national tariff or hypothetical load-shifting savings.
+
+Tariff settings require the HA Tools tariff service and its permissions.
+Unavailable or unsupported service responses are shown explicitly, and saving
+requires a confirmed settings readback. Dashboard card YAML remains separate
+from saved tariff settings.
+
 ## Automations and System
 
 The Automations tab keeps the live operational overview: total, active,
@@ -134,17 +162,26 @@ selector does not change them.
 
 ## Export
 
-Energy exports are generated locally in the browser:
+Energy exports are generated locally from the loaded snapshot. Before saving,
+review the filename, JSON or CSV format, Included/Excluded lists, source limits
+and exact file preview. Private fields are off for each new export: source and
+device names, statistic IDs and relationships use consistent aliases. Opting in
+adds only the reviewed names and statistic IDs. Tokens, users, addresses, raw
+configuration, tariff profiles/drafts and raw errors are always excluded.
 
-- JSON uses `schema_version: 2` and includes period range, timezone, overall
-  status, source mode, warnings, per-source total/cost evidence and device
-  relationships.
-- CSV is flat (one aggregate/source/device metric per row), retains source
-  status/provenance/reason, contains no nested JSON and neutralizes
-  formula-leading labels before download.
+JSON uses schema version 2, or version 3 when previous-period comparison is
+enabled. Both comparison ranges, records, source scope and coverage are retained.
+CSV preserves the existing metric rows and adds a `reviewed_full_document` row
+whose `value` contains the complete reviewed JSON document. Comparison rows can
+also contain JSON cells. Parse CSV quoting before decoding these fields.
+Formula-leading textual labels are neutralized.
 
-Export is disabled while a request is loading or failed, so an older period
-cannot be downloaded as if it were current.
+Exports retain measured zero, negative values and unavailable `null` values;
+records are not truncated. Search never filters the file. Fixed fees stay
+separate from measured energy and variable charges. Exporting performs no new
+Recorder queries and never sends email. Loading, errors, disconnection or a
+changed source invalidate the preview. A browser download request is shown as
+initiated and unconfirmed; the card cannot confirm that the file reached disk.
 
 ## Screenshots
 
@@ -220,6 +257,8 @@ and links to `/config/energy`; it does not guess a sensor.
 | `energy_device_statistics` | list | empty | Explicit device objects/IDs; objects may include `label` and `included_in_stat`. |
 | `energy_cost_statistics` | list | empty | Explicit actual-cost statistic IDs. |
 | `energy_entity` | string | none | Legacy one-total compatibility alias in explicit mode. |
+| `compare_previous_period` | boolean | `false` | Compare the equivalent prior calendar period with explicit coverage. |
+| `energy_cost_mode` | `auto`, `cost_statistics`, `flat_rate_estimate`, `configured_tariff` | `auto` | Select recorded costs, an explicit estimate, or measured hourly tariff pricing. |
 | `energy_price` | number ≥ 0 | none | Explicit flat estimate rate per kWh. |
 | `currency` | string | none | Required with `energy_price`. |
 | `show_energy` | boolean | `true` | Show the Energy tab. |

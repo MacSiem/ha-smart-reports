@@ -2,6 +2,15 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [4.2.0] - Unreleased
+
+- Add an opt-in equivalent previous-period comparison with both ranges, source scope, timezone and coverage; withhold percentages when the periods cannot be compared.
+- Search device names and statistic IDs locally without changing report totals or the complete export.
+- Show Chart/Data views from the same measured snapshot, with explicit gaps and calendar boundaries.
+- Price measured hourly energy against configured tariffs, preserving custom schedules, zero rates and separate variable/fixed charges; never assume missing measurements or hypothetical savings.
+- Review JSON/CSV filename, scope, private-field consent and exact content before downloading. Keep aliases by default and preserve the complete reviewed report in CSV.
+- Keep the native export dialog stable during report updates and invalidate stale previews after source, identity or connection changes.
+
 ## [4.1.2] - 2026-10-11
 
 - Show Energy configuration guidance when Home Assistant reports that Energy Dashboard preferences do not exist, instead of a statistics loading error.

@@ -187,3 +187,54 @@ test('comparison labels identify deltas and Data explains source roles and statu
   assert.ok(labels.includes('suma'));assert.ok(labels.includes('gotowe'));assert.equal(labels.includes('total'),false);assert.equal(labels.includes('ready'),false);
  }finally{f.close();}
 });
+
+
+test('same-period comparison refresh preserves live device search while Recorder is pending', async () => {
+  let hold = false, release;
+  const f = await fixture({alter: (message, data) => hold ? new Promise(resolve => { release = () => resolve(data); }) : data});
+  let refreshing;
+  try {
+    f.card.shadowRoot.querySelector('[data-energy-view="devices"]').click();
+    const input = f.card.shadowRoot.querySelector('.device-search');
+    input.value = 'dev'; input.dispatchEvent(new f.window.Event('input', {bubbles:true}));
+    const active = f.card.shadowRoot.querySelector('.device-search'); active.focus(); active.setSelectionRange(2,2);
+    hold = true; refreshing = f.card._loadEnergy();
+    for (let i=0; i<40 && !release; i++) await delay(5);
+    assert.equal(typeof release, 'function', 'Recorder boundary reached');
+    assert.equal(f.card._energyViewState.status, 'ready', 'settled current report remains readable');
+    assert.equal(f.card.shadowRoot.querySelector('.device-search'), active, 'same live search survives the pending read');
+    assert.equal(f.card.shadowRoot.activeElement, active);
+    assert.equal(active.selectionStart, 2);
+    assert.equal(f.card.shadowRoot.getElementById('exportJsonBtn').disabled, false);
+    active.value = 'device'; active.dispatchEvent(new f.window.Event('input', {bubbles:true}));
+    assert.equal(f.card._deviceQuery, 'device');
+  } finally {
+    hold = false; if (release) release(); if (refreshing) await refreshing; f.close();
+  }
+});
+
+test('previous-period read failure retains current measurements and exports an unavailable comparison', async () => {
+  let failPrior = false;
+  const f = await fixture({alter: (message,data) => failPrior && Date.parse(message.start_time) < Date.parse('2026-08-24T00:00:00Z')
+    ? Promise.reject({code:'timeout', message:'private transport detail must not appear'}) : data});
+  try {
+    failPrior = true; await f.card._loadEnergy();
+    const state = f.card._energyViewState;
+    assert.equal(state.status, 'ready', 'optional prior failure cannot erase valid current measurements');
+    assert.equal(state.total.value, 156);
+    assert.equal(state.devices.length, 1);
+    assert.equal(state.comparison.reason, 'read_failed');
+    assert.equal(state.comparison.previous.status, 'error');
+    assert.equal(state.comparison.previous.period.start, '2026-08-17T00:00:00.000Z');
+    assert.equal(state.comparison.previous.total.value, null);
+    assert.equal(state.comparison.metrics.energy.delta, null);
+    assert.equal(state.comparison.metrics.energy.percent, null);
+    assert.equal(f.card.shadowRoot.getElementById('exportJsonBtn').disabled, false);
+    assert.match(f.card.shadowRoot.textContent, /Previous period could not be loaded/i);
+    const report = f.card._projectReviewedExport(f.card._buildExportDocument(), false);
+    assert.equal(report.energy.total.value, 156);
+    assert.equal(report.comparison.reason, 'read_failed');
+    assert.equal(report.comparison.previous.status, 'error');
+    assert.doesNotMatch(JSON.stringify(report), /private transport detail/);
+  } finally { f.close(); }
+});
