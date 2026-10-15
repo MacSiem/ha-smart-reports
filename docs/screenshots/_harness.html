@@ -148,7 +148,7 @@ if (!customElements.get('ha-card')) customElements.define('ha-card', class exten
             result[statisticId].push({
               start: cursor,
               end: Math.min(end, cursor + hour),
-              change: index === 0 ? statisticValues[statisticId] : 0,
+              change: index === 0 ? statisticValues[statisticId] / (end < fixedNow.getTime() - 6 * 24 * hour ? 1.2 : 1) : 0,
             });
           }
         }
@@ -169,6 +169,7 @@ if (!customElements.get('ha-card')) customElements.define('ha-card', class exten
     type: 'custom:ha-smart-reports',
     title: 'Smart Reports',
     show_support: false,
+    compare_previous_period: true,
     energy_source_mode: 'dashboard',
   });
   card.hass = hass;
