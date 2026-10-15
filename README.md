@@ -272,6 +272,23 @@ The visual editor exposes Title, Currency, source mode and separate total,
 device and cost statistic IDs. Tab selection is local to each card instance. If all three `show_*` flags are false, the card shows a
 configuration message and performs no Home Assistant data requests.
 
+### Optional shared tariffs and duplicate card resources
+
+Basic reports, recorded costs, comparison and local exports use Recorder and do
+not require Email or SMTP. An explicit YAML `tariff_profile` also works locally.
+The shared tariff editor uses the separate HA Tools Email backend's
+`ha_tools_email/get_tariff` and `ha_tools_email/set_tariff` commands. That optional
+backend requires Home Assistant 2024.7.0 or newer; the public Email 2.1.2 does not
+provide those tariff commands. Until a compatible backend is installed, shared
+tariffs remain unconfirmed and the card does not guess historical prices.
+
+The Email & Reports bundle also defines `ha-smart-reports`. If both resources
+are registered, the first loaded definition wins for the browser session. Update
+both products to versions containing the same Smart source, or keep only one
+Smart-providing resource, then reload the browser. Updating the standalone file
+alone cannot replace an older definition already supplied by the bundle. Card
+configuration and Recorder data do not need to be deleted.
+
 ## Privacy and limitations
 
 The card uses Home Assistant's same-origin WebSocket API and the state object

@@ -2810,7 +2810,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const style=document.createElement('style');style.textContent=`
         .comparison-hint{font-size:12px;line-height:1.6;overflow-wrap:anywhere;margin-top:6px}
         .comparison-overview{min-width:0}.comparison-overview p{overflow-wrap:anywhere}
-        .comparison-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+        .comparison-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin-top:8px}.comparison-legend span{display:inline-flex;align-items:center;gap:5px}.comparison-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--sr-primary)}.comparison-legend .previous i{background:var(--sr-text);opacity:.25}\n        .comparison-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
         .comparison-mini-day{border:0;background:none;color:var(--sr-text);font:inherit;min-width:0;min-height:44px;padding:4px;cursor:pointer}
         .comparison-mini-bars{height:90px;display:flex;align-items:flex-end;gap:3px;border-bottom:1px solid var(--sr-border)}
         .comparison-mini-bar{flex:1;background:var(--sr-primary);min-height:2px}.comparison-mini-bar.previous{background:var(--sr-text);opacity:.25}.comparison-mini-bar.gap{background:transparent;border:1px dashed var(--sr-border);box-sizing:border-box;min-height:6px}.comparison-mini-bar.partial{background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,var(--sr-card) 3px,var(--sr-card) 5px)}
@@ -2840,6 +2840,8 @@ function projectSmartReportV3(report, includePrivate = false) {
           const label=`${this._formatPeriodDate(day.current.start,pair.current.period.time_zone)} · ${labels.join(' · ')}`;button.setAttribute('aria-label',label);button.title=label;button.append(bars,date);
           button.addEventListener('click',()=>{this._comparisonSelectedDay=day.current.start;this._comparisonDetailsOpen=true;this._renderEnergyState();this._focusReportControl(this.shadowRoot.querySelector('[data-comparison-view][aria-selected="true"]'));});days.appendChild(button);
         }section.appendChild(days);
+        const legend=document.createElement('div');legend.className='comparison-legend';
+        for(const [side,label]of [['current','Current period'],['previous','Previous period']]){const item=document.createElement('span');item.className=side;const swatch=document.createElement('i');swatch.setAttribute('aria-hidden','true');item.append(swatch,document.createTextNode(this._t(label)));legend.appendChild(item);}section.appendChild(legend);
         if(pair.daily.length>7){const more=document.createElement('p');more.className='muted';more.textContent=this._t('Comparison details');section.appendChild(more);}
       }
       const detail=document.createElement('details');detail.className='comparison-details';detail.open=this._comparisonDetailsOpen===true;
@@ -3173,9 +3175,9 @@ function projectSmartReportV3(report, includePrivate = false) {
       if (state.status === 'partial' || recordedCost.status === 'partial') { const note = document.createElement('p'); note.className = 'muted section'; note.textContent = this._t('Recorded values cover available samples only; gaps are not zero.'); container.appendChild(note); }
       if (this._energyView === 'summary' && !state.comparison) this._renderDailyChart(container, state);
       if (this._energyView !== 'costs') {
-        const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = this._t(state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown')); container.appendChild(heading);
         const devices = state.devices || [];
         if (this._energyView === 'devices') this._renderDeviceSearch(container, devices);
+        const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = this._t(state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown')); container.appendChild(heading);
         const shown = this._energyView === 'devices' ? this._filteredDevices(devices) : devices.slice(0, 6);
         if (shown.length) {
           container.appendChild(this._barChart(shown, 'Recorded energy by device', 'kWh', {scaleRows:this._energyView === 'devices' ? devices : shown,deviceContext:new Map(devices.map(row=>[row.statistic_id,row]))}));
