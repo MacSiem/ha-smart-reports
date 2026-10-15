@@ -885,6 +885,8 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     'tariff_authority_unavailable':'ustawienia taryfy niedostępne','tariff_unconfirmed':'ustawienia taryfy niepotwierdzone',
     'invalid_profile':'nieprawidłowa taryfa','mixed_rate_bucket':'zmiana stawki wewnątrz przedziału',
 
+    'Previous period could not be loaded.':'Nie udało się wczytać poprzedniego okresu.',
+    'read_failed':'odczyt nie powiódł się',
     'All hours':'Wszystkie godziny','Page':'Strona','Previous':'Poprzednia','Next':'Następna',
     'Complete history':'Kompletna historia','Partial history':'Niepełna historia','No measurements':'Brak pomiarów',
     'Daily consumption views':'Widoki dziennego zużycia','Day details':'Szczegóły dnia','Clear day selection':'Wyczyść wybór dnia',
@@ -2104,7 +2106,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         const day_index = daily.findIndex(day => Date.parse(day.start) <= from && Date.parse(day.end) >= to);
         return { day_index, day_allocation_reason: day_index < 0 ? 'crosses_local_midnight' : null };
       };
-      const references = [...selection.totals, ...selection.costs, ...selection.devices];
+      const references = state.status === 'error' ? [] : [...selection.totals, ...selection.costs, ...selection.devices];
       const summaries = new Map([...state.total_sources, ...state.cost_sources, ...state.devices].map(source => [`${source.role}:${source.statistic_id}`, source]));
       for (const source of references) {
         const summary = summaries.get(`${source.role}:${source.statistic_id}`);
@@ -2151,7 +2153,7 @@ function projectSmartReportV3(report, includePrivate = false) {
 
     _buildPeriodComparison(state, descriptor, selection, statistics, previousStatistics, metadata, snapshot) {
       const current = this._comparisonSnapshot(state, selection, statistics, metadata, 'current');
-      const previousState = descriptor.period ? this._materializeEnergyPeriod(descriptor.period, selection, previousStatistics || {}, metadata, snapshot, true) : null;
+      const previousState = descriptor.period ? (descriptor.readStatus === 'error' ? this._errorState({ code: 'read_failed' }, descriptor.period) : this._materializeEnergyPeriod(descriptor.period, selection, previousStatistics || {}, metadata, snapshot, true)) : null;
       const previous = previousState ? this._comparisonSnapshot(previousState, selection, previousStatistics || {}, metadata, 'previous') : null;
       const scope = [...selection.totals, ...selection.costs, ...selection.devices].map(source => ({ statistic_id: source.statistic_id, role: source.role,
         unit: this._metadataUnit(metadata[source.statistic_id]), provenance: source.provenance, included_in_stat: source.included_in_stat || null,
@@ -2408,7 +2410,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const previous = this._energyViewState;
       const reportConfig = JSON.stringify([this._config.energy_source_mode, this._config.energy_total_statistics, this._config.energy_device_statistics, this._config.energy_cost_statistics, this._config.energy_entity, this._config.energy_price, this._config.currency, this._config.energy_cost_mode, this._config.tariff_profile, compare]);
       const sameWindow = this._energyReportConfig === reportConfig && previous && ['ready', 'partial', 'no_data'].includes(previous.status) && previous.source_mode === mode && previous.period && previous.period.key === period.key && previous.period.start === period.start && previous.period.end === period.end && previous.period.time_zone === period.time_zone;
-      if (!sameWindow || compare) this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
+      if (!sameWindow) this._setEnergyViewState({ status: 'loading', period, source_mode: mode, total: { value: null, unit: 'kWh', source_statistic_ids: [] }, cost: { value: null, currency: null, method: 'unavailable', rate: null, source_statistic_ids: [], reason: 'loading' }, devices: [], warnings: [] });
       try {
         const selection = mode === 'explicit' ? this._explicitSources() : await this._dashboardSources(generation, read);
         if (!selection || !current()) return;
@@ -2423,9 +2425,18 @@ function projectSmartReportV3(report, includePrivate = false) {
         if (!current()) return;
         const metadataById = this._metadataMap(metadataResponse); const statisticsById = statisticsResponse && typeof statisticsResponse === 'object' ? statisticsResponse : {};
         let priorStatistics = null;
+        let comparisonDescriptor = pairedPeriod;
         if (pairedPeriod?.period) {
           const prior = pairedPeriod.period;
-          priorStatistics = new Date(prior.end) <= new Date(prior.start) ? {} : await read({ type: 'recorder/statistics_during_period', start_time: prior.start, end_time: prior.end, statistic_ids: ids, period: 'hour', types: ['change'] });
+          try {
+            priorStatistics = new Date(prior.end) <= new Date(prior.start) ? {} : await read({ type: 'recorder/statistics_during_period', start_time: prior.start, end_time: prior.end, statistic_ids: ids, period: 'hour', types: ['change'] });
+          } catch (error) {
+            if (!current()) return;
+            // Permission failures remain fail-closed. An optional historical read
+            // failure must not erase the separately confirmed current readings.
+            if (this._classifyError(error) === 'permission_denied') throw error;
+            comparisonDescriptor = { ...pairedPeriod, readStatus: 'error', reason: 'read_failed' };
+          }
           if (!current()) return;
         }
         let tariffSnapshot = null;
@@ -2436,10 +2447,10 @@ function projectSmartReportV3(report, includePrivate = false) {
           tariffSnapshot = host.snapshot();
         }
         const state = this._materializeEnergyPeriod(period, selection, statisticsById, metadataById, tariffSnapshot);
-        if (compare) state.comparison = this._buildPeriodComparison(state, pairedPeriod, selection, statisticsById, priorStatistics, metadataById, tariffSnapshot);
+        if (compare) state.comparison = this._buildPeriodComparison(state, comparisonDescriptor, selection, statisticsById, priorStatistics, metadataById, tariffSnapshot);
         if (!current()) return;
         this._tariffPricingContext = this._config.energy_cost_mode === 'configured_tariff' ? { generation, period, roots: selection.totals, statistics: statisticsById, metadata: metadataById,
-          ...(compare ? { selection, pairedPeriod, priorStatistics } : {}) } : null;
+          ...(compare ? { selection, pairedPeriod: comparisonDescriptor, priorStatistics } : {}) } : null;
         this._energyReportConfig = reportConfig;
         this._setEnergyViewState(state);
       } catch (error) {
@@ -2792,6 +2803,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         const context = document.createElement('p'); context.className = 'muted comparison-context'; context.dataset.comparisonPeriod = side;
         context.textContent = snapshot ? `${this._t(side === 'current' ? 'Current period' : 'Previous period')}: ${this._formatPeriodDate(snapshot.period.start,snapshot.period.time_zone)} → ${this._formatPeriodDate(snapshot.period.end,snapshot.period.time_zone)} · ${snapshot.period.time_zone} · ${this._formatNumber(snapshot.period.actual_hours,2)} h · UTC ${snapshot.period.start} → ${snapshot.period.end} · ${this._t('Missing energy days')}: ${snapshot.coverage.missing_energy_days} · ${this._t('Missing cost days')}: ${snapshot.coverage.missing_cost_days} · ${this._t('source hours')}: ${this._formatNumber(snapshot.coverage.observed_energy_source_hours,2)}/${this._formatNumber(snapshot.coverage.expected_energy_source_hours,2)}`
           : `${this._t('Previous period')}: — · ${this._t(pair.reason || 'unavailable')} · ${JSON.stringify(pair.requested_local_cutoff)}`;
+        if (snapshot?.status === 'error') context.textContent = `${this._t('Previous period could not be loaded.')} · ${snapshot.period.start} → ${snapshot.period.end} · ${snapshot.period.time_zone}`;
         section.appendChild(context);
       }
       const scope = document.createElement('p'); scope.className = 'muted comparison-context'; scope.textContent = `${this._t('Source evidence')}: ${pair.scope.map(source => `${this._t(source.role)}: ${source.statistic_id} (${source.unit || '—'})`).join(' · ')}`; section.appendChild(scope);
