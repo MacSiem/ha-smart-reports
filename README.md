@@ -60,7 +60,9 @@ enable discovery or a live-state fallback.
 
 Energy has **Summary**, **Devices**, and **Costs** views of one recorded snapshot.
 Summary shows consumption, cost, source counts and daily history. Devices shows
-kWh bars with each device's own coverage. Costs shows the cost samples and their
+kWh bars with each device's own coverage. Search sits directly below the view tabs;
+full report totals and comparison remain available in expandable details below
+the results. Costs shows the cost samples and their
 own time range. Switching views does not request statistics again.
 
 Daily bars use local calendar dates, including DST days. Striped days have
@@ -223,7 +225,7 @@ The optional `energy/info` lookup fills only missing generated-cost mappings. It
 
 Automation and system views read the `hass.states` object supplied to Lovelace. Theme, locale, timezone, currency and administrator visibility use the frontend's custom-card contract. The editor uses standard DOM controls and the `config-changed` event. Charts use local DOM and CSS, with no chart library or CDN. Use a browser supported by your Home Assistant frontend.
 
-Smart Reports does not require the HA Tools Email integration, SMTP or any optional email backend. Email scheduling and sending belong to the separate Email products.
+Basic Recorder reports, comparison and local exports work without the HA Tools Email integration or SMTP. Shared tariff editing has the optional backend dependency described below. Email scheduling and sending belong to the separate Email products.
 
 ### Custom repository (alternative)
 
