@@ -4,6 +4,9 @@ All notable changes to **Smart Reports** are documented here.
 
 ## [4.2.0] - 2026-10-15
 
+- Keep current values and report tabs above comparison details; show previous amounts beside headline values and use compact paired daily bars. Full ranges and hourly evidence stay available in expandable details.
+- Clarify the optional shared-tariff backend floor and the update requirement when Email & Reports also provides the Smart card.
+
 - Add an opt-in equivalent previous-period comparison with both ranges, source scope, timezone and coverage; withhold percentages when the periods cannot be compared.
 - Search device names and statistic IDs locally without changing report totals or the complete export.
 - Show Chart/Data views from the same measured snapshot, with explicit gaps and calendar boundaries.
