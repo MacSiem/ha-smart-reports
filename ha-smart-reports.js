@@ -1644,10 +1644,16 @@ function projectSmartReportV3(report, includePrivate = false) {
     }
 
     set hass(hass) {
+      // Capture scalar values: HA can mutate the same user/config/hass object.
+      const measurementBinding = { present: !!hass, connection: hass?.connection ?? null,
+        user: hass?.user?.id ?? null, zone: hass?.config?.time_zone ?? null };
+      const previousBinding = this._measurementBinding;
+      const measurementsChanged = !!previousBinding && Object.keys(measurementBinding).some(key => previousBinding[key] !== measurementBinding[key]);
+      this._measurementBinding = measurementBinding;
+      if (measurementsChanged) this._clearMeasuredEnergySource();
       const language = languageOf(hass);
       const languageChanged = language !== this._language;
       this._language = language;
-      if (this._hass && (this._hass.user?.id !== hass?.user?.id || this._hass.connection !== hass?.connection)) this._deviceQuery = '';
       this._hass = hass;
       if (this._connected) this._bindReviewedExportEvents();
       this._observeReviewedExportSource();
@@ -1661,6 +1667,24 @@ function projectSmartReportV3(report, includePrivate = false) {
         this._syncTabs();
       }
       if (this._connected && hass) this._scheduleRefresh(false);
+    }
+
+    _clearMeasuredEnergySource() {
+      this._energyReportConfig = null;
+      this._tariffPricingContext = null;
+      this._deviceQuery = '';
+      this._costSelectedDay = null;
+      this._costDataPage = 0;
+      this._costChartPage = 0;
+      this._comparisonSelectedDay = null;
+      this._comparisonDataPage = 0;
+      this._comparisonChartPage = 0;
+      this._tariffSettingsSection?.replaceChildren();
+      this._tariffSettingsSection = null;
+      this._energyViewState = { status: 'idle' };
+      // Clear accepted source DOM before a throttled/new-session read starts.
+      // Request/export association and any occupied tariff wire keep their fences.
+      if (this._scaffoldRendered) this.shadowRoot.getElementById('content')?.replaceChildren();
     }
 
     get hass() {
@@ -2631,12 +2655,8 @@ function projectSmartReportV3(report, includePrivate = false) {
       this._tariffGuard ||= createTariffGuardV3({ getHass: () => this._hass,
         getContext: () => ({ config: this._config, period: this._period, tab: this._activeTab, connected: this._connected }) });
       this._tariffGuard.subscribe(() => {
-        this._invalidateEnergyRequest(); this._energyReportConfig = null; this._tariffPricingContext = null; this._deviceQuery = ''; this._costSelectedDay = null; this._costDataPage = 0; this._costChartPage = 0;
-        this._comparisonSelectedDay = null; this._comparisonDataPage = 0; this._comparisonChartPage = 0;
-        this._tariffSettingsSection?.replaceChildren(); this._tariffSettingsSection = null;
-        this._energyViewState = { status: 'idle' };
-        // Clear cached priced/private source DOM immediately; do not dispatch a retry.
-        if (this._scaffoldRendered && this._activeTab === 'energy') this.shadowRoot.getElementById('content')?.replaceChildren();
+        this._invalidateEnergyRequest();
+        this._clearMeasuredEnergySource();
       });
       this._tariffHost = createTariffHostV3({ card: this, kind: 'smart', createModel: createEnergyTariffV3,
         legacyProfile: config => Object.hasOwn(config, 'tariff_profile') ? config.tariff_profile : null,
