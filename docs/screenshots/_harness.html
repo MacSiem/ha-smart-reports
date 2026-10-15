@@ -36,6 +36,11 @@
 </head>
 <body>
 <ha-smart-reports id="card"></ha-smart-reports>
+<script>
+if (!customElements.get('ha-card')) customElements.define('ha-card', class extends HTMLElement {
+  constructor() { super(); this.style.display = 'block'; }
+});
+</script>
 <script src="../../ha-smart-reports.js"></script>
 <script>
 (function runScreenshotHarness() {
@@ -77,6 +82,9 @@
   root.setAttribute('data-viewport', viewport);
   root.setAttribute('data-locale', locale);
   root.setAttribute('data-timezone', timezone);
+  root.setAttribute('data-browser-user-agent', navigator.userAgent);
+  root.setAttribute('data-browser-locale', Intl.DateTimeFormat().resolvedOptions().locale);
+  root.setAttribute('data-browser-timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
   root.setAttribute('data-loading', 'true');
   root.setAttribute('data-ready', 'false');
 
@@ -160,27 +168,15 @@
   card.setConfig({
     type: 'custom:ha-smart-reports',
     title: 'Smart Reports',
+    show_support: false,
     energy_source_mode: 'dashboard',
   });
   card.hass = hass;
-
-  const normalizeCardForCapture = () => {
-    if (!card.shadowRoot) return;
-    const footer = card.shadowRoot.querySelector('.donate-section');
-    if (footer) footer.remove();
-    if (!card.shadowRoot.getElementById('screenshot-harness-style')) {
-      const style = document.createElement('style');
-      style.id = 'screenshot-harness-style';
-      style.textContent = 'ha-card { display: block !important; }';
-      card.shadowRoot.appendChild(style);
-    }
-  };
 
   const settle = async () => {
     for (let attempt = 0; attempt < 240; attempt += 1) {
       const status = card._energyViewState && card._energyViewState.status;
       if (status && status !== 'idle' && status !== 'loading') {
-        normalizeCardForCapture();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         if (status !== 'ready') {
           fail('Screenshot fixture settled in unexpected state: ' + status);

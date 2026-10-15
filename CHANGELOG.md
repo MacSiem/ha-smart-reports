@@ -2,7 +2,7 @@
 
 All notable changes to **Smart Reports** are documented here.
 
-## [4.2.0] - Unreleased
+## [4.2.0] - 2026-10-15
 
 - Add an opt-in equivalent previous-period comparison with both ranges, source scope, timezone and coverage; withhold percentages when the periods cannot be compared.
 - Search device names and statistic IDs locally without changing report totals or the complete export.

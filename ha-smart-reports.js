@@ -1,7 +1,7 @@
 /**
  * Home Assistant Smart Reports Card
  * Recorder-backed energy reports, automation statistics, and system overview.
- * Version: 4.1.2
+ * Version: 4.2.0
  */
 
 (function registerHASmartReports() {
@@ -875,7 +875,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
 
   // END mirror shared/ha-tools-tariff-host.js
 
-  const VERSION = '4.1.2';
+  const VERSION = '4.2.0';
   const VALID_PERIODS = new Set(['1d', '7d', '30d']);
   const ENERGY_UNITS = new Set(['Wh', 'kWh', 'MWh']);
 
