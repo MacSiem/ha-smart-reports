@@ -121,7 +121,16 @@ test('manifest binds the exact source and two byte-identical renders', () => {
   assert.match(manifest.fixture.seed, /^[a-z0-9-]+$/);
   assert.match(manifest.renderer.name, /chrome|chromium/i);
   assert.match(manifest.renderer.version, /^\d+(?:\.\d+){3}$/);
-  assert.match(manifest.renderer.executable_sha256, /^[0-9a-f]{64}$/);
+  if (manifest.renderer.capture_method === 'native-browser-fullpage-pixel-crop') {
+    // Native Browser captures expose observed UA, not the remote renderer binary.
+    // Never substitute a hash of an unrelated local browser executable.
+    assert.equal(manifest.renderer.executable_sha256, null);
+    assert.equal(manifest.renderer.binary_provenance, 'unavailable_native_capture_interface');
+    assert.equal(manifest.renderer.version_source, 'observed_user_agent');
+    assert.equal(manifest.renderer.user_agent.match(/Chrome\/(\d+(?:\.\d+){3})/)?.[1], manifest.renderer.version);
+  } else {
+    assert.match(manifest.renderer.executable_sha256, /^[0-9a-f]{64}$/);
+  }
   assert.equal(manifest.captures.length, VARIANTS.length);
 
   for (const variant of VARIANTS) {

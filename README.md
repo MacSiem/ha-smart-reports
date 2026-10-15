@@ -195,9 +195,11 @@ tokens or household history.
 
 [`docs/screenshots/manifest.json`](docs/screenshots/manifest.json) binds every
 image to the exact `ha-smart-reports.js` SHA-256, fixed clock, locale, timezone
-and browser build. The local screenshot gate renders every variant twice,
-requires byte-identical PNG output, blocks non-loopback requests, rejects PNG
-metadata, checks horizontal overflow and runs OCR privacy checks.
+and observed browser identity. Each variant is rendered twice and must produce
+byte-identical PNGs. The gate checks dimensions, horizontal overflow, PNG
+metadata and OCR privacy. The CLI renderer also records its executable hash;
+native Browser captures explicitly mark that binary information unavailable
+and record the observed, potentially reduced user agent instead.
 
 ## Installation
 
