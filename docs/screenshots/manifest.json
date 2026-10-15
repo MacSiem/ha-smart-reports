@@ -27,10 +27,10 @@
       "pixel_width": 480,
       "pixel_height": 1359,
       "source_sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c",
-      "image_sha256": "90e872e890dbd003e4ba8b9bc56823845b2224bc384d2210d256f2b3077ca0e0",
+      "image_sha256": "6cac7da6706651cd90a6199aa1a61dd5073959052777d731ffe46be1bf5bbb03",
       "render_sha256_samples": [
-        "90e872e890dbd003e4ba8b9bc56823845b2224bc384d2210d256f2b3077ca0e0",
-        "90e872e890dbd003e4ba8b9bc56823845b2224bc384d2210d256f2b3077ca0e0"
+        "6cac7da6706651cd90a6199aa1a61dd5073959052777d731ffe46be1bf5bbb03",
+        "6cac7da6706651cd90a6199aa1a61dd5073959052777d731ffe46be1bf5bbb03"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -48,10 +48,10 @@
       "pixel_width": 480,
       "pixel_height": 1359,
       "source_sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c",
-      "image_sha256": "b06df1c2e4cd07a4438a9f1ccfb1e166720c9007e60ab91e987ada8d0c4d2dbc",
+      "image_sha256": "d78ec2aae5a5a82a516d0eb631114c3bc4fe43cde664830a3d29e6dc9d27003b",
       "render_sha256_samples": [
-        "b06df1c2e4cd07a4438a9f1ccfb1e166720c9007e60ab91e987ada8d0c4d2dbc",
-        "b06df1c2e4cd07a4438a9f1ccfb1e166720c9007e60ab91e987ada8d0c4d2dbc"
+        "d78ec2aae5a5a82a516d0eb631114c3bc4fe43cde664830a3d29e6dc9d27003b",
+        "d78ec2aae5a5a82a516d0eb631114c3bc4fe43cde664830a3d29e6dc9d27003b"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -69,10 +69,10 @@
       "pixel_width": 360,
       "pixel_height": 1505,
       "source_sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c",
-      "image_sha256": "43873ccf9156b8fa3345bf8bf9cd1760b1e58847c30229f424b0f7097e54ec91",
+      "image_sha256": "d8dac59d57df256ab9413875981a7cc029c307dc624290ff8bca5732d59b47d5",
       "render_sha256_samples": [
-        "43873ccf9156b8fa3345bf8bf9cd1760b1e58847c30229f424b0f7097e54ec91",
-        "43873ccf9156b8fa3345bf8bf9cd1760b1e58847c30229f424b0f7097e54ec91"
+        "d8dac59d57df256ab9413875981a7cc029c307dc624290ff8bca5732d59b47d5",
+        "d8dac59d57df256ab9413875981a7cc029c307dc624290ff8bca5732d59b47d5"
       ],
       "layout": {
         "horizontal_overflow": false

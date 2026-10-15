@@ -4,6 +4,8 @@ All notable changes to **Smart Reports** are documented here.
 
 ## [4.2.0] - 2026-10-15
 
+- Clear accepted measurements and device details immediately when the Home Assistant user, connection or timezone changes, including disconnection; preserve current measurements on locale and theme changes.
+
 - Keep device search directly below its view tabs; retain the unfiltered report total and all detailed comparison values below the results.
 
 - Keep a validated comparison currency when current cost hours are missing; show incomplete history rather than an incompatible-currency error, without inventing totals or percentages.
