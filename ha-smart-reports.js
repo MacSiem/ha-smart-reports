@@ -1650,7 +1650,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       const previousBinding = this._measurementBinding;
       const measurementsChanged = !!previousBinding && Object.keys(measurementBinding).some(key => previousBinding[key] !== measurementBinding[key]);
       this._measurementBinding = measurementBinding;
-      if (measurementsChanged) this._clearMeasuredEnergySource();
+      if (measurementsChanged) this._clearMeasuredEnergySource(true);
       const language = languageOf(hass);
       const languageChanged = language !== this._language;
       this._language = language;
@@ -1669,7 +1669,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       if (this._connected && hass) this._scheduleRefresh(false);
     }
 
-    _clearMeasuredEnergySource() {
+    _clearMeasuredEnergySource(allViews = false) {
       this._energyReportConfig = null;
       this._tariffPricingContext = null;
       this._deviceQuery = '';
@@ -1684,7 +1684,7 @@ function projectSmartReportV3(report, includePrivate = false) {
       this._energyViewState = { status: 'idle' };
       // Clear accepted source DOM before a throttled/new-session read starts.
       // Request/export association and any occupied tariff wire keep their fences.
-      if (this._scaffoldRendered) this.shadowRoot.getElementById('content')?.replaceChildren();
+      if (this._scaffoldRendered && (allViews || this._activeTab === 'energy')) this.shadowRoot.getElementById('content')?.replaceChildren();
     }
 
     get hass() {
