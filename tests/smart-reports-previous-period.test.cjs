@@ -238,3 +238,27 @@ test('previous-period read failure retains current measurements and exports an u
     assert.doesNotMatch(JSON.stringify(report), /private transport detail/);
   } finally { f.close(); }
 });
+
+test('approved comparison keeps current KPIs first and the previous amount beside each value',async()=>{
+ const f=await fixture({alter:(m,data)=>{const value=Date.parse(m.start_time)<Date.parse('2026-08-24T00:00:00Z')?1:2;for(const rows of Object.values(data))for(const row of rows)row.change=value;return data;}});
+ try{
+  const root=f.card.shadowRoot,main=root.getElementById('content');
+  const headline=[...main.querySelectorAll('.metric')].find(e=>e.querySelector('.metric-label')?.textContent==='Grid import');
+  assert.ok(headline);assert.match(headline.textContent,/312\.00 kWh/);assert.match(headline.textContent,/Previous period.*156\.00 kWh/);assert.match(headline.textContent,/100\.00%/);
+  const details=[...main.querySelectorAll('details')].find(e=>e.querySelector('summary')?.textContent==='Comparison details');
+  assert.ok(details,'full ranges and hourly records remain accessible');assert.equal(details.open,false);
+  assert.ok(headline.compareDocumentPosition(details)&f.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  const before=callsOf(f.hass,'recorder/statistics_during_period').length;
+  details.open=true;details.dispatchEvent(new f.window.Event('toggle'));root.querySelector('[data-comparison-view="data"]').click();
+  const rerendered=[...main.querySelectorAll('details')].find(e=>e.querySelector('summary')?.textContent==='Comparison details');
+  assert.equal(rerendered.open,true);assert.ok(rerendered.querySelector('[data-comparison-record]'));assert.equal(callsOf(f.hass,'recorder/statistics_during_period').length,before);
+ }finally{f.close();}
+});
+
+test('incomplete previous coverage puts an explicit reason next to the headline without a false percent',async()=>{
+ const f=await fixture({alter:(m,data)=>{if(Date.parse(m.start_time)<Date.parse('2026-08-24T00:00:00Z'))for(const rows of Object.values(data))rows.pop();return data;}});
+ try{
+  const metric=[...f.card.shadowRoot.querySelectorAll('.metric')].find(e=>e.querySelector('.metric-label')?.textContent==='Grid import');
+  assert.match(metric.textContent,/Previous period/);assert.match(metric.textContent,/incomplete|Incomplete/);assert.equal(metric.textContent.includes('%'),false);
+ }finally{f.close();}
+});
