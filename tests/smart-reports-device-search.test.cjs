@@ -40,3 +40,15 @@ test('source search matches root label/ID, reveals matching evidence and preserv
   const i=f.card.shadowRoot.querySelector('.device-search');assert.ok(i);i.value='HOUSE';i.dispatchEvent(new f.window.Event('input'));assert.deepEqual(Array.from(f.card.shadowRoot.querySelectorAll('[data-energy-source]'),e=>e.dataset.energySource),['sensor.grid']);assert.equal(f.card.shadowRoot.querySelector('.source-evidence').open,true);assert.equal(f.card.shadowRoot.querySelectorAll('[data-device-statistic]').length,0);assert.equal(JSON.stringify(f.card._buildExportDocument('2026-08-30T00:00:00Z')),before);
  }finally{f.card.remove();f.dom.window.close();}
 });
+
+test('Devices puts search directly after its tabs and keeps the full report behind a disclosure',async()=>{
+ const f=await fixture();try{
+  const root=f.card.shadowRoot,nav=root.querySelector('[data-report-nav="energy"]');
+  assert.ok(nav.nextElementSibling.classList.contains('device-search-form'),'device search must not be pushed below the four report KPIs');
+  const totals=root.querySelector('.device-report-details');assert.ok(totals);assert.equal(totals.open,false);assert.equal(totals.querySelectorAll('.metric').length,4,'full report values remain available');
+  assert.match(root.querySelector('.device-total-note').textContent,/30\.00 kWh/);
+  totals.open=true;totals.dispatchEvent(new f.window.Event('toggle'));
+  const input=root.querySelector('.device-search');input.focus();input.value='fridge';input.setSelectionRange(3,3);input.dispatchEvent(new f.window.Event('input'));
+  assert.equal(root.querySelector('.device-report-details').open,true);assert.match(root.querySelector('.device-total-note').textContent,/30\.00 kWh/);assert.equal(root.activeElement,root.querySelector('.device-search'));assert.equal(root.activeElement.selectionStart,3);
+ }finally{f.card.remove();f.dom.window.close();}
+});
