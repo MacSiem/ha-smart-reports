@@ -1081,6 +1081,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "nested_parent_missing": "brak nadrzędnego źródła urządzenia",
     "currency_mismatch": "niezgodna waluta",
     "partial_cost": "niepełne dane kosztu",
+    "partial_energy": "niepełne dane energii",
     "missing_currency": "brak waluty",
     "energy_data_unavailable": "dane energii niedostępne",
     "included_in_stat is only valid for device sources: ": "included_in_stat jest dozwolone tylko dla źródeł urządzeń: "
@@ -1102,7 +1103,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
       nonexistent_local_cutoff: 'Local cutoff time does not exist', historical_flat_rate_unavailable: 'Confirmed historical flat rate unavailable',
       previous_zero: 'Previous value is zero; percentage unavailable', previous_nonpositive: 'Previous value is negative; percentage unavailable',
       nonfinite_delta: 'Change exceeds numeric range', unit_mismatch: 'Incompatible units',
-      incomplete_coverage: 'Incomplete coverage', missing_rate: 'Missing rate', currency_mismatch: 'Incompatible currency' })[text] || (text === 'day_suffix' ? 'd' : text);
+      incomplete_coverage: 'Incomplete coverage', partial_cost: 'Incomplete cost history', partial_energy: 'Incomplete energy history', missing_rate: 'Missing rate', currency_mismatch: 'Incompatible currency' })[text] || (text === 'day_suffix' ? 'd' : text);
   }
 
   function uniqueById(items) {
@@ -2174,10 +2175,22 @@ function projectSmartReportV3(report, includePrivate = false) {
         && (current.cost.method !== 'configured_tariff' || (current.cost.coverage?.complete && previous.cost.coverage?.complete
           && current.cost.price_basis === previous.cost.price_basis && current.cost.revision === previous.cost.revision
           && current.cost.tariff_timezone === previous.cost.tariff_timezone && JSON.stringify(current.cost.tariff_clock) === JSON.stringify(previous.cost.tariff_clock)));
+      // An unavailable amount does not invalidate a currency confirmed by every
+      // selected cost source. Keep the legacy cost snapshot itself unchanged.
+      const comparisonCurrency = snapshot => {
+        if (snapshot?.cost.currency) return snapshot.cost.currency;
+        const expected = this._hass.config?.currency;
+        return snapshot && snapshot.cost.reason !== 'currency_mismatch' && typeof expected === 'string' && expected
+          && snapshot.cost_sources.length > 0 && snapshot.cost_sources.every(source => source.unit === expected && source.reason !== 'incompatible_currency_metadata')
+          ? expected : null;
+      };
+      const currentCurrency = comparisonCurrency(current), previousCurrency = comparisonCurrency(previous);
+      const costReason = descriptor.reason || (currentCurrency && previousCurrency && currentCurrency !== previousCurrency ? 'currency_mismatch'
+        : previous?.cost.reason || current.cost.reason || 'incomplete_coverage');
       const metrics = {
         energy: this._comparisonDelta(current.total.value, previous?.total.value, current.total.unit, previous?.total.unit, energyComplete, descriptor.reason),
-        cost: this._comparisonDelta(current.cost.value, previous?.cost.value, current.cost.currency, previous?.cost.currency, costComplete,
-          descriptor.reason || (current.cost.currency !== previous?.cost.currency ? 'currency_mismatch' : previous?.cost.reason || current.cost.reason)),
+        cost: this._comparisonDelta(current.cost.value, previous?.cost.value, currentCurrency, previousCurrency, costComplete,
+          costComplete ? descriptor.reason : costReason),
       };
       return this._freezeComparison({ status: descriptor.reason ? 'noncomparable' : metrics.energy.comparable && metrics.cost.comparable ? 'ready' : 'partial',
         reason: descriptor.reason || null, shift_days: descriptor.shift_days,
@@ -2797,7 +2810,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         note.textContent = `${this._t('Previous period')}: ${evidence ? `${key === 'sources' ? evidence.sources_with_data : evidence.complete_sources} / ${evidence.configured_sources}` : '—'}`;
       } else {
         const delta = pair.metrics[key];
-        note.textContent = `${this._t('Previous period')}: ${this._formatNumber(delta.previous,2)} ${delta.unit || ''}`;
+        note.textContent = `${this._t('Previous period')}: ${this._formatNumber(delta.previous,2)} ${key === 'cost' ? pair.previous?.cost.currency || (pair.previous?.cost_sources.length && pair.previous.cost_sources.every(source => source.unit === delta.unit) ? delta.unit : '') : delta.unit || ''}`;
         if (typeof delta.delta === 'number') note.textContent += ` · Δ ${this._formatNumber(delta.delta,2)} ${delta.unit || ''}`;
         if (typeof delta.percent === 'number') note.textContent += ` · ${this._formatNumber(delta.percent,2)}%`;
         else note.textContent += ` · ${this._t(delta.reason || pair.reason || 'unavailable')}`;
