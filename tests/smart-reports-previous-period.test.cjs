@@ -262,3 +262,18 @@ test('incomplete previous coverage puts an explicit reason next to the headline 
   assert.match(metric.textContent,/Previous period/);assert.match(metric.textContent,/incomplete|Incomplete/);assert.equal(metric.textContent.includes('%'),false);
  }finally{f.close();}
 });
+
+for(const missing of [['sensor.money'],['sensor.grid_import','sensor.money']])test(`missing current hour ${missing.join('+')} is not a currency mismatch`,async()=>{
+ const f=await fixture({alter:(m,data)=>{if(Date.parse(m.start_time)>=Date.parse('2026-08-24T00:00:00Z'))for(const id of missing)data[id].pop();return data;}});
+ try{
+  const state=f.card._energyViewState,pair=state.comparison;
+  assert.equal(state.cost.value,null);assert.equal(state.cost.currency,null,'legacy unavailable-cost contract stays unchanged');
+  assert.equal(pair.metrics.cost.unit,'PLN','validated statistic currency survives an unavailable current amount');
+  assert.equal(pair.metrics.cost.reason,missing.length===1?'partial_cost':'partial_energy');
+  assert.equal(pair.metrics.cost.previous,156);assert.equal(pair.metrics.cost.delta,null);assert.equal(pair.metrics.cost.percent,null);
+  assert.equal(state.recorded_cost.value,155);assert.equal(pair.previous.cost.value,156);
+  const hint=[...f.card.shadowRoot.querySelectorAll('.comparison-hint')].find(e=>e.textContent.includes('156.00 PLN'));
+  assert.ok(hint);assert.match(hint.textContent,/Incomplete (cost|energy) history/);assert.equal(hint.textContent.includes('%'),false);
+  const exported=f.card._buildExportDocument();assert.equal(exported.energy.cost.currency,null);assert.equal(exported.comparison.metrics.cost.unit,'PLN');
+ }finally{f.close();}
+});
