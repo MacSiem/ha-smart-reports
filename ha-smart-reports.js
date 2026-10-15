@@ -929,6 +929,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "ambiguous_rules": "Niejednoznaczne reguły",
     "Compare previous local-calendar period": "Porównaj poprzedni okres kalendarza lokalnego",
     "Previous period comparison": "Porównanie z poprzednim okresem",
+    "Comparison details": "Szczegóły porównania",
     "Current period": "Bieżący okres",
     "Previous period": "Poprzedni okres",
     "Missing energy days": "Dni z brakami energii",
@@ -2789,6 +2790,64 @@ function projectSmartReportV3(report, includePrivate = false) {
       label.append(checkbox, text); container.appendChild(label);
     }
 
+    _comparisonHint(metric, pair, key) {
+      const note = document.createElement('div'); note.className = 'muted comparison-hint';
+      if (key === 'sources' || key === 'complete') {
+        const evidence = pair.previous?.recorded_total;
+        note.textContent = `${this._t('Previous period')}: ${evidence ? `${key === 'sources' ? evidence.sources_with_data : evidence.complete_sources} / ${evidence.configured_sources}` : '—'}`;
+      } else {
+        const delta = pair.metrics[key];
+        note.textContent = `${this._t('Previous period')}: ${this._formatNumber(delta.previous,2)} ${delta.unit || ''}`;
+        if (typeof delta.delta === 'number') note.textContent += ` · Δ ${this._formatNumber(delta.delta,2)} ${delta.unit || ''}`;
+        if (typeof delta.percent === 'number') note.textContent += ` · ${this._formatNumber(delta.percent,2)}%`;
+        else note.textContent += ` · ${this._t(delta.reason || pair.reason || 'unavailable')}`;
+      }
+      metric.appendChild(note);
+    }
+
+    _renderComparisonOverview(container, pair) {
+      const section=document.createElement('section');section.className='section comparison-overview';
+      const style=document.createElement('style');style.textContent=`
+        .comparison-hint{font-size:12px;line-height:1.6;overflow-wrap:anywhere;margin-top:6px}
+        .comparison-overview{min-width:0}.comparison-overview p{overflow-wrap:anywhere}
+        .comparison-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+        .comparison-mini-day{border:0;background:none;color:var(--sr-text);font:inherit;min-width:0;min-height:44px;padding:4px;cursor:pointer}
+        .comparison-mini-bars{height:90px;display:flex;align-items:flex-end;gap:3px;border-bottom:1px solid var(--sr-border)}
+        .comparison-mini-bar{flex:1;background:var(--sr-primary);min-height:2px}.comparison-mini-bar.previous{background:var(--sr-text);opacity:.25}.comparison-mini-bar.gap{background:transparent;border:1px dashed var(--sr-border);box-sizing:border-box;min-height:6px}.comparison-mini-bar.partial{background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,var(--sr-card) 3px,var(--sr-card) 5px)}
+        .comparison-mini-day small{display:block;font-size:10px;overflow-wrap:anywhere;margin-top:5px}
+        .comparison-details>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px}.comparison-details>summary:before{content:'▸'}.comparison-details[open]>summary:before{content:'▾'}
+        .comparison-mini-day:focus-visible,.comparison-details>summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}`;
+      section.appendChild(style);
+      for (const [side,label] of [['current','Current period'],['previous','Previous period']]) {
+        const snapshot=pair[side],context=document.createElement('p');context.className='muted comparison-context';
+        context.textContent=snapshot?`${this._t(label)}: ${this._formatPeriodDate(snapshot.period.start,snapshot.period.time_zone)} → ${this._formatPeriodDate(snapshot.period.end,snapshot.period.time_zone)} · ${snapshot.period.time_zone} · ${this._t('Missing energy days')}: ${snapshot.coverage.missing_energy_days}`:`${this._t(label)}: — · ${this._t(pair.reason || 'unavailable')}`;
+        if(snapshot?.status==='error')context.textContent=`${this._t('Previous period could not be loaded.')} · ${snapshot.period.start} → ${snapshot.period.end}`;
+        section.appendChild(context);
+      }
+      if(this._energyView==='summary') {
+        const title=document.createElement('h3');title.textContent=this._t('Recorded consumption by day');section.appendChild(title);
+        const days=document.createElement('div');days.className='comparison-days';days.setAttribute('role','group');days.setAttribute('aria-label',this._t('Previous period comparison'));
+        const shown=pair.daily.slice(0,7),scale=Math.max(0,...shown.flatMap(d=>[d.current.energy.recorded_value,d.previous?.energy.recorded_value]).filter(Number.isFinite));
+        for(const day of shown){
+          const button=document.createElement('button');button.type='button';button.className='comparison-mini-day';
+          const bars=document.createElement('span');bars.className='comparison-mini-bars';bars.setAttribute('aria-hidden','true');const labels=[];
+          for(const side of ['previous','current']){
+            const metric=day[side]?.energy,value=metric?.recorded_value ?? null,bar=document.createElement('span');bar.className=`comparison-mini-bar ${side} ${value===null?'gap':metric.status==='ready'?'':'partial'}`;
+            bar.style.height=`${value===null?100:scale?Math.max(0,value)/scale*100:0}%`;bars.appendChild(bar);
+            labels.push(`${this._t(side==='current'?'Current period':'Previous period')}: ${this._formatNumber(value,2)} kWh · ${this._t(metric?.status || 'no_data')}`);
+          }
+          const date=document.createElement('small');date.textContent=new Intl.DateTimeFormat(languageOf(this._hass),{month:'numeric',day:'numeric',timeZone:pair.current.period.time_zone}).format(new Date(day.current.start));
+          const label=`${this._formatPeriodDate(day.current.start,pair.current.period.time_zone)} · ${labels.join(' · ')}`;button.setAttribute('aria-label',label);button.title=label;button.append(bars,date);
+          button.addEventListener('click',()=>{this._comparisonSelectedDay=day.current.start;this._comparisonDetailsOpen=true;this._renderEnergyState();this._focusReportControl(this.shadowRoot.querySelector('[data-comparison-view][aria-selected="true"]'));});days.appendChild(button);
+        }section.appendChild(days);
+        if(pair.daily.length>7){const more=document.createElement('p');more.className='muted';more.textContent=this._t('Comparison details');section.appendChild(more);}
+      }
+      const detail=document.createElement('details');detail.className='comparison-details';detail.open=this._comparisonDetailsOpen===true;
+      const summary=document.createElement('summary');summary.textContent=this._t('Comparison details');summary.dataset.reportControl='comparison-details';detail.appendChild(summary);
+      detail.addEventListener('toggle',()=>{if(detail.isConnected)this._comparisonDetailsOpen=detail.open;});
+      this._renderPeriodComparison(detail,pair);section.appendChild(detail);container.appendChild(section);
+    }
+
     _renderPeriodComparison(container, pair) {
       const section = document.createElement('section'); section.className = 'comparison section'; section.dataset.comparison = '';
       // Scoped styles keep the existing Smart19 settings and chart CSS intact.
@@ -3088,8 +3147,8 @@ function projectSmartReportV3(report, includePrivate = false) {
       context.dataset.periodEnd = period.end || '';
       context.title = `${this._t('Exact recorder window')}: ${period.start || '—'} → ${period.end || '—'}`;
       container.appendChild(context);
-      if (state.comparison) this._renderPeriodComparison(container, state.comparison);
       if (state.status === 'no_data') {
+        if(state.comparison)this._renderComparisonOverview(container,state.comparison);
         container.appendChild(this._stateBlock('No recorded energy change in this period.', 'Measured zero is rendered separately; this state means no recorder samples were available.', '', 'status', 'no_data'));
         this._renderDailyChart(container, state);
         if (period.start === period.end) { const note = document.createElement('p'); note.className = 'muted section'; note.textContent = this._t('Today starts reporting after its first completed hour.'); container.appendChild(note); }
@@ -3106,9 +3165,13 @@ function projectSmartReportV3(report, includePrivate = false) {
       summary.appendChild(this._metric(state.cost && state.cost.value == null && recordedCost.value != null ? 'Recorded cost' : costLabel, state.cost && state.cost.value == null && recordedCost.value != null ? `${this._formatNumber(recordedCost.value, 2)} ${recordedCost.unit || ''}` : costValue));
       summary.appendChild(this._metric('Sources with data', `${recordedTotal.sources_with_data || 0} / ${(state.total_sources || []).length}`));
       summary.appendChild(this._metric('Complete sources', `${recordedTotal.complete_sources || 0} / ${(state.total_sources || []).length}`));
+      if(state.comparison){
+        [...summary.children].forEach((metric,index)=>this._comparisonHint(metric,state.comparison,['energy','cost','sources','complete'][index]));
+      }
       container.appendChild(summary);
+      if(state.comparison)this._renderComparisonOverview(container,state.comparison);
       if (state.status === 'partial' || recordedCost.status === 'partial') { const note = document.createElement('p'); note.className = 'muted section'; note.textContent = this._t('Recorded values cover available samples only; gaps are not zero.'); container.appendChild(note); }
-      if (this._energyView === 'summary') this._renderDailyChart(container, state);
+      if (this._energyView === 'summary' && !state.comparison) this._renderDailyChart(container, state);
       if (this._energyView !== 'costs') {
         const heading = document.createElement('h3'); heading.className = 'section'; heading.textContent = this._t(state.top_ranking_available === false ? 'Device breakdown unavailable' : (state.device_data_status === 'partial' ? 'Reported devices — partial' : 'Device breakdown')); container.appendChild(heading);
         const devices = state.devices || [];
