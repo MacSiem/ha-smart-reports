@@ -3493,6 +3493,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         default_tab: ['energy','automations','system'].includes(next.default_tab)?next.default_tab:'energy',
       };
       if(initial)this._activeTab=this._availableTabs().includes(this._config.default_tab)?this._config.default_tab:this._availableTabs()[0]||null;
+      if(initial&&this._simpleReport()){this._simpleFullTab=this._activeTab;if(this._config.show_energy)this._activeTab='energy';}
       this._observeReviewedExportSource();
       this._tariffGuard?.observe();
       if (this._scaffoldRendered) {
@@ -3734,7 +3735,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         button.setAttribute('aria-selected', String(tab === this._activeTab));
       }
       this.shadowRoot.getElementById('energyToolbar').hidden = this._activeTab !== 'energy' || this._analysisMode === 'calendar';
-      if(this._simpleReport()&&this._activeTab!=='energy')this._renderSimpleReport(this.shadowRoot.getElementById('content'),{status:'idle'});
+      if(this._simpleReport()&&this._activeTab!=='energy')this._renderSimpleReport(this.shadowRoot.getElementById('content'),{status:'unavailable'});
       else if (this._activeTab === null) {
         const container = this.shadowRoot.getElementById('content');
         container.replaceChildren(this._stateBlock('Enable at least one report section.', 'Turn on Energy, Automations, or System in the card configuration.', '', 'status'));
@@ -5001,7 +5002,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       root.querySelector('[data-smart-access-settings]').hidden=simple||!this._canManageAccess();
       this._syncSupport();
       let back=root.querySelector('[data-smart-back]');
-      if(!simple&&['tile','compact'].includes(this._config.variant)&&!back){back=document.createElement('button');back.type='button';back.className='action';back.dataset.smartBack='';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';back.addEventListener('click',()=>{this._simpleExpanded=false;this._syncTabs();root.querySelector('[data-smart-open]')?.focus({preventScroll:true});});root.querySelector('.header').append(back);}
+      if(!simple&&['tile','compact'].includes(this._config.variant)&&!back){back=document.createElement('button');back.type='button';back.className='action';back.dataset.smartBack='';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';back.addEventListener('click',()=>{this._simpleFullTab=this._activeTab;this._simpleExpanded=false;if(this._config.show_energy)this._activeTab='energy';this._syncTabs();if(this._activeTab==='energy'&&['idle','loading'].includes(this._energyViewState.status))this._scheduleRefresh(true);root.querySelector('[data-smart-open]')?.focus({preventScroll:true});});root.querySelector('.header').append(back);}
       if(back){back.hidden=simple||this._config.variant==='full';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';}
     }
 
@@ -5019,8 +5020,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         if(calendar&&snapshot){
           energy=snapshot.totals?.measurement_complete===true?snapshot.totals.kwh:null;
           cost=snapshot.totals?.pricing_complete===true?snapshot.totals.total_cost:null;currency=snapshot.totals?.currency;
-          const c=snapshot.comparisons?.previous;if(c?.status==='ready')comparison={delta:c.delta_kwh,percent:c.percent,scope:c.comparison_scope};
-          const rows=snapshot.comparisons?.previous?.groups?.devices||{};
+          const kind=state.selection?.comparison||snapshot.context?.comparison_kind||'previous',c=snapshot.comparisons?.[kind];if(c?.status==='ready')comparison={delta:c.delta_kwh,percent:c.percent,scope:c.comparison_scope,kind};
+          const rows=c?.groups?.devices||{};
           changes=Object.entries(rows).filter(([,v])=>v.status==='ready'&&number(v.delta_kwh)!==null).map(([id,v])=>({name:snapshot.groups?.devices?.[id]?.name||id,delta:number(v.delta_kwh)}));
         }else{
           energy=state.total?.value;cost=state.cost?.value;currency=state.cost?.currency;
@@ -5037,11 +5038,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       if(this._config.variant==='tile'){primary.textContent=`${periodText}: ${format(energy,'kWh')} · ${!calendar&&state.cost?.method==='flat_rate_estimate'?'≈ ':''}${format(cost,currency)}`;status.hidden=true;}
       else{
         section.append(costLine);const delta=document.createElement('p');delta.dataset.smartComparison='';
-        delta.textContent=comparison?`${t('vs previous','względem poprzedniego')}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
+        delta.textContent=comparison?`${({previous:t('vs previous','względem poprzedniego'),same_weekday:t('vs same weekday','względem tego samego dnia tygodnia'),mean7:t('vs seven-period mean','względem średniej z 7 okresów'),year_ago:t('vs year ago','względem ubiegłego roku')})[comparison.kind||'previous']}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
         const list=document.createElement('ul');list.setAttribute('aria-label',t('Largest measured changes','Największe zmierzone zmiany'));
         for(const row of changes.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||a.name.localeCompare(b.name)).slice(0,3)){const li=document.createElement('li');li.dataset.smartChange='';const name=document.createElement('span');name.textContent=row.name;name.title=row.name;const value=document.createElement('span');value.textContent=`${this._formatReportChange(row.delta)} kWh`;li.append(name,value);list.append(li);}section.append(list);
       }
-      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>{this._simpleExpanded=true;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});});section.append(open);
+      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>{this._simpleExpanded=true;if(this._availableTabs().includes(this._simpleFullTab))this._activeTab=this._simpleFullTab;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});});section.append(open);
       container.replaceChildren(section);if(focused)open.focus({preventScroll:true});this._syncVariantChrome();
     }
 
@@ -5064,7 +5065,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         const note=document.createElement('p');note.className='muted';note.textContent=String(languageOf(this._hass)).startsWith('pl')?'Źródła: konfiguracja Energia HA. Dostęp i obliczenia potwierdza HA Tools Email. Wybrane ręcznie statystyki należą do osobnego raportu.':'Sources: HA Energy configuration. HA Tools Email authorizes access and calculates this report. Manually selected statistics belong to the separate report.';if(!this._simpleReport())container.append(note);
         const access=this._calendarAccess().state();
         if(access.status!=='ready'||access.analysis.visible!==true||access.analysis.read!==true){
-          this._calendarHost?.stop();const pl=String(languageOf(this._hass)).startsWith('pl');const p=document.createElement('p');p.setAttribute('role','status');p.textContent=access.status==='unsupported'?(pl?'Zainstaluj lub zaktualizuj HA Tools Email, aby użyć kalendarza. Wybrane statystyki pozostają dostępne.':'Install or update HA Tools Email to use the calendar. Selected statistics remain available.'):['idle','loading'].includes(access.status)?(pl?'Sprawdzanie dostępu do kalendarza…':'Checking calendar access…'):(pl?'Nie potwierdzono uprawnień do odczytu kalendarza. Sprawdź dostęp i ponów.':'Calendar read permission could not be confirmed. Check access and retry.');container.append(p);const retry=document.createElement('button');retry.type='button';retry.className='action';retry.textContent=pl?'Ponów':'Retry';retry.addEventListener('click',()=>this._calendarAccessGate.refresh());container.append(retry);return;
+          this._calendarHost?.stop();if(this._simpleReport()){this._renderSimpleReport(container,{status:['idle','loading'].includes(access.status)?'loading':'unavailable'},true);return;}const pl=String(languageOf(this._hass)).startsWith('pl');const p=document.createElement('p');p.setAttribute('role','status');p.textContent=access.status==='unsupported'?(pl?'Zainstaluj lub zaktualizuj HA Tools Email, aby użyć kalendarza. Wybrane statystyki pozostają dostępne.':'Install or update HA Tools Email to use the calendar. Selected statistics remain available.'):['idle','loading'].includes(access.status)?(pl?'Sprawdzanie dostępu do kalendarza…':'Checking calendar access…'):(pl?'Nie potwierdzono uprawnień do odczytu kalendarza. Sprawdź dostęp i ponów.':'Calendar read permission could not be confirmed. Check access and retry.');container.append(p);const retry=document.createElement('button');retry.type='button';retry.className='action';retry.textContent=pl?'Ponów':'Retry';retry.addEventListener('click',()=>this._calendarAccessGate.refresh());container.append(retry);return;
         }
         const mount=document.createElement('section');mount.dataset.smartCalendar='';container.append(mount);
         this._calendarHost ||= createSmartAnalysisHostV53({card:this});this._calendarHost.mount(mount);return;
