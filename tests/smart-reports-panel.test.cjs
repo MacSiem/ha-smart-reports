@@ -6,7 +6,7 @@ async function setup({native=true,preview=false,deferOwner=false,reuseOwner=fals
  let cachedOwner;
  if(native)ha.provideHass=()=>{};
  const hass=makeHass();hass.user.is_admin=false;hass.user.is_active=true;hass.connection=Object.assign(new w.EventTarget(),{connected:true});
- ha.addEventListener('show-dialog',event=>{requests.push(event.detail);if(deferOwner)return;const owner=reuseOwner&&cachedOwner?cachedOwner:w.document.createElement(event.detail.dialogTag);cachedOwner=owner;owner.showDialog(event.detail.dialogParams);owner.hass=hass;ha.append(owner);});
+ ha.addEventListener('show-dialog',event=>{requests.push(event.detail);if(deferOwner)return;const owner=reuseOwner&&cachedOwner?cachedOwner:w.document.createElement(event.detail.dialogTag);cachedOwner=owner;owner.showDialog(event.detail.dialogParams);owner.hass=hass;if(owner.parentNode!==ha)ha.append(owner);});
  card.preview=preview;card.setConfig(explicitConfig({variant:'tile',tap_target:'panel',future:{keep:true},...config}));card._period='30d';card._energyView='costs';ha.append(card);w.document.body.append(ha);card.hass=hass;for(let i=0;i<4;i++)await delay();
  return {w,dom,ha,card,hass,requests,async open(){card.shadowRoot.querySelector('[data-smart-open]').click();for(let i=0;i<4;i++)await delay();return w.document.querySelector('ha-tools-smart-report-panel-dialog-v53');},close(){ha.remove();w.close();}};
 }
