@@ -46,11 +46,36 @@ install the current backend (2.4.2 or newer) for these features. Read access mus
 be confirmed for the active user. A denial, missing backend or invalid response
 never falls back to another report or stale data.
 
-Calendar supports day, week, month and year, local dates and the selected
-previous-period, same-weekday, seven-period-mean or year-ago reference where
-applicable. Rooms, floors and devices share one authorized snapshot. **No room**
+The backend baseline documented here is HA Tools Email 2.4.2. Calendar checks
+the backend's actual capabilities, access and response schema; a version label
+alone does not confirm availability. SMTP configuration is not required.
+
+| Calendar period | Local boundaries | Available reference |
+|---|---|---|
+| Day | Local midnight to the next midnight | Previous period; Same weekday; Mean of 7 previous days |
+| Week | Monday to the following Monday | Previous period; Same period last year |
+| Month | First day to the first day of the next month | Previous period; Same period last year |
+| Year | January 1 to January 1 of the next year | Previous period; Same period last year |
+
+Choose a date in the requested period. Future dates are not accepted. Completed
+periods use their full boundaries; the current period stops at the last
+completed UTC hour. The displayed interval includes its start and excludes its
+end. Calendar uses Home Assistant's configured time zone, including DST.
+Current-period comparisons align the corresponding local cutoff. Year-ago
+weeks use the corresponding ISO week in the previous ISO year; an unavailable
+week stays unavailable. For Year, both offered references resolve to the
+previous calendar year. Check the actual reference dates and coverage.
+
+Calendar starts with Day and Previous period. Its source, date, period and
+reference are report controls, not YAML options. In particular,
+`energy_source_mode: explicit` changes Selected statistics only;
+`default_tab: energy` does not select Calendar.
+
+Rooms, floors and devices share one authorized snapshot. **No room**
 and **Unmeasured** stay distinct, and nested devices are not counted twice.
-Chart and Data switch presentation without reading measurements again.
+Unmeasured is a reconciled remainder, when available, not an estimated
+allocation to rooms. Chart and Data switch presentation without reading
+measurements again.
 
 Historical tariff versions price the measured intervals they cover. Energy,
 variable charges and fixed household-period fees stay separate. Whole-period
@@ -61,6 +86,11 @@ percentages describe usage, not an invented whole-period bill percentage.
 
 Calendar JSON/CSV uses schema 4 (`calendar_energy`), with measured coverage,
 comparison facts, fees and the historical rate versions used in calculations.
+Its CSV has the columns `row_type,path,value_type,value`, with one field per
+row, explicit types, JSON Pointer paths and empty-container markers. It is
+different from the Selected-statistics CSV described below. Parse CSV quoting
+and respect the declared value type; formula-leading cells are neutralized.
+
 Review the full preview before saving. Source names and identifiers use aliases
 by default; private fields require an explicit choice for each export. Exports
 are local and do not send email or change access settings.
@@ -90,7 +120,9 @@ The default source mode is `dashboard`:
    top-level consumer.
 
 Use `explicit` mode when the report should use a different declared set of
-statistics. Total, device and cost roles are intentionally separate:
+statistics. Total, device and cost roles are intentionally separate.
+All entity/statistic IDs in the following example are synthetic; replace them
+with existing recorded statistics from your installation:
 
 ```yaml
 type: custom:ha-smart-reports
@@ -128,11 +160,22 @@ Each daily history, cost evidence and previous-period comparison has Chart and
 Data views of the same snapshot. The table retains ranges, units, timezone,
 coverage and missing values. Switching presentation does not fetch new data.
 
-Enable **Compare previous period** to compare the selected range with its
-calendar equivalent. It is off by default (`compare_previous_period: false`).
-Both ranges, source scope and timezone stay visible. Incomplete history,
-incompatible sources and ambiguous calendar boundaries keep percentage changes
-unavailable; a missing day is never a measured zero.
+Selected statistics start with **7 days**. **Today** begins at local midnight;
+**7 days** includes today and the six previous local dates; **30 days** includes
+today and the 29 previous local dates. Each ends at the last completed UTC
+hour. These are trailing local-date windows, not a Monday-to-Sunday week or a
+calendar month, and they are not always exactly 168 or 720 hours around DST.
+
+Enable **Compare previous local-calendar period** to shift both local boundaries back by 1,
+7 or 30 days respectively. It is off by default
+(`compare_previous_period: false`). Both exact ranges, source scope and time
+zone stay visible. The comparison uses actual recorded measurements.
+Incomplete history, incompatible sources and ambiguous or nonexistent local
+boundaries keep affected differences unavailable. A zero baseline permits a
+measured absolute delta but no percentage; Recorder percentages require a
+positive baseline. Energy and cost comparisons can have different availability.
+Today's explicit flat rate does not supply a historical cost comparison.
+A missing day is never a measured zero.
 
 Device search matches names and statistic IDs locally. It filters the displayed
 ranking, preserves parent relationships and leaves report totals unchanged.
@@ -187,10 +230,16 @@ energy_price: 0.42
 currency: PLN
 ```
 
-There is no default tariff. A zero rate is valid and remains zero.
-Recorded cost can cover a shorter period than energy. The current tariff is
-not multiplied by past partial energy; a flat-rate estimate still requires a
-complete energy total.
+The sample price above is synthetic and illustrative. There is no default
+tariff. A zero rate is valid and remains zero. Use a YAML number, not a quoted
+numeric string. Recorded cost can cover a shorter period than energy. A
+flat-rate estimate still requires a complete energy total.
+
+In `auto`, incomplete configured cost statistics remain unavailable; they do
+not trigger a replacement estimate. `cost_statistics` requires recorded cost
+sources. `flat_rate_estimate` explicitly chooses the supplied rate and currency,
+ignoring configured cost statistics for that calculation. Recorded cost covers
+the configured cost sources and is not necessarily a complete electricity bill.
 
 With `energy_cost_mode: configured_tariff`, costs use measured hourly energy
 and the configured rate for each matching time zone, date and tariff zone.
@@ -200,10 +249,33 @@ separate. Zero rates are valid. Missing measurements, missing rates or an
 unavailable tariff service keep the result incomplete or unavailable; there is
 no assumed national tariff or hypothetical load-shifting savings.
 
-Tariff settings require the HA Tools tariff service and its permissions.
-Unavailable or unsupported service responses are shown explicitly, and saving
-requires a confirmed settings readback. Dashboard card YAML remains separate
-from saved tariff settings.
+Shared tariff settings require the HA Tools tariff service and its permissions.
+A validated `tariff_profile` supplied in the card configuration can instead be
+used locally by Selected statistics. Unavailable or unsupported shared-service
+responses are shown explicitly, and saving requires a confirmed settings
+readback. Dashboard card YAML remains separate from saved tariff settings.
+
+## Access and household users
+
+Selected statistics use Home Assistant's Recorder permissions. The
+`show_energy`, `show_automations` and `show_system` options control presentation;
+they do not create a server access policy.
+
+Calendar requires the backend's `energy_analysis` feature visibility and read
+permission for the active user, plus access to the required HA resources.
+The backend enforces this feature gate and validates the request context before
+returning a report. The frontend also discards a report or export preview when
+its access confirmation becomes invalid. A hidden control alone is not the
+security boundary.
+
+An active administrator can open **Settings** and **Access to HA Tools
+features** to manage the existing backend policy. With the backend's default
+policy, Calendar reading is available to household users; administrators may
+change that policy. A household user's permitted Calendar read also supports
+reviewed local exports without granting policy administration, shared-tariff
+writes or SMTP sending. Those are separate capabilities. Policy administration
+and dashboard placement remain administrator operations. No separate
+Smart-specific allowlist is created.
 
 ## Automations and System
 
@@ -317,12 +389,12 @@ and links to `/config/energy`; it does not guess a sensor.
 | `default_tab` | `energy`, `automations`, `system` | `energy` | Initial full report tab. |
 | `show_help` | boolean | `true` | Show the full-view report help disclosure. |
 | `title` | string | `Smart Reports` | Card heading. |
-| `energy_source_mode` | `dashboard` or `explicit` | `dashboard` | Exact source-selection policy. |
+| `energy_source_mode` | `dashboard` or `explicit` | `dashboard` | Source selection for Selected statistics only; Calendar always uses HA Energy. |
 | `energy_total_statistics` | list | empty | Explicit root total statistic IDs. |
 | `energy_device_statistics` | list | empty | Explicit device objects/IDs; objects may include `label` and `included_in_stat`. |
 | `energy_cost_statistics` | list | empty | Explicit actual-cost statistic IDs. |
 | `energy_entity` | string | none | Legacy one-total compatibility alias in explicit mode. |
-| `compare_previous_period` | boolean | `false` | Compare the equivalent prior calendar period with explicit coverage. |
+| `compare_previous_period` | boolean | `false` | Compare the Selected-statistics window shifted back by 1, 7 or 30 local days, with explicit coverage. |
 | `energy_cost_mode` | `auto`, `cost_statistics`, `flat_rate_estimate`, `configured_tariff` | `auto` | Select recorded costs, an explicit estimate, or measured hourly tariff pricing. |
 | `energy_price` | number ≥ 0 | none | Explicit flat estimate rate per kWh. |
 | `currency` | string | none | Required with `energy_price`. |
@@ -331,9 +403,22 @@ and links to `/config/energy`; it does not guess a sensor.
 | `show_system` | boolean | `true` | Show the System tab. |
 | `show_support` | boolean | `true` | Show the optional support link to administrators unless dismissed. |
 
-The visual editor exposes Title, Currency, source mode and separate total,
-device and cost statistic IDs. Tab selection is local to each card instance. If all three `show_*` flags are false, the card shows a
-configuration message and performs no Home Assistant data requests.
+The visual editor exposes **Title**, **Currency**, **Source mode**, **Open report
+in**, **View**, **Initial report**, explicit total/device/cost IDs, **Cost mode**,
+**Flat rate per kWh** and **Show help**. Explicit IDs appear in explicit mode;
+enter one per line or separate them with commas. Existing labels and parent
+relationships are retained when their IDs remain selected.
+
+**Compare previous local-calendar period** is a report control and YAML option.
+`show_energy`, `show_automations`, `show_system`, `show_support` and the
+advanced local `tariff_profile` are YAML options, not extra controls in this
+editor. `default_tab` chooses the initial enabled full-report tab and falls
+back to the first enabled tab when necessary; it does not select Calendar.
+Compact and Tile still show the energy summary when Energy is enabled.
+
+Tab selection is local to each card instance. If all three report-section
+flags are false, the card shows a configuration message and performs no
+Home Assistant data requests.
 
 ### Optional shared tariffs and duplicate card resources
 
