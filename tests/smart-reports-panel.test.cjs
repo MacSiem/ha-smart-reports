@@ -16,7 +16,7 @@ async function setup({native=true,preview=false,deferOwner=false,reuseOwner=fals
  return {w,dom,ha,card,hass,requests,async open(){const open=card.shadowRoot.querySelector('[data-smart-open]');open.focus();open.click();for(let i=0;i<4;i++)await delay();return w.document.querySelector('ha-tools-smart-report-panel-dialog-v53');},close(){ha.remove();w.close();}};
 }
 test('Panel target opens a real full Smart child for a reader and preserves selection without expanding source',async()=>{
- const f=await setup();try{const owner=await f.open();assert.ok(owner);assert.equal(f.requests[0].addHistory,false);assert.ok(f.card.shadowRoot.querySelector('[data-smart-simple]'));const child=owner.querySelector('ha-smart-reports');assert.ok(child);assert.equal(child._inReportPanelV53,true);assert.equal(child._config.variant,'full');assert.equal(child._config.tap_target,'full');assert.equal(child._period,'30d');assert.equal(child._energyView,'costs');assert.equal(child._config.future.keep,true);assert.equal(child._hass,f.hass);assert.equal(owner.querySelector('dialog').open,true);owner.querySelector('[data-smart-panel-close]').click();assert.equal(owner.querySelector('dialog'),null);assert.equal(f.card.shadowRoot.activeElement,f.card.shadowRoot.querySelector('[data-smart-open]'));}finally{f.close();}
+ const f=await setup();try{const owner=await f.open();assert.ok(owner);assert.equal(f.requests[0].addHistory,false);assert.ok(f.card.shadowRoot.querySelector('[data-smart-simple]'));const child=owner.querySelector('ha-smart-reports');assert.ok(child);assert.equal(child._inReportPanelV53,true);assert.equal(child._config.variant,'full');assert.equal(child._config.tap_target,'full');assert.equal(child._period,'30d');assert.equal(child._energyView,'costs');assert.equal(child._config.future.keep,true);assert.equal(child._hass,f.hass);assert.equal(owner.querySelector('dialog').open,true);owner.querySelector('[data-smart-panel-close]').click();assert.equal(owner.querySelector('dialog'),null);await afterManager(f.w);assert.equal(f.card.shadowRoot.activeElement,f.card.shadowRoot.querySelector('[data-smart-open]'));}finally{f.close();}
 });
 test('Native owner survives source detach then invalidates from its own current hass and connection',async()=>{
  const f=await setup();try{const owner=await f.open();assert.ok(owner);f.card.remove();assert.ok(owner.querySelector('dialog'));owner.hass={...f.hass,language:'pl'};assert.match(owner.querySelector('[data-smart-panel-close]').textContent,/Zamknij/);f.hass.user.id='other';owner.hass=f.hass;assert.equal(owner.querySelector('dialog'),null);}finally{f.close();}
@@ -48,7 +48,7 @@ for(const native of [true,false])for(const action of ['click','cancel'])test(`Pa
   assert.equal(oldButton.isConnected,false,'ordinary report refresh replaced the opener');assert.notEqual(current,oldButton);
   if(action==='click')owner.querySelector('[data-smart-panel-close]').click();
   else owner.querySelector('dialog').dispatchEvent(new f.w.Event('cancel',{cancelable:true}));
-  assert.equal(f.card.shadowRoot.activeElement,current);
+  await afterManager(f.w);assert.equal(f.card.shadowRoot.activeElement,current);
  }finally{f.close();}
 });
 
