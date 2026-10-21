@@ -277,3 +277,25 @@ for(const missing of [['sensor.money'],['sensor.grid_import','sensor.money']])te
   const exported=f.card._buildExportDocument();assert.equal(exported.energy.cost.currency,null);assert.equal(exported.comparison.metrics.cost.unit,'PLN');
  }finally{f.close();}
 });
+
+for (const [language, delta, percent, expected] of [
+  ['en', 3.07, 20, '+3.07 kWh (+20%)'],
+  ['pl', 3.07, 20, '+3,07 kWh (+20%)'],
+  ['en', -3.07, -20, '−3.07 kWh (−20%)'],
+  ['pl', 0.004, 0.02, '+0,004 kWh (+0,02%)'],
+]) test(`headline comparison keeps local signed delta and percent: ${language} ${delta}`, () => {
+  const dom = loadRuntime();
+  try {
+    const card = dom.window.document.createElement('ha-smart-reports');
+    const hass = makeHass(); hass.language = language; card.hass = hass;
+    const metric = dom.window.document.createElement('div');
+    const pair = { previous: { cost: {}, cost_sources: [] }, metrics: {
+      energy: { previous: 15.35, delta, percent, unit: 'kWh' },
+    } };
+    const before = JSON.stringify(pair);
+    card._comparisonHint(metric, pair, 'energy');
+    assert.ok(metric.textContent.includes(expected), metric.textContent);
+    assert.equal(metric.textContent.includes('Δ'), false);
+    assert.equal(JSON.stringify(pair), before, 'display leaves exact model/export input unchanged');
+  } finally { dom.window.close(); }
+});
