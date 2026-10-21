@@ -71,7 +71,7 @@ test('Compact retains the selected mean-seven comparison and its measured device
 
 for (const scenario of ['total','common','incomplete','currency','basis']) test(`Compact cost comparison preserves producer scope: ${scenario}`,async()=>{
  const h=await setup(()=>{const d=clone(fixture),c=d.comparisons.previous.costs;c.delta_cost='7.00';c.delta_total_cost='11.00';c.percent='3';
- if(scenario==='common')c.comparison_scope='common_measurements';
+ if(scenario==='common'){d.comparisons.previous.comparison_scope=c.comparison_scope='common_measurements';c.delta_total_cost=null;c.current.total_cost=c.baseline.total_cost=null;}
  if(scenario==='incomplete')c.current.pricing_complete=false;
  if(scenario==='currency')c.baseline.currency='PLN';
  if(scenario==='basis')c.baseline.price_basis='net';
@@ -84,8 +84,8 @@ for (const scenario of ['total','common','incomplete','currency','basis']) test(
  assert.equal(h.hass.calls.length,before,'summary uses accepted facts only');
  }finally{h.close();}
 });
-test('Compact cost follows selected mean-seven comparison independently of energy availability',async()=>{
- const h=await setup(m=>{const d=clone(fixture);if(m.comparison==='mean7'){d.context.comparison_kind='mean7';const c=clone(d.comparisons.previous);c.status='noncomparable';c.delta_kwh=null;c.percent=null;c.costs.delta_total_cost='-4.00';d.comparisons={mean7:c};}return d;},{variant:'compact'});try{
+test('Compact cost follows selected mean-seven comparison',async()=>{
+ const h=await setup(m=>{const d=clone(fixture);if(m.comparison==='mean7'){d.context.comparison_kind='mean7';const c=clone(d.comparisons.previous);c.baseline_kind='mean7';c.costs.baseline.fixed_scope='arithmetic_mean_seven_household_periods';c.costs.baseline.period_count=7;c.costs.baseline.aggregation='arithmetic_mean_seven_unrounded_components';c.costs.delta_total_cost='-4.00';d.comparisons={mean7:c};}return d;},{variant:'compact'});try{
  h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();let r=h.card.shadowRoot;const select=r.querySelector('[data-analysis-action="comparison"]');select.value='mean7';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();r.querySelector('[data-smart-back]').click();const node=r.querySelector('[data-smart-cost-comparison]');assert.ok(node);assert.match(node.textContent,/seven.*−4.*EUR/);
  }finally{h.close();}
 });

@@ -3540,6 +3540,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           [data-smart-simple] ul{list-style:none;margin:0;padding:0;font-size:12px;line-height:16px;display:grid;gap:2px}
           [data-smart-change]{display:flex;justify-content:space-between;gap:8px;min-width:0}[data-smart-change] span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}[data-smart-change] span:last-child{flex-shrink:0}
           [data-smart-simple] button{justify-self:end;min-height:44px}
+          [data-smart-simple=compact]{grid-template-columns:minmax(0,1fr) auto}
+          [data-smart-simple=compact] .smart-simple-status{grid-column:2;grid-row:1;align-self:center;text-align:end}
+          [data-smart-simple=compact]>:not(h2):not(.smart-simple-status){grid-column:1/-1}
           [data-smart-simple=tile]{grid-template-columns:minmax(0,1fr) auto;gap:0 8px;padding:8px 12px}
           [data-smart-simple=tile] h2{grid-column:1;align-self:end}[data-smart-simple=tile] [data-smart-import]{grid-column:1;font-size:12px;line-height:16px;font-weight:400}
           [data-smart-simple=tile] button{grid-column:2;grid-row:1/3;max-width:100px;font-size:12px;padding:4px 8px}
@@ -5024,7 +5027,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           const costs=c?.costs,a=costs?.current,b=costs?.baseline;
           // The producer percentage describes usage_cost, even when a separate
           // whole-period delta includes fixed fees. Never mix those two scopes.
-          const samePrice=costs?.status==='ready'&&a?.pricing_complete===true&&b?.pricing_complete===true&&a.compatible===true&&b.compatible===true&&a.currency&&a.currency===b.currency&&a.price_basis&&a.price_basis===b.price_basis;
+          const samePrice=costs?.status==='ready'&&a?.pricing_complete===true&&b?.pricing_complete===true&&a.compatible===true&&b.compatible===true&&/^[A-Z]{3}$/.test(a.currency)&&a.currency===b.currency&&['gross','net'].includes(a.price_basis)&&a.price_basis===b.price_basis&&['calendar_totals','common_measurements'].includes(costs.comparison_scope);
           if(samePrice){
             const total=costs.comparison_scope==='calendar_totals'&&number(costs.delta_total_cost)!==null;
             const delta=total?costs.delta_total_cost:costs.metric==='usage_cost'?costs.delta_cost:null;
@@ -5035,7 +5038,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         }else{
           energy=state.total?.value;cost=state.cost?.value;currency=state.cost?.currency;
           const c=state.comparison,metric=c?.metrics?.energy;if(metric?.comparable)comparison={delta:metric.delta,percent:metric.percent,scope:'calendar_totals'};
-          const money=c?.metrics?.cost;if(money?.comparable&&number(money.delta)!==null)costComparison={delta:money.delta,percent:money.percent,currency:money.unit,scope:'calendar_totals',kind:'previous',total:true};
+          const money=c?.metrics?.cost;if(money?.comparable&&/^[A-Z]{3}$/.test(money.unit)&&number(money.delta)!==null)costComparison={delta:money.delta,percent:money.percent,currency:money.unit,scope:'calendar_totals',kind:'previous',total:true};
           const previous=new Map((c?.previous?.devices||[]).map(v=>[v.statistic_id,v]));
           changes=(state.devices||[]).flatMap(v=>{const before=previous.get(v.statistic_id);return v.status==='ready'&&before?.status==='ready'&&v.unit===before.unit&&number(v.value)!==null&&number(before.value)!==null?[{name:v.label||v.statistic_id,delta:number(v.value)-number(before.value)}]:[];});
         }
@@ -5048,10 +5051,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       if(this._config.variant==='tile'){primary.textContent=`${periodText}: ${format(energy,'kWh')} · ${!calendar&&state.cost?.method==='flat_rate_estimate'?'≈ ':''}${format(cost,currency)}`;status.hidden=true;}
       else{
         section.append(costLine);const delta=document.createElement('p');delta.dataset.smartComparison='';
-        delta.textContent=comparison?`${({previous:t('vs previous','względem poprzedniego'),same_weekday:t('vs same weekday','względem tego samego dnia tygodnia'),mean7:t('vs seven-period mean','względem średniej z 7 okresów'),year_ago:t('vs year ago','względem ubiegłego roku')})[comparison.kind||'previous']}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
+        delta.textContent=comparison?`${({previous:t('vs previous','vs poprzedni okres'),same_weekday:t('vs same weekday','vs ten sam dzień tyg.'),mean7:t('vs seven-period mean','vs średnia z 7'),year_ago:t('vs year ago','vs ubiegły rok')})[comparison.kind||'previous']}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
         const moneyDelta=document.createElement('p');moneyDelta.dataset.smartCostComparison='';
         const costKind=costComparison?.kind||state.selection?.comparison||snapshot?.context?.comparison_kind||'previous';
-        const costBaseline=({previous:t('vs previous','względem poprzedniego'),same_weekday:t('vs same weekday','względem tego samego dnia tygodnia'),mean7:t('vs seven-period mean','względem średniej z 7 okresów'),year_ago:t('vs year ago','względem ubiegłego roku')})[costKind];
+        const costBaseline=({previous:t('vs previous','vs poprzedni okres'),same_weekday:t('vs same weekday','vs ten sam dzień tyg.'),mean7:t('vs seven-period mean','vs średnia z 7'),year_ago:t('vs year ago','vs ubiegły rok')})[costKind];
         moneyDelta.textContent=costComparison?`${costComparison.total?t('Period cost','Koszt okresu'):t('Usage cost','Koszt zużycia')} ${costBaseline}: ${this._formatReportChange(number(costComparison.delta))} ${costComparison.currency}${number(costComparison.percent)===null?'':` (${this._formatReportChange(number(costComparison.percent))}%)`}${costComparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:`${t('Cost','Koszt')} ${costBaseline}: ${t('no comparable data','brak porównywalnych danych')}`;
         section.append(moneyDelta);
         const list=document.createElement('ul');list.setAttribute('aria-label',t('Largest measured changes','Największe zmierzone zmiany'));
