@@ -1,0 +1,30 @@
+"use strict";
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {loadRuntime,makeHass,explicitConfig,delay}=require('./helpers/smart-reports-harness.cjs');
+async function setup({native=true,preview=false,config={}}={}){
+ const dom=loadRuntime(),w=dom.window,ha=w.document.createElement('home-assistant'),card=w.document.createElement('ha-smart-reports'),requests=[];
+ if(native)ha.provideHass=()=>{};
+ const hass=makeHass();hass.user.is_admin=false;hass.user.is_active=true;hass.connection=Object.assign(new w.EventTarget(),{connected:true});
+ ha.addEventListener('show-dialog',event=>{requests.push(event.detail);const owner=w.document.createElement(event.detail.dialogTag);owner.showDialog(event.detail.dialogParams);owner.hass=hass;ha.append(owner);});
+ card.preview=preview;card.setConfig(explicitConfig({variant:'tile',tap_target:'panel',future:{keep:true},...config}));card._period='30d';card._energyView='costs';ha.append(card);w.document.body.append(ha);card.hass=hass;for(let i=0;i<4;i++)await delay();
+ return {w,dom,ha,card,hass,requests,async open(){card.shadowRoot.querySelector('[data-smart-open]').click();for(let i=0;i<4;i++)await delay();return w.document.querySelector('ha-tools-smart-report-panel-dialog-v53');},close(){ha.remove();w.close();}};
+}
+test('Panel target opens a real full Smart child for a reader and preserves selection without expanding source',async()=>{
+ const f=await setup();try{const owner=await f.open();assert.ok(owner);assert.equal(f.requests[0].addHistory,false);assert.ok(f.card.shadowRoot.querySelector('[data-smart-simple]'));const child=owner.querySelector('ha-smart-reports');assert.ok(child);assert.equal(child._inReportPanelV53,true);assert.equal(child._config.variant,'full');assert.equal(child._config.tap_target,'full');assert.equal(child._period,'30d');assert.equal(child._energyView,'costs');assert.equal(child._config.future.keep,true);assert.equal(child._hass,f.hass);assert.equal(owner.querySelector('dialog').open,true);owner.querySelector('[data-smart-panel-close]').click();assert.equal(owner.querySelector('dialog'),null);assert.equal(f.card.shadowRoot.activeElement,f.card.shadowRoot.querySelector('[data-smart-open]'));}finally{f.close();}
+});
+test('Native owner survives source detach then invalidates from its own current hass and connection',async()=>{
+ const f=await setup();try{const owner=await f.open();assert.ok(owner);f.card.remove();assert.ok(owner.querySelector('dialog'));owner.hass={...f.hass,language:'pl'};assert.match(owner.querySelector('[data-smart-panel-close]').textContent,/Zamknij/);f.hass.user.id='other';owner.hass=f.hass;assert.equal(owner.querySelector('dialog'),null);}finally{f.close();}
+});
+test('Connection event closes an owned panel after source detach without waiting for a hass assignment',async()=>{
+ const f=await setup();try{const owner=await f.open();assert.ok(owner);f.card.remove();f.hass.connection.dispatchEvent(new f.w.Event('disconnected'));assert.equal(owner.querySelector('dialog'),null);}finally{f.close();}
+});
+test('A preview cannot open either panel or inline full report',async()=>{
+ for(const target of ['panel','full']){const f=await setup({preview:true,config:{tap_target:target}});try{await f.open();assert.equal(f.requests.length,0);assert.ok(f.card.shadowRoot.querySelector('[data-smart-simple]'));assert.equal(f.w.document.querySelector('dialog'),null);}finally{f.close();}}
+});
+test('Fallback panel closes on source detach and native pending request can be cancelled before attachment',async()=>{
+ const f=await setup({native:false});try{const owner=await f.open();assert.ok(owner);f.card.remove();assert.equal(f.w.document.querySelector('dialog'),null);}finally{f.close();}
+ const g=await setup();try{g.ha.replaceWith(g.ha);let request;g.ha.addEventListener('show-dialog',e=>{request=e.detail.dialogParams;},{once:true});await g.open();g.card.setConfig({variant:'tile',tap_target:'full'});assert.equal(request.closed,true);}finally{g.close();}
+});
+test('Editor roundtrips panel target, unknown config and label language',async()=>{
+ const f=await setup();try{const e=f.w.document.createElement('ha-smart-reports-editor');e.setConfig({...f.card._config});f.ha.append(e);e.hass=f.hass;const target=e.shadowRoot.querySelector('#cf_tap_target');assert.ok(target);assert.equal(target.value,'panel');let config;e.addEventListener('config-changed',event=>config=event.detail.config);target.value='full';target.dispatchEvent(new f.w.Event('change'));assert.equal(config.tap_target,'full');assert.equal(config.future.keep,true);e.hass={...f.hass,language:'pl'};assert.match(e.shadowRoot.querySelector('#cf_tap_target').parentElement.textContent,/oknie/);}finally{f.close();}
+});
