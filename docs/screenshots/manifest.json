@@ -2,7 +2,7 @@
   "schema_version": 2,
   "source": {
     "path": "ha-smart-reports.js",
-    "sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c"
+    "sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd"
   },
   "fixture": {
     "seed": "sr-demo-v1",
@@ -11,13 +11,9 @@
     "timezone": "Europe/Warsaw"
   },
   "renderer": {
-    "name": "Chromium (native Chrome browser capture)",
-    "version": "155.0.0.0",
-    "executable_sha256": null,
-    "capture_method": "native-browser-fullpage-pixel-crop",
-    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
-    "version_source": "observed_user_agent",
-    "binary_provenance": "unavailable_native_capture_interface"
+    "name": "Google Chrome",
+    "version": "156.0.8078.48",
+    "executable_sha256": "00ba2d076d622800fe24e1323e1963a77ed115fe7b20105e3d40ffca422805e3"
   },
   "captures": [
     {
@@ -25,12 +21,12 @@
       "theme": "light",
       "viewport": "desktop",
       "pixel_width": 480,
-      "pixel_height": 1359,
-      "source_sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c",
-      "image_sha256": "6cac7da6706651cd90a6199aa1a61dd5073959052777d731ffe46be1bf5bbb03",
+      "pixel_height": 1783,
+      "source_sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd",
+      "image_sha256": "40fac138dc464c952968454d8a4cad6c526903f6e55161fe8208ea3913f6f2da",
       "render_sha256_samples": [
-        "6cac7da6706651cd90a6199aa1a61dd5073959052777d731ffe46be1bf5bbb03",
-        "6cac7da6706651cd90a6199aa1a61dd5073959052777d731ffe46be1bf5bbb03"
+        "40fac138dc464c952968454d8a4cad6c526903f6e55161fe8208ea3913f6f2da",
+        "40fac138dc464c952968454d8a4cad6c526903f6e55161fe8208ea3913f6f2da"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -46,12 +42,12 @@
       "theme": "dark",
       "viewport": "desktop",
       "pixel_width": 480,
-      "pixel_height": 1359,
-      "source_sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c",
-      "image_sha256": "d78ec2aae5a5a82a516d0eb631114c3bc4fe43cde664830a3d29e6dc9d27003b",
+      "pixel_height": 1783,
+      "source_sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd",
+      "image_sha256": "06c2dfe4d8038fe71615ceca5ef95c13c7fad623ef72d35dc2f6bcde88dcad0a",
       "render_sha256_samples": [
-        "d78ec2aae5a5a82a516d0eb631114c3bc4fe43cde664830a3d29e6dc9d27003b",
-        "d78ec2aae5a5a82a516d0eb631114c3bc4fe43cde664830a3d29e6dc9d27003b"
+        "06c2dfe4d8038fe71615ceca5ef95c13c7fad623ef72d35dc2f6bcde88dcad0a",
+        "06c2dfe4d8038fe71615ceca5ef95c13c7fad623ef72d35dc2f6bcde88dcad0a"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -67,12 +63,12 @@
       "theme": "light",
       "viewport": "narrow",
       "pixel_width": 360,
-      "pixel_height": 1505,
-      "source_sha256": "b3b2ea718469081598284eb226066519a3a5b4049847e59872daa3197865155c",
-      "image_sha256": "d8dac59d57df256ab9413875981a7cc029c307dc624290ff8bca5732d59b47d5",
+      "pixel_height": 2149,
+      "source_sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd",
+      "image_sha256": "62e2689446b658f53569eca2d849499de7e275ca7d1b1115506df3d311b467f6",
       "render_sha256_samples": [
-        "d8dac59d57df256ab9413875981a7cc029c307dc624290ff8bca5732d59b47d5",
-        "d8dac59d57df256ab9413875981a7cc029c307dc624290ff8bca5732d59b47d5"
+        "62e2689446b658f53569eca2d849499de7e275ca7d1b1115506df3d311b467f6",
+        "62e2689446b658f53569eca2d849499de7e275ca7d1b1115506df3d311b467f6"
       ],
       "layout": {
         "horizontal_overflow": false
