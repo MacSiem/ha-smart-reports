@@ -2,7 +2,7 @@
   "schema_version": 2,
   "source": {
     "path": "ha-smart-reports.js",
-    "sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd"
+    "sha256": "eb9aa7a8ca2762b3596a21f1d09737ba68c14c3de7363fc4c765e8578c65727c"
   },
   "fixture": {
     "seed": "sr-demo-v1",
@@ -22,11 +22,11 @@
       "viewport": "desktop",
       "pixel_width": 480,
       "pixel_height": 1783,
-      "source_sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd",
-      "image_sha256": "40fac138dc464c952968454d8a4cad6c526903f6e55161fe8208ea3913f6f2da",
+      "source_sha256": "eb9aa7a8ca2762b3596a21f1d09737ba68c14c3de7363fc4c765e8578c65727c",
+      "image_sha256": "92a6ddace0a42ab2edd4c553d8d68ed63bb2d8a764183f8417f6e8687e4f7df5",
       "render_sha256_samples": [
-        "40fac138dc464c952968454d8a4cad6c526903f6e55161fe8208ea3913f6f2da",
-        "40fac138dc464c952968454d8a4cad6c526903f6e55161fe8208ea3913f6f2da"
+        "92a6ddace0a42ab2edd4c553d8d68ed63bb2d8a764183f8417f6e8687e4f7df5",
+        "92a6ddace0a42ab2edd4c553d8d68ed63bb2d8a764183f8417f6e8687e4f7df5"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -43,11 +43,11 @@
       "viewport": "desktop",
       "pixel_width": 480,
       "pixel_height": 1783,
-      "source_sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd",
-      "image_sha256": "06c2dfe4d8038fe71615ceca5ef95c13c7fad623ef72d35dc2f6bcde88dcad0a",
+      "source_sha256": "eb9aa7a8ca2762b3596a21f1d09737ba68c14c3de7363fc4c765e8578c65727c",
+      "image_sha256": "68806ab4deb13d45daebe1ac39916365594ecc34827cbb0e8f4ad36f83ecf24c",
       "render_sha256_samples": [
-        "06c2dfe4d8038fe71615ceca5ef95c13c7fad623ef72d35dc2f6bcde88dcad0a",
-        "06c2dfe4d8038fe71615ceca5ef95c13c7fad623ef72d35dc2f6bcde88dcad0a"
+        "68806ab4deb13d45daebe1ac39916365594ecc34827cbb0e8f4ad36f83ecf24c",
+        "68806ab4deb13d45daebe1ac39916365594ecc34827cbb0e8f4ad36f83ecf24c"
       ],
       "layout": {
         "horizontal_overflow": false
@@ -63,12 +63,12 @@
       "theme": "light",
       "viewport": "narrow",
       "pixel_width": 360,
-      "pixel_height": 2149,
-      "source_sha256": "39bdc5c8238de7c68f6c8ddd7bf154de95c1f1a7a3a439bb79d1707423cba6bd",
-      "image_sha256": "62e2689446b658f53569eca2d849499de7e275ca7d1b1115506df3d311b467f6",
+      "pixel_height": 2139,
+      "source_sha256": "eb9aa7a8ca2762b3596a21f1d09737ba68c14c3de7363fc4c765e8578c65727c",
+      "image_sha256": "f7717846cd7961795cfccd9d704c8fb5739b59e3aeaa4fd0456ee26f36885526",
       "render_sha256_samples": [
-        "62e2689446b658f53569eca2d849499de7e275ca7d1b1115506df3d311b467f6",
-        "62e2689446b658f53569eca2d849499de7e275ca7d1b1115506df3d311b467f6"
+        "f7717846cd7961795cfccd9d704c8fb5739b59e3aeaa4fd0456ee26f36885526",
+        "f7717846cd7961795cfccd9d704c8fb5739b59e3aeaa4fd0456ee26f36885526"
       ],
       "layout": {
         "horizontal_overflow": false
