@@ -42,3 +42,15 @@ test('only an active administrator can open native feature-policy settings and s
 test('household users never fetch the administrator policy or account directory',async()=>{
  const f=await setup();try{assert.equal(f.card.shadowRoot.querySelector('[data-smart-access-settings]')?.hidden??true,true);f.card._selectTab('config');await settle();assert.notEqual(f.card._activeTab,'config');assert.equal(f.hass.calls.filter(m=>['ha_tools_email/get_feature_access','ha_tools_email/set_feature_access','config/auth/list'].includes(m.type)).length,0);}finally{f.close();}
 });
+
+test('a late control event from the previous user cannot clear the current accepted calendar',async()=>{
+ const f=await setup();try{
+ const oldControl=[...f.listeners][0];assert.equal(typeof oldControl,'function');
+ button(f).click();await settle();
+ f.hass.user.id='new_household';f.card.hass=f.hass;await settle();
+ const tile=f.card.shadowRoot.querySelector('.analysis-tiles');assert.ok(tile);
+ const calls=f.hass.calls.length;oldControl({});await settle();
+ assert.equal(f.card.shadowRoot.querySelector('.analysis-tiles'),tile);
+ assert.equal(f.hass.calls.length,calls);
+ }finally{f.close();}
+});

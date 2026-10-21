@@ -15,7 +15,7 @@ async function setup(){
  hass.connection={connected:true,subscribeMessage:async(fn)=>{listeners.add(fn);return()=>listeners.delete(fn);},addEventListener(){},removeEventListener(){}};
  card.setConfig(explicitConfig());w.document.body.append(card);card.hass=hass;card._refreshThrottleMs=1000000;
  if(card._refreshTimer!==null){w.clearTimeout(card._refreshTimer);card._refreshTimer=null;}
- card.shadowRoot.querySelector('[data-smart-analysis="calendar"]').click();for(let i=0;i<12;i++)await delay();
+ const choose=card.shadowRoot.querySelector('[data-smart-analysis="calendar"]');for(let i=0;i<12&&choose.disabled;i++)await delay();assert.equal(choose.disabled,false);choose.click();for(let i=0;i<12;i++)await delay();
  return {dom,w,card,hass,listeners,dto,pause(){pending=true;},close(){card.remove();dom.window.close();}};
 }
 async function open(f,format='json'){
