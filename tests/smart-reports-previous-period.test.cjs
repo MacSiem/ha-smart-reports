@@ -329,3 +329,18 @@ for (const [partial, coverage] of [[false, '1/1 source complete'], [true, '0/1 s
     } finally { f.close(); }
   });
 }
+
+test('summary shows one period context while both exact comparison windows remain in Details', async () => {
+  const f = await fixture();
+  try {
+    const root = f.card.shadowRoot, overview = root.querySelector('.comparison-overview');
+    assert.equal(overview.querySelectorAll(':scope > .comparison-context').length, 0);
+    const details = overview.querySelector('.comparison-details');
+    assert.equal(details.open, false);
+    for (const side of ['current', 'previous']) {
+      const period = f.card._energyViewState.comparison[side].period;
+      const evidence = details.querySelector(`[data-comparison-period="${side}"]`).textContent;
+      for (const exact of [period.start, period.end, period.time_zone]) assert.ok(evidence.includes(exact));
+    }
+  } finally { f.close(); }
+});
