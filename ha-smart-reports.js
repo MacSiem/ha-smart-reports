@@ -3300,6 +3300,7 @@ function createSmartAnalysisHostV53({card}) {
  function paint(){
   if(!active())return;
   const state=exportState(),view=createEnergyAnalysisViewV53({card});
+  if(card._simpleReport?.()){card._renderSimpleReport(root,state,true);return;}
   const calendar=root.querySelector('[data-analysis-calendar-options]');if(calendar)calendarOpen=calendar.open;
   const focused=root.getRootNode().activeElement,saved=root.contains(focused)?{action:focused.dataset.analysisAction,value:focused.dataset.analysisValue,draft:focused.matches('input')?focused.value:null}:null;
   root.innerHTML=`<style>${view.styles()}</style>`;
@@ -3424,7 +3425,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       else this._tariffGuard?.observe();
       this._syncTheme();
       this._syncSupport();
-      if(this._scaffoldRendered){this.shadowRoot.querySelector('[data-smart-access-settings]').hidden=!this._canManageAccess();if(this._activeTab==='config')this._renderAccessSettings();}
+      if(this._scaffoldRendered){this.shadowRoot.querySelector('[data-smart-access-settings]').hidden=!this._canManageAccess()||this._simpleReport();if(this._activeTab==='config')this._renderAccessSettings();this._syncVariantChrome();}
       if (languageChanged && this._scaffoldRendered) {
         this._syncLabels();
         this._syncTabs();
@@ -3460,6 +3461,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       this._analysisMode='recorded';
       this._deviceQuery = '';
       const next = config && typeof config === 'object' ? config : {};
+      const initial=!this._configured;this._configured=true;this._simpleExpanded=false;
       const hasRate = Object.prototype.hasOwnProperty.call(next, 'energy_price');
       const currency = typeof next.currency === 'string' && next.currency.trim() ? next.currency.trim() : null;
       this._config = {
@@ -3480,7 +3482,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           : null,
         currency,
         compare_previous_period: next.compare_previous_period === true,
+        variant: ['tile','compact','full'].includes(next.variant)?next.variant:next.compact===true?'compact':'full',
+        default_tab: ['energy','automations','system'].includes(next.default_tab)?next.default_tab:'energy',
       };
+      if(initial)this._activeTab=this._availableTabs().includes(this._config.default_tab)?this._config.default_tab:this._availableTabs()[0]||null;
       this._observeReviewedExportSource();
       this._tariffGuard?.observe();
       if (this._scaffoldRendered) {
@@ -3491,11 +3496,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       }
     }
 
-    getCardSize() { return 5; }
+    getCardSize() { return this._simpleReport()?(this._config.variant==='tile'?1:4):5; }
 
-    getGridOptions() { return { columns: 12, min_rows: 3, min_columns: 6 }; }
+    getGridOptions() { return this._simpleReport()?{columns:this._config.variant==='tile'?6:12,rows:this.getCardSize(),min_rows:1,min_columns:6}:{ columns: 12, min_rows: 3, min_columns: 6 }; }
 
-    static getStubConfig() { return { title: 'Smart Reports', energy_source_mode: 'dashboard' }; }
+    static getStubConfig() { return { title: 'Smart Reports', energy_source_mode: 'dashboard',variant:'compact' }; }
 
     static getConfigElement() { return document.createElement('ha-smart-reports-editor'); }
 
@@ -3517,6 +3522,19 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           .report-picker{display:block;width:100%;min-width:0;padding:10px;border:1px solid var(--sr-border);border-radius:8px;background:var(--sr-card);color:var(--sr-text);margin:0 0 12px}
           .report-picker[data-report-picker="main"]{width:calc(100% - 32px);margin:0 16px 12px}[hidden]{display:none!important}
           :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
+
+          .smart-simple-card .pane{padding:0;min-height:0}.smart-simple-card{overflow:hidden}
+          [data-smart-simple]{display:grid;gap:6px;padding:12px 16px;font-size:14px;line-height:20px;min-width:0;box-sizing:border-box}
+          [data-smart-simple] h2{font-size:14px;line-height:20px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          [data-smart-simple] p{margin:0;overflow-wrap:anywhere;font-size:12px;line-height:16px;color:var(--sr-muted)}
+          [data-smart-import]{font-size:22px;line-height:28px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+          [data-smart-cost]{font-size:14px;line-height:20px;overflow-wrap:anywhere}
+          [data-smart-simple] ul{list-style:none;margin:0;padding:0;font-size:12px;line-height:16px;display:grid;gap:2px}
+          [data-smart-change]{display:flex;justify-content:space-between;gap:8px;min-width:0}[data-smart-change] span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}[data-smart-change] span:last-child{flex-shrink:0}
+          [data-smart-simple] button{justify-self:end;min-height:44px}
+          [data-smart-simple=tile]{grid-template-columns:minmax(0,1fr) auto;gap:0 8px;padding:8px 12px}
+          [data-smart-simple=tile] h2{grid-column:1;align-self:end}[data-smart-simple=tile] [data-smart-import]{grid-column:1;font-size:12px;line-height:16px;font-weight:400}
+          [data-smart-simple=tile] button{grid-column:2;grid-row:1/3;max-width:100px;font-size:12px;padding:4px 8px}
         </style>
         <ha-card class="card">
           <div class="header"><h2 id="title"></h2><span class="muted" id="recorderLabel">${this._t("Recorder-backed")}</span><button type="button" class="action" data-smart-access-settings hidden>${this._t("Settings")}</button></div>
@@ -3601,7 +3619,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       if (!this._scaffoldRendered) return;
       let dismissed = false;
       try { dismissed = localStorage.getItem('ha-smart-reports-support-dismissed') === '1'; } catch (_) {}
-      this.shadowRoot.querySelector('.donate-section[data-source="own-card"]').hidden = !this._hass?.user?.is_admin || this._config.show_support === false || dismissed;
+      this.shadowRoot.querySelector('.donate-section[data-source="own-card"]').hidden = !this._hass?.user?.is_admin || this._config.show_support === false || dismissed || this._simpleReport();
     }
 
     _availableTabs() {
@@ -3618,6 +3636,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         this._navigationObserver = new ResizeObserver(() => this._syncNavigation());
         this._navigationObserver.observe(this);
       }
+      if(this._simpleReport()){for(const group of this.shadowRoot.querySelectorAll('[data-report-nav],[data-report-picker]'))group.hidden=true;return;}
       const width = this.getBoundingClientRect().width;
       const compact = width > 0 && width < 280;
       for (const group of this.shadowRoot.querySelectorAll('[data-report-nav]')) {
@@ -3708,14 +3727,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         button.setAttribute('aria-selected', String(tab === this._activeTab));
       }
       this.shadowRoot.getElementById('energyToolbar').hidden = this._activeTab !== 'energy' || this._analysisMode === 'calendar';
-      if (this._activeTab === null) {
+      if(this._simpleReport()&&this._activeTab!=='energy')this._renderSimpleReport(this.shadowRoot.getElementById('content'),{status:'idle'});
+      else if (this._activeTab === null) {
         const container = this.shadowRoot.getElementById('content');
         container.replaceChildren(this._stateBlock('Enable at least one report section.', 'Turn on Energy, Automations, or System in the card configuration.', '', 'status'));
       } else if (this._activeTab === 'config') this._renderAccessSettings();
       else if (this._activeTab === 'energy') this._renderEnergyState();
       else if (this._activeTab === 'automations') this._renderAutomations();
       else this._renderSystem();
-      this._syncNavigation();
+      this._syncNavigation();this._syncVariantChrome();
     }
 
     _selectTab(tab) {
@@ -3746,7 +3766,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
     }
 
     async _runRefresh() {
-      if (!this._connected || !this._hass) return;
+      if (!this._connected || !this._hass || this._simpleReport()&&this._activeTab!=='energy') return;
       this._lastRefreshStartedAt = Date.now();
       try {
         if (this._activeTab === null) return;
@@ -4218,7 +4238,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       const exportAssociation = this._observeReviewedExportSource();
       const requestHass = this._hass, requestCall = requestHass?.callWS;
       if (this._config.energy_cost_mode === 'configured_tariff') this._tariffController().reset();
-      const compare = this._config.compare_previous_period === true;
+      const compare = this._config.compare_previous_period === true || this._config.variant==='compact';
       if (compare) this._tariffController();
       const ticket = compare ? this._tariffGuard.snapshot() : null;
       const generation = ++this._energyRequestGeneration;
@@ -4964,6 +4984,60 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       return block;
     }
 
+    _simpleReport(){return ['tile','compact'].includes(this._config.variant)&&!this._simpleExpanded;}
+
+    _syncVariantChrome(){
+      if(!this._scaffoldRendered)return;
+      const simple=this._simpleReport(),root=this.shadowRoot;root.querySelector('.card').classList.toggle('smart-simple-card',simple);
+      root.querySelector('.header').hidden=simple;
+      root.getElementById('energyToolbar').hidden=simple||this._activeTab!=='energy'||this._analysisMode==='calendar';
+      root.querySelector('[data-smart-access-settings]').hidden=simple||!this._canManageAccess();
+      this._syncSupport();
+      let back=root.querySelector('[data-smart-back]');
+      if(!simple&&this._config.variant!=='full'&&!back){back=document.createElement('button');back.type='button';back.className='action';back.dataset.smartBack='';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';back.addEventListener('click',()=>{this._simpleExpanded=false;this._syncTabs();root.querySelector('[data-smart-open]')?.focus({preventScroll:true});});root.querySelector('.header').append(back);}
+      if(back)back.hidden=simple;
+    }
+
+    _renderSimpleReport(container,state,calendar=false){
+      const pl=String(languageOf(this._hass)).startsWith('pl'),t=(en,polish)=>pl?polish:en;
+      const focused=this.shadowRoot.activeElement?.matches('[data-smart-open]');
+      const section=document.createElement('section');section.dataset.smartSimple=this._config.variant;
+      const heading=document.createElement('h2');heading.textContent=this._config.title;section.append(heading);
+      const ready=['ready','partial','no_data'].includes(state.status),snapshot=calendar?state.snapshot:null;
+      const period=snapshot?.period||state.period||{};
+      const number=v=>typeof v==='number'&&Number.isFinite(v)?v:typeof v==='string'&&v.trim()!==''&&Number.isFinite(Number(v))?Number(v):null;
+      const format=(v,unit)=>number(v)===null?'—':`${this._formatNumber(number(v),2)}${unit?' '+unit:''}`;
+      let energy=null,cost=null,currency=null,comparison=null,changes=[];
+      if(ready){
+        if(calendar&&snapshot){
+          energy=snapshot.totals?.measurement_complete===true?snapshot.totals.kwh:null;
+          cost=snapshot.totals?.pricing_complete===true?snapshot.totals.total_cost:null;currency=snapshot.totals?.currency;
+          const c=snapshot.comparisons?.previous;if(c?.status==='ready')comparison={delta:c.delta_kwh,percent:c.percent,scope:c.comparison_scope};
+          const rows=snapshot.comparisons?.previous?.attribution?.devices||{};
+          changes=Object.entries(rows).filter(([,v])=>v.status==='ready'&&number(v.delta_kwh)!==null).map(([id,v])=>({name:snapshot.groups?.devices?.[id]?.name||id,delta:number(v.delta_kwh)}));
+        }else{
+          energy=state.total?.value;cost=state.cost?.value;currency=state.cost?.currency;
+          const c=state.comparison,metric=c?.metrics?.energy;if(metric?.comparable)comparison={delta:metric.delta,percent:metric.percent,scope:'calendar_totals'};
+          const previous=new Map((c?.previous?.devices||[]).map(v=>[v.statistic_id,v]));
+          changes=(state.devices||[]).flatMap(v=>{const before=previous.get(v.statistic_id);return v.status==='ready'&&before?.status==='ready'&&v.unit===before.unit&&number(v.value)!==null&&number(before.value)!==null?[{name:v.label||v.statistic_id,delta:number(v.value)-number(before.value)}]:[];});
+        }
+      }
+      const periodText=calendar?({day:t('Day','Dzień'),week:t('Week','Tydzień'),month:t('Month','Miesiąc'),year:t('Year','Rok')}[period.kind]||''):(period.key==='1d'?this._t('Today'):period.key==='30d'?this._t('30 days'):this._t('7 days'));
+      const status=document.createElement('p');status.className='smart-simple-status';status.setAttribute('role','status');
+      status.textContent=ready?periodText:['idle','loading'].includes(state.status)?t('Loading report…','Wczytywanie raportu…'):t('Report data unavailable','Dane raportu niedostępne');section.append(status);
+      const primary=document.createElement('strong');primary.dataset.smartImport='';primary.textContent=format(energy,'kWh');section.append(primary);
+      const costLine=document.createElement('span');costLine.dataset.smartCost='';costLine.textContent=`${calendar?t('Period cost','Koszt okresu'):this._t(state.cost?.method==='flat_rate_estimate'?'Estimated cost':'Actual cost')}: ${format(cost,currency)}`;
+      if(this._config.variant==='tile'){primary.textContent=`${periodText}: ${format(energy,'kWh')} · ${format(cost,currency)}`;status.hidden=true;}
+      else{
+        section.append(costLine);const delta=document.createElement('p');delta.dataset.smartComparison='';
+        delta.textContent=comparison?`${t('vs previous','względem poprzedniego')}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
+        const list=document.createElement('ul');list.setAttribute('aria-label',t('Largest measured changes','Największe zmierzone zmiany'));
+        for(const row of changes.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||a.name.localeCompare(b.name)).slice(0,3)){const li=document.createElement('li');li.dataset.smartChange='';const name=document.createElement('span');name.textContent=row.name;name.title=row.name;const value=document.createElement('span');value.textContent=`${this._formatReportChange(row.delta)} kWh`;li.append(name,value);list.append(li);}section.append(list);
+      }
+      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>{this._simpleExpanded=true;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});});section.append(open);
+      container.replaceChildren(section);if(focused)open.focus({preventScroll:true});this._syncVariantChrome();
+    }
+
     _renderAnalysisEntry(container) {
       const nav=document.createElement('nav');nav.setAttribute('aria-label',String(languageOf(this._hass)).startsWith('pl')?'Źródło raportu':'Report source');nav.className='toolbar-actions';
       const pl=String(languageOf(this._hass)).startsWith('pl'),access=this._calendarAccess().state();
@@ -4977,9 +5051,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       this._tariffGuard?.observe();
       if (!this._scaffoldRendered) return;
       const container = this.shadowRoot.getElementById('content'); const state = this._energyViewState || { status: 'idle' };
+      if(this._simpleReport()&&this._analysisMode!=='calendar'){this._renderSimpleReport(container,state);return;}
       if(this._analysisMode==='calendar') {
-        container.replaceChildren();this._renderAnalysisEntry(container);
-        const note=document.createElement('p');note.className='muted';note.textContent=String(languageOf(this._hass)).startsWith('pl')?'Źródła: konfiguracja Energia HA. Dostęp i obliczenia potwierdza HA Tools Email. Wybrane ręcznie statystyki należą do osobnego raportu.':'Sources: HA Energy configuration. HA Tools Email authorizes access and calculates this report. Manually selected statistics belong to the separate report.';container.append(note);
+        container.replaceChildren();if(!this._simpleReport())this._renderAnalysisEntry(container);
+        const note=document.createElement('p');note.className='muted';note.textContent=String(languageOf(this._hass)).startsWith('pl')?'Źródła: konfiguracja Energia HA. Dostęp i obliczenia potwierdza HA Tools Email. Wybrane ręcznie statystyki należą do osobnego raportu.':'Sources: HA Energy configuration. HA Tools Email authorizes access and calculates this report. Manually selected statistics belong to the separate report.';if(!this._simpleReport())container.append(note);
         const access=this._calendarAccess().state();
         if(access.status!=='ready'||access.analysis.visible!==true||access.analysis.read!==true){
           this._calendarHost?.stop();const pl=String(languageOf(this._hass)).startsWith('pl');const p=document.createElement('p');p.setAttribute('role','status');p.textContent=access.status==='unsupported'?(pl?'Zainstaluj lub zaktualizuj HA Tools Email, aby użyć kalendarza. Wybrane statystyki pozostają dostępne.':'Install or update HA Tools Email to use the calendar. Selected statistics remain available.'):['idle','loading'].includes(access.status)?(pl?'Sprawdzanie dostępu do kalendarza…':'Checking calendar access…'):(pl?'Nie potwierdzono uprawnień do odczytu kalendarza. Sprawdź dostęp i ponów.':'Calendar read permission could not be confirmed. Check access and retry.');container.append(p);const retry=document.createElement('button');retry.type='button';retry.className='action';retry.textContent=pl?'Ponów':'Retry';retry.addEventListener('click',()=>this._calendarAccessGate.refresh());container.append(retry);return;
@@ -5483,6 +5558,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       const mode = document.createElement('select'); mode.id = 'cf_source_mode'; mode.style.cssText = 'font:inherit;padding:9px;background:var(--card-background-color,#fff);color:inherit;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px';
       for (const [value, text] of [['dashboard', 'Energy Dashboard'], ['explicit', 'Explicit statistics']]) { const option = document.createElement('option'); option.value = value; option.textContent = translate(this._hass, text); mode.appendChild(option); }
       mode.value = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'dashboard'; modeLabel.appendChild(mode); this.shadowRoot.appendChild(modeLabel);
+      for(const [id,key,label,choices] of [['cf_variant','variant','View',[['full','Full'],['compact','Compact'],['tile','Tile']]],['cf_default_tab','default_tab','Initial report',[['energy','Energy'],['automations','Automations'],['system','System']]]]){
+        const wrap=document.createElement('label');wrap.textContent=translate(this._hass,label);const select=document.createElement('select');select.id=id;
+        for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=translate(this._hass,text);select.append(option);}
+        select.value=this._config[key]||(key==='variant'?(this._config.compact===true?'compact':'full'):'energy');select.addEventListener('change',()=>{this._config={...this._config,[key]:select.value};this._dispatch();});wrap.append(select);this.shadowRoot.append(wrap);
+      }
       const sources = document.createElement('section'); sources.style.cssText = 'display:grid;gap:12px'; sources.hidden = mode.value !== 'explicit';
       for (const [key, title] of [['energy_total_statistics', 'Total statistic IDs'], ['energy_device_statistics', 'Device statistic IDs'], ['energy_cost_statistics', 'Cost statistic IDs']]) {
         const label = document.createElement('label'); label.textContent = translate(this._hass, title);

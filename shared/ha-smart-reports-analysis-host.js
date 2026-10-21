@@ -14,6 +14,7 @@ function createSmartAnalysisHostV53({card}) {
  function paint(){
   if(!active())return;
   const state=exportState(),view=createEnergyAnalysisViewV53({card});
+  if(card._simpleReport?.()){card._renderSimpleReport(root,state,true);return;}
   const calendar=root.querySelector('[data-analysis-calendar-options]');if(calendar)calendarOpen=calendar.open;
   const focused=root.getRootNode().activeElement,saved=root.contains(focused)?{action:focused.dataset.analysisAction,value:focused.dataset.analysisValue,draft:focused.matches('input')?focused.value:null}:null;
   root.innerHTML=`<style>${view.styles()}</style>`;
