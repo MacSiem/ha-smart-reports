@@ -39,3 +39,10 @@ test('compact alias and editor keep unknown keys, selected variant and title car
  const select=e.shadowRoot.getElementById('cf_variant');assert.equal(select.value,'tile');let emitted;e.addEventListener('config-changed',ev=>emitted=ev.detail.config);select.value='compact';select.dispatchEvent(new f.w.Event('change'));assert.deepEqual(JSON.parse(JSON.stringify(emitted.foreign)),{keep:true});assert.equal(emitted.default_tab,'system');const title=e.shadowRoot.getElementById('cf_title');title.focus();title.setSelectionRange(2,5);f.hass.language='pl';e.hass=f.hass;assert.equal(e.shadowRoot.activeElement.id,'cf_title');assert.equal(e.shadowRoot.activeElement.selectionStart,2);assert.equal(e.shadowRoot.getElementById('cf_variant').value,'compact');e.remove();
  }finally{f.close();}
 });
+
+test('HA can attach a card before setConfig without a phantom Back action; Back label follows language changes',async()=>{
+ const dom=loadRuntime(),w=dom.window,card=w.document.createElement('ha-smart-reports');try{
+ w.document.body.append(card);card.hass=makeHass();assert.equal(card.shadowRoot.querySelector('[data-smart-back]'),null);
+ card.setConfig({variant:'tile'});card.hass=makeHass();card.shadowRoot.querySelector('[data-smart-open]').click();const back=card.shadowRoot.querySelector('[data-smart-back]');assert.equal(back.textContent,'Back to summary');back.focus();const pl=makeHass();pl.language='pl-PL';card.hass=pl;assert.equal(back.textContent,'Wróć do skrótu');
+ }finally{card.remove();w.close();}
+});
