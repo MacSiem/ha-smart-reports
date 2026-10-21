@@ -3350,6 +3350,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       this._hass = null;
       this._config = {
         energy_cost_mode: 'auto',
+        variant:'full',
         title: 'Smart Reports',
         show_energy: true,
         show_automations: true,
@@ -5000,8 +5001,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       root.querySelector('[data-smart-access-settings]').hidden=simple||!this._canManageAccess();
       this._syncSupport();
       let back=root.querySelector('[data-smart-back]');
-      if(!simple&&this._config.variant!=='full'&&!back){back=document.createElement('button');back.type='button';back.className='action';back.dataset.smartBack='';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';back.addEventListener('click',()=>{this._simpleExpanded=false;this._syncTabs();root.querySelector('[data-smart-open]')?.focus({preventScroll:true});});root.querySelector('.header').append(back);}
-      if(back)back.hidden=simple;
+      if(!simple&&['tile','compact'].includes(this._config.variant)&&!back){back=document.createElement('button');back.type='button';back.className='action';back.dataset.smartBack='';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';back.addEventListener('click',()=>{this._simpleExpanded=false;this._syncTabs();root.querySelector('[data-smart-open]')?.focus({preventScroll:true});});root.querySelector('.header').append(back);}
+      if(back){back.hidden=simple||this._config.variant==='full';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';}
     }
 
     _renderSimpleReport(container,state,calendar=false){
