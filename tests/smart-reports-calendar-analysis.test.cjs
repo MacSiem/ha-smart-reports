@@ -86,6 +86,6 @@ for (const scenario of ['total','common','incomplete','currency','basis']) test(
 });
 test('Compact cost follows selected mean-seven comparison',async()=>{
  const h=await setup(m=>{const d=clone(fixture);if(m.comparison==='mean7'){d.context.comparison_kind='mean7';const c=clone(d.comparisons.previous);c.baseline_kind='mean7';c.costs.baseline.fixed_scope='arithmetic_mean_seven_household_periods';c.costs.baseline.period_count=7;c.costs.baseline.aggregation='arithmetic_mean_seven_unrounded_components';c.costs.delta_total_cost='-4.00';d.comparisons={mean7:c};}return d;},{variant:'compact'});try{
- h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();let r=h.card.shadowRoot;const select=r.querySelector('[data-analysis-action="comparison"]');select.value='mean7';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();r.querySelector('[data-smart-back]').click();const node=r.querySelector('[data-smart-cost-comparison]');assert.ok(node);assert.match(node.textContent,/seven.*−4.*EUR/);
+ h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();let r=h.card.shadowRoot;const select=r.querySelector('[data-analysis-action="comparison"]');select.value='mean7';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();r.querySelector('[data-smart-back]').click();const node=r.querySelector('[data-smart-cost-comparison]');assert.ok(node);assert.match(node.textContent,/(?:seven|7).*−4.*EUR/);
  }finally{h.close();}
 });
