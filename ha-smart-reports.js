@@ -3543,9 +3543,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           [data-smart-simple=compact]{grid-template-columns:minmax(0,1fr) auto}
           [data-smart-simple=compact] .smart-simple-status{grid-column:2;grid-row:1;align-self:center;text-align:end}
           [data-smart-simple=compact]>:not(h2):not(.smart-simple-status){grid-column:1/-1}
-          [data-smart-simple=tile]{grid-template-columns:minmax(0,1fr) auto;gap:0 8px;padding:8px 12px}
-          [data-smart-simple=tile] h2{grid-column:1;align-self:end}[data-smart-simple=tile] [data-smart-import]{grid-column:1;font-size:12px;line-height:16px;font-weight:400}
-          [data-smart-simple=tile] button{grid-column:2;grid-row:1/3;max-width:100px;font-size:12px;padding:4px 8px}
+          [data-smart-simple=tile]{position:relative;height:56px;grid-template-columns:32px minmax(0,1fr);gap:0 8px;padding:8px}
+          [data-smart-simple=tile] ha-icon{grid-column:1;grid-row:1/3;align-self:center;display:flex;align-items:center;justify-content:center;width:32px;height:32px;--mdc-icon-size:20px;border-radius:50%;color:var(--primary-color);background:color-mix(in srgb,var(--primary-color) 14%,transparent)}
+          [data-smart-simple=tile] h2{grid-column:2;align-self:end;pointer-events:none}
+          [data-smart-simple=tile] [data-smart-import]{grid-column:2;font-size:12px;line-height:16px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+          [data-smart-simple=tile] button{position:absolute;inset:0;width:100%;height:100%;min-height:44px;min-width:44px;padding:0;border:0;background:transparent;border-radius:inherit}
+          [data-smart-simple=tile] button:focus-visible{outline:3px solid var(--primary-color);outline-offset:-3px}
+
         </style>
         <ha-card class="card">
           <div class="header"><h2 id="title"></h2><span class="muted" id="recorderLabel">${this._t("Recorder-backed")}</span><button type="button" class="action" data-smart-access-settings hidden>${this._t("Settings")}</button></div>
@@ -5048,19 +5052,25 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       status.textContent=ready?periodText:['idle','loading'].includes(state.status)?t('Loading report…','Wczytywanie raportu…'):t('Report data unavailable','Dane raportu niedostępne');section.append(status);
       const primary=document.createElement('strong');primary.dataset.smartImport='';primary.textContent=format(energy,'kWh');section.append(primary);
       const costLine=document.createElement('span');costLine.dataset.smartCost='';costLine.textContent=`${calendar?t('Period cost','Koszt okresu'):this._t(state.cost?.method==='flat_rate_estimate'?'Estimated cost':'Actual cost')}: ${format(cost,currency)}`;
-      if(this._config.variant==='tile'){primary.textContent=`${periodText}: ${format(energy,'kWh')} · ${!calendar&&state.cost?.method==='flat_rate_estimate'?'≈ ':''}${format(cost,currency)}`;status.hidden=true;}
+      if(this._config.variant==='tile'){
+        const icon=document.createElement('ha-icon');icon.setAttribute('icon','mdi:chart-box-outline');icon.setAttribute('aria-hidden','true');section.prepend(icon);
+        const brief=(v,unit)=>{const n=number(v);return n===null?'—':`${n!==0&&Math.abs(n)<0.01?this._formatReportChange(n).replace(/^\+/,''):this._formatNumber(n,2).replace(/([.,]\d*?[1-9])0+$|[.,]0+$/, '$1')}${unit?' '+unit:''}`;};
+        heading.textContent=`${periodText} · ${this._config.title}`;heading.title=heading.textContent;
+        primary.textContent=`${brief(energy,'kWh')} · ${!calendar&&state.cost?.method==='flat_rate_estimate'?'≈ ':''}${brief(cost,pl&&currency==='PLN'?'zł':currency)}`;
+        primary.title=`${periodText}: ${format(energy,'kWh')} · ${format(cost,currency)}`;status.hidden=true;
+      }
       else{
         section.append(costLine);const delta=document.createElement('p');delta.dataset.smartComparison='';
-        delta.textContent=comparison?`${({previous:t('vs previous','vs poprzedni okres'),same_weekday:t('vs same weekday','vs ten sam dzień tyg.'),mean7:t('vs seven-period mean','vs średnia z 7'),year_ago:t('vs year ago','vs ubiegły rok')})[comparison.kind||'previous']}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
+        delta.textContent=comparison?`${({previous:t('vs previous','vs poprzedni okres'),same_weekday:t('vs same weekday','vs ten sam dzień tyg.'),mean7:t('vs 7-period mean','vs średnia z 7'),year_ago:t('vs year ago','vs ubiegły rok')})[comparison.kind||'previous']}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
         const moneyDelta=document.createElement('p');moneyDelta.dataset.smartCostComparison='';
         const costKind=costComparison?.kind||state.selection?.comparison||snapshot?.context?.comparison_kind||'previous';
-        const costBaseline=({previous:t('vs previous','vs poprzedni okres'),same_weekday:t('vs same weekday','vs ten sam dzień tyg.'),mean7:t('vs seven-period mean','vs średnia z 7'),year_ago:t('vs year ago','vs ubiegły rok')})[costKind];
+        const costBaseline=({previous:t('vs previous','vs poprzedni okres'),same_weekday:t('vs same weekday','vs ten sam dzień tyg.'),mean7:t('vs 7-period mean','vs średnia z 7'),year_ago:t('vs year ago','vs ubiegły rok')})[costKind];
         moneyDelta.textContent=costComparison?`${costComparison.total?t('Period cost','Koszt okresu'):t('Usage cost','Koszt zużycia')} ${costBaseline}: ${this._formatReportChange(number(costComparison.delta))} ${costComparison.currency}${number(costComparison.percent)===null?'':` (${this._formatReportChange(number(costComparison.percent))}%)`}${costComparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:`${t('Cost','Koszt')} ${costBaseline}: ${t('no comparable data','brak porównywalnych danych')}`;
         section.append(moneyDelta);
         const list=document.createElement('ul');list.setAttribute('aria-label',t('Largest measured changes','Największe zmierzone zmiany'));
         for(const row of changes.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||a.name.localeCompare(b.name)).slice(0,3)){const li=document.createElement('li');li.dataset.smartChange='';const name=document.createElement('span');name.textContent=row.name;name.title=row.name;const value=document.createElement('span');value.textContent=`${this._formatReportChange(row.delta)} kWh`;li.append(name,value);list.append(li);}section.append(list);
       }
-      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>{this._simpleExpanded=true;if(this._availableTabs().includes(this._simpleFullTab))this._activeTab=this._simpleFullTab;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});});section.append(open);
+      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>{this._simpleExpanded=true;if(this._availableTabs().includes(this._simpleFullTab))this._activeTab=this._simpleFullTab;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});});if(this._config.variant==='tile'){open.setAttribute('aria-label',open.textContent);open.setAttribute('aria-description',primary.title);open.title=primary.title;open.textContent='';}section.append(open);
       container.replaceChildren(section);if(focused)open.focus({preventScroll:true});this._syncVariantChrome();
     }
 
