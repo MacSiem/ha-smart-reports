@@ -1,14 +1,19 @@
 "use strict";
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {loadRuntime,makeHass,explicitConfig,delay}=require('./helpers/smart-reports-harness.cjs');
-async function setup({native=true,preview=false,deferOwner=false,reuseOwner=false,config={}}={}){
+const deepActive=doc=>{let node=doc.activeElement;while(node?.shadowRoot?.activeElement)node=node.shadowRoot.activeElement;return node;};
+const afterManager=w=>new Promise(resolve=>w.requestAnimationFrame(()=>w.setTimeout(()=>w.requestAnimationFrame(()=>w.setTimeout(resolve,0)),0)));
+async function setup({native=true,preview=false,deferOwner=false,reuseOwner=false,managerFocus=false,config={}}={}){
  const dom=loadRuntime(),w=dom.window,ha=w.document.createElement('home-assistant'),card=w.document.createElement('ha-smart-reports'),requests=[];
- let cachedOwner;
+ let cachedOwner,closedFocusTarget;
  if(native)ha.provideHass=()=>{};
  const hass=makeHass();hass.user.is_admin=false;hass.user.is_active=true;hass.connection=Object.assign(new w.EventTarget(),{connected:true});
- ha.addEventListener('show-dialog',event=>{requests.push(event.detail);if(deferOwner)return;const owner=reuseOwner&&cachedOwner?cachedOwner:w.document.createElement(event.detail.dialogTag);cachedOwner=owner;owner.showDialog(event.detail.dialogParams);owner.hass=hass;if(owner.parentNode!==ha)ha.append(owner);});
+ ha.addEventListener('show-dialog',event=>{requests.push(event.detail);if(managerFocus)closedFocusTarget=deepActive(w.document);if(deferOwner)return;const owner=reuseOwner&&cachedOwner?cachedOwner:w.document.createElement(event.detail.dialogTag);cachedOwner=owner;owner.showDialog(event.detail.dialogParams);owner.hass=hass;if(owner.parentNode!==ha)ha.append(owner);});
+ // Installed HA 2026.10.1 app.14aa97223db841e4.js, modules 47269/7908:
+ // dialog-closed blurs synchronously, then restores captured targets after rAF + timer.
+ if(managerFocus)ha.addEventListener('dialog-closed',()=>{const target=closedFocusTarget;deepActive(w.document)?.blur();w.requestAnimationFrame(()=>w.setTimeout(()=>target?.focus(),0));});
  card.preview=preview;card.setConfig(explicitConfig({variant:'tile',tap_target:'panel',future:{keep:true},...config}));card._period='30d';card._energyView='costs';ha.append(card);w.document.body.append(ha);card.hass=hass;for(let i=0;i<4;i++)await delay();
- return {w,dom,ha,card,hass,requests,async open(){card.shadowRoot.querySelector('[data-smart-open]').click();for(let i=0;i<4;i++)await delay();return w.document.querySelector('ha-tools-smart-report-panel-dialog-v53');},close(){ha.remove();w.close();}};
+ return {w,dom,ha,card,hass,requests,async open(){const open=card.shadowRoot.querySelector('[data-smart-open]');open.focus();open.click();for(let i=0;i<4;i++)await delay();return w.document.querySelector('ha-tools-smart-report-panel-dialog-v53');},close(){ha.remove();w.close();}};
 }
 test('Panel target opens a real full Smart child for a reader and preserves selection without expanding source',async()=>{
  const f=await setup();try{const owner=await f.open();assert.ok(owner);assert.equal(f.requests[0].addHistory,false);assert.ok(f.card.shadowRoot.querySelector('[data-smart-simple]'));const child=owner.querySelector('ha-smart-reports');assert.ok(child);assert.equal(child._inReportPanelV53,true);assert.equal(child._config.variant,'full');assert.equal(child._config.tap_target,'full');assert.equal(child._period,'30d');assert.equal(child._energyView,'costs');assert.equal(child._config.future.keep,true);assert.equal(child._hass,f.hass);assert.equal(owner.querySelector('dialog').open,true);owner.querySelector('[data-smart-panel-close]').click();assert.equal(owner.querySelector('dialog'),null);assert.equal(f.card.shadowRoot.activeElement,f.card.shadowRoot.querySelector('[data-smart-open]'));}finally{f.close();}
@@ -53,5 +58,36 @@ test('Panel close control occupies its own row above the size-contained report',
   const style=f.w.getComputedStyle(close);
   assert.notEqual(style.cssFloat,'right','a floated close forces the report into a narrow adjacent column');
   assert.equal(style.display,'block');
+ }finally{f.close();}
+});
+
+for(const action of ['click','cancel'])test(`Native HA manager ${action} restores the current opener after its own deferred focus handling`,async()=>{
+ const f=await setup({managerFocus:true});try{
+  const owner=await f.open(),old=f.card.shadowRoot.querySelector('[data-smart-open]');
+  f.card._refreshThrottleMs=0;f.card.hass={...f.hass};for(let i=0;i<6;i++)await delay();
+  assert.equal(old.isConnected,false);
+  if(action==='click')owner.querySelector('[data-smart-panel-close]').click();
+  else owner.querySelector('dialog').dispatchEvent(new f.w.Event('cancel',{cancelable:true}));
+  await afterManager(f.w);
+  assert.equal(deepActive(f.w.document),f.card.shadowRoot.querySelector('[data-smart-open]'));
+ }finally{f.close();}
+});
+
+for(const change of ['focus','input','route','identity','connection','detach-reattach','new-dialog'])test(`Pending panel focus does not overtake ${change}`,async()=>{
+ const f=await setup({managerFocus:true,reuseOwner:true});try{
+  const owner=await f.open();f.card._refreshThrottleMs=0;f.card.hass={...f.hass};for(let i=0;i<6;i++)await delay();
+  owner.querySelector('[data-smart-panel-close]').click();
+  const other=f.w.document.createElement('button');other.textContent='Other destination';f.ha.append(other);
+  if(change==='focus')other.focus();
+  if(change==='input')f.w.dispatchEvent(new f.w.Event('pointerdown'));
+  if(change==='route')f.w.history.replaceState(null,'','/lovelace/other');
+  if(change==='identity')f.hass.user.id='changed';
+  if(change==='connection')f.hass.connection.connected=false;
+  if(change==='detach-reattach'){f.card.remove();f.ha.append(f.card);}
+  if(change==='new-dialog')await f.open();
+  await afterManager(f.w);
+  if(change==='focus')assert.equal(deepActive(f.w.document),other);
+  else if(change==='new-dialog')assert.equal(deepActive(f.w.document),owner.querySelector('[data-smart-panel-close]'));
+  else assert.notEqual(deepActive(f.w.document),f.card.shadowRoot.querySelector('[data-smart-open]'));
  }finally{f.close();}
 });
