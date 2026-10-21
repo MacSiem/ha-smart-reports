@@ -1,0 +1,18 @@
+{
+  "donorRepo": "ha-energy-optimizer",
+  "donorCommit": "a1d333dc3fef54e8a1fb430202d275699b65b016",
+  "files": {
+    "shared/ha-tools-format.js": {
+      "sha256": "da6a6ff3a9adf5eeff326f7f941f8b19136ad7125c2f128ebcf4ee9047161261"
+    },
+    "shared/ha-tools-energy-analysis.js": {
+      "sha256": "c39ef323439872024c6d214fd288285d5079f01df19453f8a6a62f4e09f9dd71"
+    },
+    "shared/ha-tools-energy-analysis-binding.js": {
+      "sha256": "02dbb4f88b908a91ec5fd3775edbf1033c6ed7230c062120eee2c87d097d91e5"
+    },
+    "shared/ha-tools-energy-analysis-view.js": {
+      "sha256": "deb57a4a03edb4862e5431f4f224494fc205cb632b604b4a9569fb87df524704"
+    }
+  }
+}

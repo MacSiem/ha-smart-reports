@@ -23,6 +23,16 @@ for(const [name,file,transform]of units) {
  if(process.argv.includes('--write')) card=card.slice(0,first)+expected+card.slice(last+end.length);
  else if(card.slice(first,last+end.length)!==expected)throw new Error('Runtime/source drift: '+name);
 }
+const analysis=JSON.parse(fs.readFileSync(path.join(root,'shared/smart-analysis-vendors.json'),'utf8'));
+for(const file of [...Object.keys(analysis.files),'shared/ha-smart-reports-analysis-host.js']) {
+ const source=fs.readFileSync(path.join(root,file),'utf8');
+ if(analysis.files[file]&&hash(source)!==analysis.files[file].sha256)throw Error('Analysis donor drift: '+file);
+ const name=path.basename(file),start='// BEGIN SMART CALENDAR '+name,end='// END SMART CALENDAR '+name;
+ const a=card.indexOf(start),b=card.indexOf(end,a);if(a<0||b<0||card.indexOf(start,a+1)>=0)throw Error('Missing or competing analysis vendor: '+file);
+ const expected=start+'\n'+source+'\n'+end;
+ if(process.argv.includes('--write'))card=card.slice(0,a)+expected+card.slice(b+end.length);
+ else if(card.slice(a,b+end.length)!==expected)throw Error('Analysis source/runtime drift: '+file);
+}
 if((card.match(/function projectSmartReportV3\(/g)||[]).length!==1)throw new Error('Competing projection factories');
 if((card.match(/function createUiV3\(/g)||[]).length!==1 || (card.match(/function createExportDialog\(/g)||[]).length!==1)throw new Error('Competing factories');
 for(const file of ['ha-smart-reports.js']) {
