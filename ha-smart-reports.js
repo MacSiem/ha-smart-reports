@@ -3311,7 +3311,8 @@ function createSmartAnalysisHostV53({card,initialSelection={}}) {
  const exportButtons=new Map();
  let selection={period:'day',comparison:'previous'},options={level:'areas',view:'chart',selected:null};
  if(['day','week','month','year'].includes(initialSelection.period))selection.period=initialSelection.period;
- const allowed=selection.period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
+ const allowedComparisons=period=>period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
+ const allowed=allowedComparisons(selection.period);
  if(allowed.includes(initialSelection.comparison))selection.comparison=initialSelection.comparison;
  if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z'))&&new Date(initialSelection.anchor+'T12:00:00Z').toISOString().slice(0,10)===initialSelection.anchor)selection.anchor=initialSelection.anchor;
  const context=()=>[card._hass?.connection,card._hass?.user?.id,card._hass?.user?.is_active,card._hass?.user?.is_admin,card._hass?.connected,card._hass?.config?.time_zone,card._hass?.connection?.connected,card._hass?.callWS,JSON.stringify([card._hass?.user?.is_owner,card._hass?.user?.groups,card._hass?.user?.group_ids])];
@@ -3345,7 +3346,7 @@ function createSmartAnalysisHostV53({card,initialSelection={}}) {
   const key=el.dataset.analysisAction,value=el.matches('select,input')?el.value:el.dataset.analysisValue;
   if(key==='retry'){card._calendarAccessGate?.refresh();binding.invalidate();started=false;void read();return;}
   if(key==='section'&&['overview','comparison','rates'].includes(value))section=value;
-  else if(key==='period'&&['day','week','month','year'].includes(value)){selection.period=value;if(value!=='day'&&['same_weekday','mean7'].includes(selection.comparison))selection.comparison='previous';}
+  else if(key==='period'&&['day','week','month','year'].includes(value)){selection.period=value;if(!allowedComparisons(value).includes(selection.comparison))selection.comparison='previous';}
   else if(key==='anchor'){if(value)selection.anchor=value;else delete selection.anchor;}
   else if(key==='comparison')selection.comparison=value;
   else if(key==='level'&&['areas','floors','devices'].includes(value))options.level=value;
