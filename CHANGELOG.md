@@ -2,6 +2,16 @@
 
 All notable changes to **Smart Reports** are documented here.
 
+## [4.3.0] - 2026-10-21
+
+- Add an optional HA Energy calendar report with day, week, month and year periods; selected comparisons, room/floor/device views, measured coverage, historical rates and separate fixed fees use one authorized server snapshot.
+- Keep standalone Recorder statistics independent; calendar permission failures never substitute another data source. Confirm feature access through a secured update subscription before reading, and invalidate data and export previews when access changes.
+- Review complete calendar JSON/CSV exports locally with aliases by default, explicit private-field consent and the historical rate versions used in the calculation.
+- Add Tile, Compact and Full layouts, an initial tab and an optional full report window. Compact shows measured energy and cost comparisons with their own coverage; partial cost comparisons remain separate from whole-period bills.
+- Fit Tile in a native dashboard row with a themed icon and one accessible action. Preserve tiny nonzero amounts and focus when returning from the full report.
+- Add native dashboard destination previews and one explicit save, with confirmed readback and exact session Undo. Keep confirmation through an own card remount; refuse overwrite after another dashboard edit or an unconfirmed write.
+- Explain sources, gaps, costs, comparisons and exports in optional Polish/English full-view help. Bind delayed dialog close events to their original window when HA reuses the native owner.
+
 ## [4.2.0] - 2026-10-15
 
 - Clear accepted measurements and device details immediately when the Home Assistant user, connection or timezone changes, including disconnection; preserve current measurements on locale and theme changes.

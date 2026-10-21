@@ -12,7 +12,60 @@ Smart Reports is a Lovelace card with three focused views:
 
 Part of the [HA Tools](https://github.com/MacSiem) ecosystem.
 
+## Card layouts and dashboard placement
+
+Choose `variant: tile`, `compact` or `full`. Existing cards without the option keep
+Full; the card picker starts with Compact. Tile uses six Sections columns and one
+row; Compact uses twelve columns and up to four rows on a phone. Its energy and
+cost changes each retain their own comparison coverage. A small nonzero amount
+is never shortened to zero. Long Tile names are shortened visually; its action
+retains the complete state for assistive technology and the tooltip.
+
+`default_tab` selects Energy, Automations or System when opening the full report.
+`tap_target: full` expands the same card; `tap_target: panel` opens a full report
+window owned by Home Assistant, with current access checks and the selected
+report period. It does not create a sidebar panel. Back or Close returns focus.
+The optional **How to read the report** disclosure belongs to Full only.
+
+Administrators can use **Add to my dashboard** in Full, choose a variant and an
+existing destination, review its real card preview and save once. Sections,
+Masonry and an empty Panel are supported. YAML, strategy-managed and occupied
+Panel views stay read-only. Undo restores exactly the confirmed change while the
+session is open; another dashboard edit blocks it. An uncertain save can be
+checked without sending another save. Dashboard placement does not require SMTP
+or the optional Email backend.
+
+## Optional HA Energy calendar
+
+Full Energy offers **Selected statistics** and **Calendar · HA Energy** as
+separate sources. Selected statistics keep the Recorder model below. Calendar
+uses the current HA Energy source configuration and the HA Tools Email backend;
+install the current backend (2.4.2 or newer) for these features. Read access must
+be confirmed for the active user. A denial, missing backend or invalid response
+never falls back to another report or stale data.
+
+Calendar supports day, week, month and year, local dates and the selected
+previous-period, same-weekday, seven-period-mean or year-ago reference where
+applicable. Rooms, floors and devices share one authorized snapshot. **No room**
+and **Unmeasured** stay distinct, and nested devices are not counted twice.
+Chart and Data switch presentation without reading measurements again.
+
+Historical tariff versions price the measured intervals they cover. Energy,
+variable charges and fixed household-period fees stay separate. Whole-period
+cost comparisons use the whole-period delta; comparisons of common measurements
+show usage costs and their narrower scope. Missing rates, measurements, currency
+or gross/net compatibility keep unavailable values explicit. Previous cost
+percentages describe usage, not an invented whole-period bill percentage.
+
+Calendar JSON/CSV uses schema 4 (`calendar_energy`), with measured coverage,
+comparison facts, fees and the historical rate versions used in calculations.
+Review the full preview before saving. Source names and identifiers use aliases
+by default; private fields require an explicit choice for each export. Exports
+are local and do not send email or change access settings.
+
 ## Energy data model
+
+This section describes **Selected statistics**, independently of Calendar.
 
 The Energy tab never estimates history from current entity states and never
 discovers sensors by matching words in entity IDs. It reads Recorder
@@ -164,14 +217,16 @@ selector does not change them.
 
 ## Export
 
-Energy exports are generated locally from the loaded snapshot. Before saving,
+Selected-statistics exports are generated locally from the loaded snapshot. Before saving,
 review the filename, JSON or CSV format, Included/Excluded lists, source limits
 and exact file preview. Private fields are off for each new export: source and
 device names, statistic IDs and relationships use consistent aliases. Opting in
 adds only the reviewed names and statistic IDs. Tokens, users, addresses, raw
-configuration, tariff profiles/drafts and raw errors are always excluded.
+configuration, tariff profiles/drafts and raw errors are always excluded from
+selected-statistics exports. Calendar exports include the historical rate versions
+used in their calculations, as described above.
 
-JSON uses schema version 2, or version 3 when previous-period comparison is
+Selected-statistics JSON uses schema version 2, or version 3 when previous-period comparison is
 enabled. Both comparison ranges, records, source scope and coverage are retained.
 CSV preserves the existing metric rows and adds a `reviewed_full_document` row
 whose `value` contains the complete reviewed JSON document. Comparison rows can
@@ -255,6 +310,10 @@ and links to `/config/energy`; it does not guess a sensor.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
+| `variant` | `tile`, `compact`, `full` | `full` (picker: `compact`) | Dashboard layout; omitted keeps the existing full card. |
+| `tap_target` | `full`, `panel` | `full` | Expand this card or open the full report window. |
+| `default_tab` | `energy`, `automations`, `system` | `energy` | Initial full report tab. |
+| `show_help` | boolean | `true` | Show the full-view report help disclosure. |
 | `title` | string | `Smart Reports` | Card heading. |
 | `energy_source_mode` | `dashboard` or `explicit` | `dashboard` | Exact source-selection policy. |
 | `energy_total_statistics` | list | empty | Explicit root total statistic IDs. |
@@ -280,13 +339,14 @@ Basic reports, recorded costs, comparison and local exports use Recorder and do
 not require Email or SMTP. An explicit YAML `tariff_profile` also works locally.
 The shared tariff editor uses the separate HA Tools Email backend's
 `ha_tools_email/get_tariff` and `ha_tools_email/set_tariff` commands. That optional
-backend requires Home Assistant 2024.7.0 or newer; the public Email 2.1.2 does not
-provide those tariff commands. Until a compatible backend is installed, shared
+backend requires Home Assistant 2024.7.0 or newer; use current HA Tools Email
+(2.4.2 or newer). Until a compatible backend is installed, shared
 tariffs remain unconfirmed and the card does not guess historical prices.
 
 The Email & Reports bundle also defines `ha-smart-reports`. If both resources
 are registered, the first loaded definition wins for the browser session. Update
-both products to versions containing the same Smart source, or keep only one
+both products to versions containing the same Smart source (Smart 4.3.0 and
+Email & Reports 4.9.0), or keep only one
 Smart-providing resource, then reload the browser. Updating the standalone file
 alone cannot replace an older definition already supplied by the bundle. Card
 configuration and Recorder data do not need to be deleted.
