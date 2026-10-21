@@ -162,6 +162,8 @@ if (!customElements.get('ha-card')) customElements.define('ha-card', class exten
   };
 
   const card = document.getElementById('card');
+  const cardWidth=Number(params.get('card_width'));
+  if(Number.isInteger(cardWidth)&&cardWidth>=160&&cardWidth<=1440)card.style.width=cardWidth+'px';
   card.style.setProperty('--sr-card', theme === 'dark' ? '#1c1e26' : '#ffffff');
   card._now = () => new Date(fixedNow.getTime());
   card._refreshThrottleMs = 0;

@@ -62,3 +62,7 @@ test('Compact independently uses comparable recorded cost and refuses historical
 test('Tile and Compact preserve a small nonzero amount rather than showing zero',async()=>{
  for(const variant of ['tile','compact']){const f=await setup({variant});try{const r=f.card.shadowRoot,state={...f.card._energyViewState,total:{value:0.000000001},cost:{value:-0.000000001,currency:'PLN'}};f.card._renderSimpleReport(r.getElementById('content'),state);assert.match(r.querySelector('[data-smart-import]').textContent,/<0.000001/);assert.doesNotMatch(r.querySelector('[data-smart-import]').textContent,/0.00 kWh/);if(variant==='compact')assert.match(r.querySelector('[data-smart-cost]').textContent,/>−0.000001/);}finally{f.close();}}
 });
+
+test('Tile provides a themed icon and one accessible full-surface action with complete state text',async()=>{
+ const f=await setup({variant:'tile'});try{const r=f.card.shadowRoot,s=r.querySelector('[data-smart-simple]'),icon=s.querySelector('ha-icon'),button=s.querySelector('[data-smart-open]');assert.ok(icon);assert.equal(icon.getAttribute('icon'),'mdi:chart-box-outline');assert.equal(icon.getAttribute('aria-hidden'),'true');assert.equal(button.getAttribute('aria-label'),'Open report');assert.match(button.getAttribute('title'),/kWh.*PLN/);assert.equal(s.querySelectorAll('button').length,1);button.click();assert.ok(r.querySelector('[data-smart-back]'));}finally{f.close();}
+});
