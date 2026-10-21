@@ -56,3 +56,9 @@ test('compact reuses the accepted calendar totals, measured device changes and n
  s.querySelector('[data-smart-open]').click();assert.ok(r.querySelector('[data-analysis-chart]'));assert.equal(h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length,calls);
  }finally{h.close();}
 });
+
+test('revoked calendar in Compact still offers a safe route to the available full report',async()=>{
+ const h=await setup(()=>clone(fixture),{variant:'compact'});try{h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();h.card.shadowRoot.querySelector('[data-smart-back]').click();
+ const call=h.hass.callWS;h.hass.callWS=function(m){return m.type==='ha_tools_email/feature_capabilities'?Promise.resolve({status:'ready',revision:1,capabilities:{energy_analysis:{visible:true,read:false}}}):call.call(this,m);};h.card.hass=h.hass;for(let i=0;i<18;i++)await delay();const root=h.card.shadowRoot;assert.ok(root.querySelector('[data-smart-open]'));assert.doesNotMatch(root.querySelector('[data-smart-simple]').textContent,/240|241/);root.querySelector('[data-smart-open]').click();assert.ok(root.querySelector('[data-smart-analysis="recorded"]'));
+ }finally{h.close();}
+});

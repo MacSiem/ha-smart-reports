@@ -46,3 +46,9 @@ test('HA can attach a card before setConfig without a phantom Back action; Back 
  card.setConfig({variant:'tile'});card.hass=makeHass();card.shadowRoot.querySelector('[data-smart-open]').click();const back=card.shadowRoot.querySelector('[data-smart-back]');assert.equal(back.textContent,'Back to summary');back.focus();const pl=makeHass();pl.language='pl-PL';card.hass=pl;assert.equal(back.textContent,'Wróć do skrótu');
  }finally{card.remove();w.close();}
 });
+
+test('energy summaries remain usable with a different initial full tab and after returning from System',async()=>{
+ const f=await setup({variant:'compact',default_tab:'system'});try{const r=f.card.shadowRoot;assert.equal(f.card._activeTab,'energy');assert.match(r.querySelector('[data-smart-import]').textContent,/kWh/);r.querySelector('[data-smart-open]').click();assert.equal(f.card._activeTab,'system');r.querySelector('[data-smart-back]').click();assert.equal(f.card._activeTab,'energy');assert.match(r.querySelector('[data-smart-import]').textContent,/kWh/);
+ f.card.setConfig({variant:'compact',show_energy:false});assert.doesNotMatch(r.querySelector('[data-smart-simple]').textContent,/Loading/);assert.ok(r.querySelector('[data-smart-open]'));
+ }finally{f.close();}
+});
