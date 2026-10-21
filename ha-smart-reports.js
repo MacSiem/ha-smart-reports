@@ -1105,6 +1105,19 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "Compact": "Skrót",
     "Tile": "Kafelek",
     "Initial report": "Początkowy raport",
+    "How to read the report": "Jak czytać raport?",
+    "The energy report uses history recorded by Home Assistant. By default, selected statistics use the Energy dashboard sources. A sensor’s current state does not replace missing history.": "Raport energii korzysta z historii zapisanej przez Home Assistant. Wybrane statystyki domyślnie używają źródeł z panelu Energia. Bieżący stan czujnika nie zastępuje brakującej historii.",
+    "Selected statistics and Calendar are separate reports. Calendar uses HA Energy sources and requires access confirmed by HA Tools Email. It does not fall back to a different report when access is unavailable.": "Wybrane statystyki i Kalendarz to osobne raporty. Kalendarz używa źródeł Energia HA i wymaga dostępu potwierdzonego przez HA Tools Email. Brak dostępu nie przełącza go na inne dane.",
+    "Periods use Home Assistant’s time zone. Selected statistics end at the last completed hour. Calendar shows its own exact interval and coverage. A daylight-saving day can have 23 or 25 hours.": "Okresy używają strefy czasowej Home Assistant. Wybrane statystyki kończą się na ostatniej pełnej godzinie. Kalendarz pokazuje własny dokładny przedział i pokrycie. Dzień zmiany czasu może mieć 23 lub 25 godzin.",
+    "Missing measurements are not zero. Confirmed readings and complete totals have separate coverage. A complete total remains unavailable when required data is missing.": "Brak pomiarów nie oznacza zera. Potwierdzone odczyty i pełne sumy mają osobne pokrycie. Pełna suma pozostaje niedostępna, jeśli brakuje wymaganych danych.",
+    "A nested device is already included in its parent. Each device may have different coverage. Rooms follow the entity or device assignment in HA; No room and Unmeasured are separate categories.": "Urządzenie podrzędne jest już uwzględnione w nadrzędnym. Każde urządzenie może mieć inne pokrycie. Pokój wynika z przypisania encji lub urządzenia w HA; Bez pokoju i Niezmierzone to osobne kategorie.",
+    "Recorded costs, configured historical tariff costs and explicit flat-rate estimates have separate labels. Missing rates leave costs unavailable. Fixed fees stay separate from usage; a common-measurement comparison is not a whole-period bill.": "Zapisane koszty, koszty według historycznej taryfy i jawne szacunki po stałej stawce mają osobne oznaczenia. Brak stawek pozostawia koszt niedostępny. Opłaty stałe są oddzielne od zużycia; porównanie wspólnych pomiarów nie jest rachunkiem całego okresu.",
+    "Comparison uses the selected reference and confirmed comparable measurements. A zero baseline has no percentage. Search changes the visible device list; totals and exports still cover the loaded report.": "Porównanie używa wybranego odniesienia i potwierdzonych porównywalnych pomiarów. Zerowa wartość odniesienia nie ma procentu. Wyszukiwanie zmienia listę urządzeń; sumy i eksport nadal obejmują wczytany raport.",
+    "Chart and Data show the same snapshot. Switching between them does not fetch measurements again. Data and export retain the precise values behind shortened labels.": "Wykres i Dane pokazują ten sam odczyt. Przełączenie nie pobiera pomiarów ponownie. Dane i eksport zachowują dokładne wartości kryjące się za skróconymi etykietami.",
+    "Before saving an export, review its complete preview and included fields. Names and source IDs use aliases by default; private fields require a separate choice for each export. Calendar exports include the historical rate versions used in calculations. Tokens, access policies and SMTP settings are excluded. This is not an HA backup.": "Przed zapisem eksportu sprawdź pełny podgląd i uwzględnione pola. Nazwy i identyfikatory źródeł mają domyślnie aliasy; pola prywatne włączasz osobno dla każdego eksportu. Eksport Kalendarza zawiera historyczne wersje stawek użyte w obliczeniach. Tokeny, polityki dostępu i ustawienia SMTP są pomijane. To nie jest kopia zapasowa HA.",
+    "Full report window opens the real report with current access checks. Adding to a dashboard requires an administrator and an explicit preview. Undo is available only for the confirmed change in the open session; a later dashboard edit blocks it.": "Pełny raport w oknie otwiera rzeczywisty raport z bieżącą kontrolą dostępu. Dodawanie do dashboardu wymaga administratora i jawnego podglądu. Cofnij dotyczy tylko potwierdzonej zmiany w otwartej sesji; późniejsza edycja dashboardu je blokuje.",
+    "Automations and System show the current HA state. The energy-report period does not change those views.": "Automatyzacje i System pokazują bieżący stan HA. Okres raportu energii nie zmienia tych widoków.",
+    "Show help": "Pokaż pomoc",
     "Open report in": "Otwórz raport",
     "This card": "W tej karcie",
     "Full report window": "Pełny raport w oknie",
@@ -3300,7 +3313,7 @@ function createSmartAnalysisHostV53({card,initialSelection={}}) {
  if(['day','week','month','year'].includes(initialSelection.period))selection.period=initialSelection.period;
  const allowed=selection.period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
  if(allowed.includes(initialSelection.comparison))selection.comparison=initialSelection.comparison;
- if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z')))selection.anchor=initialSelection.anchor;
+ if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z'))&&new Date(initialSelection.anchor+'T12:00:00Z').toISOString().slice(0,10)===initialSelection.anchor)selection.anchor=initialSelection.anchor;
  const context=()=>[card._hass?.connection,card._hass?.user?.id,card._hass?.user?.is_active,card._hass?.user?.is_admin,card._hass?.connected,card._hass?.config?.time_zone,card._hass?.connection?.connected,card._hass?.callWS,JSON.stringify([card._hass?.user?.is_owner,card._hass?.user?.groups,card._hass?.user?.group_ids])];
  const same=(a,b)=>a&&b&&a.every((v,i)=>v===b[i]);
  const active=()=>card.isConnected&&root?.isConnected&&card._analysisMode==='calendar'&&card._activeTab==='energy';
@@ -3754,7 +3767,7 @@ function createDashboardPlacementV53({host, getHass, getCardConfig,
     if (!current(s) || !area) return;
     area.replaceChildren(); s.previewReady = false;
     if (!destination(s)) { s.status = 'readonly'; return; }
-    // The allowlist is intersected with our three concrete types. No user HTML,
+    // The allowlist is intersected with the concrete Smart type. No user HTML,
     // YAML forms, guessed dialog imports, or arbitrary custom-element names.
     const name = s.card.type.slice(7);
     if (!host.ownerDocument.defaultView.customElements.get(name)) { s.status = 'previewerror'; return; }
@@ -4083,6 +4096,7 @@ dialog[data-ha-tools-placement]{box-sizing:border-box;width:min(640px,calc(100vw
         show_automations: next.show_automations !== false,
         show_system: next.show_system !== false,
         show_support: next.show_support !== false,
+        show_help: next.show_help !== false,
         energy_source_mode: next.energy_source_mode === 'explicit' ? 'explicit' : 'dashboard',
         energy_total_statistics: Array.isArray(next.energy_total_statistics) ? next.energy_total_statistics : [],
         energy_device_statistics: Array.isArray(next.energy_device_statistics) ? next.energy_device_statistics : [],
@@ -5608,7 +5622,7 @@ dialog[data-ha-tools-placement]{box-sizing:border-box;width:min(640px,calc(100vw
 
     _syncVariantChrome(){
       if(!this._scaffoldRendered)return;
-      const simple=this._simpleReport(),root=this.shadowRoot;root.querySelector('.card').classList.toggle('smart-simple-card',simple);this._syncDashboardPlacementV53();
+      const simple=this._simpleReport(),root=this.shadowRoot;root.querySelector('.card').classList.toggle('smart-simple-card',simple);this._syncDashboardPlacementV53();this._syncHelpV53();
       root.querySelector('.header').hidden=simple;
       root.getElementById('energyToolbar').hidden=simple||this._activeTab!=='energy'||this._analysisMode==='calendar';
       root.querySelector('[data-smart-access-settings]').hidden=simple||!this._canManageAccess();
@@ -5616,6 +5630,16 @@ dialog[data-ha-tools-placement]{box-sizing:border-box;width:min(640px,calc(100vw
       let back=root.querySelector('[data-smart-back]');
       if(!simple&&['tile','compact'].includes(this._config.variant)&&!back){back=document.createElement('button');back.type='button';back.className='action';back.dataset.smartBack='';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';back.addEventListener('click',()=>{this._simpleFullTab=this._activeTab;this._simpleExpanded=false;if(this._config.show_energy)this._activeTab='energy';this._syncTabs();if(this._activeTab==='energy'&&['idle','loading'].includes(this._energyViewState.status))this._scheduleRefresh(true);root.querySelector('[data-smart-open]')?.focus({preventScroll:true});});root.querySelector('.header').append(back);}
       if(back){back.hidden=simple||this._config.variant==='full';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';}
+    }
+
+    _syncHelpV53() {
+      if(!this._scaffoldRendered)return;
+      let help=this.shadowRoot.querySelector('[data-smart-help]');
+      if(!help){help=document.createElement('details');help.dataset.smartHelp='';help.style.cssText='margin:12px 16px;font-size:14px;line-height:1.5';const summary=document.createElement('summary');summary.style.cssText='min-height:44px;cursor:pointer;display:flex;align-items:center';help.append(summary);
+        for(const key of ["The energy report uses history recorded by Home Assistant. By default, selected statistics use the Energy dashboard sources. A sensor’s current state does not replace missing history.", "Selected statistics and Calendar are separate reports. Calendar uses HA Energy sources and requires access confirmed by HA Tools Email. It does not fall back to a different report when access is unavailable.", "Periods use Home Assistant’s time zone. Selected statistics end at the last completed hour. Calendar shows its own exact interval and coverage. A daylight-saving day can have 23 or 25 hours.", "Missing measurements are not zero. Confirmed readings and complete totals have separate coverage. A complete total remains unavailable when required data is missing.", "A nested device is already included in its parent. Each device may have different coverage. Rooms follow the entity or device assignment in HA; No room and Unmeasured are separate categories.", "Recorded costs, configured historical tariff costs and explicit flat-rate estimates have separate labels. Missing rates leave costs unavailable. Fixed fees stay separate from usage; a common-measurement comparison is not a whole-period bill.", "Comparison uses the selected reference and confirmed comparable measurements. A zero baseline has no percentage. Search changes the visible device list; totals and exports still cover the loaded report.", "Chart and Data show the same snapshot. Switching between them does not fetch measurements again. Data and export retain the precise values behind shortened labels.", "Before saving an export, review its complete preview and included fields. Names and source IDs use aliases by default; private fields require a separate choice for each export. Calendar exports include the historical rate versions used in calculations. Tokens, access policies and SMTP settings are excluded. This is not an HA backup.", "Full report window opens the real report with current access checks. Adding to a dashboard requires an administrator and an explicit preview. Undo is available only for the confirmed change in the open session; a later dashboard edit blocks it.", "Automations and System show the current HA state. The energy-report period does not change those views."]){const p=document.createElement('p');p.dataset.smartHelpKey=key;help.append(p);}this.shadowRoot.querySelector('.card').append(help);}
+      help.hidden=this._simpleReport()||this._config.show_help===false;
+      help.querySelector('summary').textContent=this._t('How to read the report');
+      for(const p of help.querySelectorAll('[data-smart-help-key]'))p.textContent=this._t(p.dataset.smartHelpKey);
     }
 
     _placementIdentityV53() {
@@ -6284,6 +6308,7 @@ dialog[data-ha-tools-placement]{box-sizing:border-box;width:min(640px,calc(100vw
       for(const [value,label] of [['auto','Recorded costs, then explicit flat estimate'],['cost_statistics','Recorded monetary statistics'],['flat_rate_estimate','Explicit flat-rate estimate'],['configured_tariff','Configured tariff from measured hours']]){const option=document.createElement('option');option.value=value;option.textContent=translate(this._hass,label);costMode.appendChild(option);}
       costMode.value=['cost_statistics','flat_rate_estimate','configured_tariff'].includes(this._config.energy_cost_mode)?this._config.energy_cost_mode:'auto';costMode.addEventListener('change',()=>{this._config={...this._config,energy_cost_mode:costMode.value};this._dispatch();});costLabel.appendChild(costMode);
       this.shadowRoot.append(costLabel,rateLabel);
+      const helpLabel=document.createElement('label');helpLabel.style.cssText='display:flex;align-items:center;gap:8px;min-height:44px';const help=document.createElement('input');help.type='checkbox';help.id='cf_show_help';help.style.cssText='width:22px;height:22px;min-height:22px';help.checked=this._config.show_help!==false;help.addEventListener('change',()=>{this._config={...this._config,show_help:help.checked};this._dispatch();});helpLabel.append(help,document.createTextNode(translate(this._hass,'Show help')));this.shadowRoot.append(helpLabel);
       mode.addEventListener('change', () => { this._config = { ...this._config, energy_source_mode: mode.value }; sources.hidden = mode.value !== 'explicit'; this._dispatch(); });
       if (focus) {
         const target = this.shadowRoot.getElementById(focus.id);

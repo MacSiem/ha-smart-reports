@@ -6,7 +6,7 @@ function createSmartAnalysisHostV53({card,initialSelection={}}) {
  if(['day','week','month','year'].includes(initialSelection.period))selection.period=initialSelection.period;
  const allowed=selection.period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
  if(allowed.includes(initialSelection.comparison))selection.comparison=initialSelection.comparison;
- if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z')))selection.anchor=initialSelection.anchor;
+ if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z'))&&new Date(initialSelection.anchor+'T12:00:00Z').toISOString().slice(0,10)===initialSelection.anchor)selection.anchor=initialSelection.anchor;
  const context=()=>[card._hass?.connection,card._hass?.user?.id,card._hass?.user?.is_active,card._hass?.user?.is_admin,card._hass?.connected,card._hass?.config?.time_zone,card._hass?.connection?.connected,card._hass?.callWS,JSON.stringify([card._hass?.user?.is_owner,card._hass?.user?.groups,card._hass?.user?.group_ids])];
  const same=(a,b)=>a&&b&&a.every((v,i)=>v===b[i]);
  const active=()=>card.isConnected&&root?.isConnected&&card._analysisMode==='calendar'&&card._activeTab==='energy';

@@ -252,7 +252,7 @@ function createDashboardPlacementV53({host, getHass, getCardConfig,
     if (!current(s) || !area) return;
     area.replaceChildren(); s.previewReady = false;
     if (!destination(s)) { s.status = 'readonly'; return; }
-    // The allowlist is intersected with our three concrete types. No user HTML,
+    // The allowlist is intersected with the concrete Smart type. No user HTML,
     // YAML forms, guessed dialog imports, or arbitrary custom-element names.
     const name = s.card.type.slice(7);
     if (!host.ownerDocument.defaultView.customElements.get(name)) { s.status = 'previewerror'; return; }
