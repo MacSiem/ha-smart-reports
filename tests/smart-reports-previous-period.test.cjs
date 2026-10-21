@@ -283,6 +283,8 @@ for (const [language, delta, percent, expected] of [
   ['pl', 3.07, 20, '+3,07 kWh (+20%)'],
   ['en', -3.07, -20, '−3.07 kWh (−20%)'],
   ['pl', 0.004, 0.02, '+0,004 kWh (+0,02%)'],
+  ['en', 0, 0, 'No change'],
+  ['pl', 0, 0, 'Bez zmiany'],
 ]) test(`headline comparison keeps local signed delta and percent: ${language} ${delta}`, () => {
   const dom = loadRuntime();
   try {
@@ -299,3 +301,31 @@ for (const [language, delta, percent, expected] of [
     assert.equal(JSON.stringify(pair), before, 'display leaves exact model/export input unchanged');
   } finally { dom.window.close(); }
 });
+
+for (const [partial, coverage] of [[false, '1/1 source complete'], [true, '0/1 source complete']]) {
+  test(`range context is one concise line with exact window in Details: partial=${partial}`, async () => {
+    const f = await fixture({ alter: (message, data) => {
+      if (partial && Date.parse(message.start_time) >= Date.parse('2026-08-24T00:00:00Z')) data['sensor.grid_import'].pop();
+      return data;
+    } });
+    try {
+      const root = f.card.shadowRoot, context = root.querySelector('.report-context');
+      assert.ok(context.textContent.includes(coverage), context.textContent);
+      assert.match(context.textContent, /7 days/);
+      assert.doesNotMatch(context.textContent, /Time zone:|Period:|12:00|00:00/);
+      const details = root.querySelector('.report-context-details');
+      assert.ok(details); assert.equal(details.open, false);
+      const period = f.card._energyViewState.period;
+      for (const exact of [period.start, period.end, period.time_zone]) assert.ok(details.textContent.includes(exact));
+      assert.equal(context.dataset.periodStart, period.start); assert.equal(context.dataset.periodEnd, period.end);
+      const reads = callsOf(f.hass, 'recorder/statistics_during_period').length;
+      const stamp = new Date('2026-08-30T12:00:00Z');
+      const exported = JSON.stringify(f.card._buildExportDocument(stamp));
+      details.open = true; details.dispatchEvent(new f.window.Event('toggle'));
+      f.card._renderEnergyState();
+      assert.equal(root.querySelector('.report-context-details').open, true);
+      assert.equal(callsOf(f.hass, 'recorder/statistics_during_period').length, reads);
+      assert.equal(JSON.stringify(f.card._buildExportDocument(stamp)), exported);
+    } finally { f.close(); }
+  });
+}
