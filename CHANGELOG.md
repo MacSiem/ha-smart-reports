@@ -9,6 +9,7 @@ All notable changes to **Smart Reports** are documented here.
 - Review complete calendar JSON/CSV exports locally with aliases by default, explicit private-field consent and the historical rate versions used in the calculation.
 - Add Tile, Compact and Full layouts, an initial tab and an optional full report window. Compact shows measured energy and cost comparisons with their own coverage; partial cost comparisons remain separate from whole-period bills.
 - Fit Tile in a native dashboard row with a themed icon and one accessible action. Preserve tiny nonzero amounts and focus when returning from the full report. Keep the full report width on narrow screens, restore the current opener after HA closes its window, and wrap whole tab buttons without splitting labels.
+- Reset an unsupported comparison when switching calendar periods, so returning from a year-ago report to Day keeps the report and date controls usable.
 - Add native dashboard destination previews and one explicit save, with confirmed readback and exact session Undo. Keep confirmation through an own card remount; refuse overwrite after another dashboard edit or an unconfirmed write.
 - Explain sources, gaps, costs, comparisons and exports in optional Polish/English full-view help. Bind delayed dialog close events to their original window when HA reuses the native owner.
 
