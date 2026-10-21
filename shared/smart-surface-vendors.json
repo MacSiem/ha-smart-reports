@@ -1,0 +1,11 @@
+{
+  "donors": {
+    "panel": "ha-baby-tracker@b9c920486de82e06873a820f9fbe4733b8d1ac3f"
+  },
+  "adaptations": [
+    "Smart child, selection allowlist and independent identity guard; distinct native tag"
+  ],
+  "files": [
+    "shared/ha-smart-reports-panel.js"
+  ]
+}

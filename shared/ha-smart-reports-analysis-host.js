@@ -1,8 +1,12 @@
 // Smart owns only the selected HA Energy calendar snapshot. No Recorder fallback.
-function createSmartAnalysisHostV53({card}) {
+function createSmartAnalysisHostV53({card,initialSelection={}}) {
  let root=null,started=false,ticket=0,section='overview',identity=null,calendarOpen=false,selectionPending=false;
  const exportButtons=new Map();
  let selection={period:'day',comparison:'previous'},options={level:'areas',view:'chart',selected:null};
+ if(['day','week','month','year'].includes(initialSelection.period))selection.period=initialSelection.period;
+ const allowed=selection.period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
+ if(allowed.includes(initialSelection.comparison))selection.comparison=initialSelection.comparison;
+ if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z')))selection.anchor=initialSelection.anchor;
  const context=()=>[card._hass?.connection,card._hass?.user?.id,card._hass?.user?.is_active,card._hass?.user?.is_admin,card._hass?.connected,card._hass?.config?.time_zone,card._hass?.connection?.connected,card._hass?.callWS,JSON.stringify([card._hass?.user?.is_owner,card._hass?.user?.groups,card._hass?.user?.group_ids])];
  const same=(a,b)=>a&&b&&a.every((v,i)=>v===b[i]);
  const active=()=>card.isConnected&&root?.isConnected&&card._analysisMode==='calendar'&&card._activeTab==='energy';
@@ -46,6 +50,6 @@ function createSmartAnalysisHostV53({card}) {
  function mount(next){observe();if(!next?.isConnected){stop();return;}if(root!==next){if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);}root=next;root.addEventListener('click',action);root.addEventListener('change',action);}paint();if(!started)void read();}
  function refresh(){observe();if(!active())return;const focused=root.getRootNode().activeElement;if(root.contains(focused)&&focused.matches('input,select'))return;void read();}
  function stop(){exportButtons.clear();selectionPending=false;calendarOpen=false;started=false;ticket++;if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);root.replaceChildren();root=null;}binding.stop();identity=null;}
- return {mount,stop,observe,refresh,state:exportState};
+ return {mount,stop,observe,refresh,state:exportState,selection:()=>({...selection})};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalysisHostV53};

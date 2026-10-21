@@ -1105,6 +1105,9 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "Compact": "Skrót",
     "Tile": "Kafelek",
     "Initial report": "Początkowy raport",
+    "Open report in": "Otwórz raport",
+    "This card": "W tej karcie",
+    "Full report window": "Pełny raport w oknie",
     "Administrator access is required.": "Wymagany jest dostęp administratora.",
     "Automations": "Automatyzacje",
     "System": "System",
@@ -3290,10 +3293,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartCalend
 // END SMART CALENDAR ha-smart-reports-feature-gate.js
 // BEGIN SMART CALENDAR ha-smart-reports-analysis-host.js
 // Smart owns only the selected HA Energy calendar snapshot. No Recorder fallback.
-function createSmartAnalysisHostV53({card}) {
+function createSmartAnalysisHostV53({card,initialSelection={}}) {
  let root=null,started=false,ticket=0,section='overview',identity=null,calendarOpen=false,selectionPending=false;
  const exportButtons=new Map();
  let selection={period:'day',comparison:'previous'},options={level:'areas',view:'chart',selected:null};
+ if(['day','week','month','year'].includes(initialSelection.period))selection.period=initialSelection.period;
+ const allowed=selection.period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
+ if(allowed.includes(initialSelection.comparison))selection.comparison=initialSelection.comparison;
+ if(typeof initialSelection.anchor==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialSelection.anchor)&&Number.isFinite(Date.parse(initialSelection.anchor+'T12:00:00Z')))selection.anchor=initialSelection.anchor;
  const context=()=>[card._hass?.connection,card._hass?.user?.id,card._hass?.user?.is_active,card._hass?.user?.is_admin,card._hass?.connected,card._hass?.config?.time_zone,card._hass?.connection?.connected,card._hass?.callWS,JSON.stringify([card._hass?.user?.is_owner,card._hass?.user?.groups,card._hass?.user?.group_ids])];
  const same=(a,b)=>a&&b&&a.every((v,i)=>v===b[i]);
  const active=()=>card.isConnected&&root?.isConnected&&card._analysisMode==='calendar'&&card._activeTab==='energy';
@@ -3337,11 +3344,160 @@ function createSmartAnalysisHostV53({card}) {
  function mount(next){observe();if(!next?.isConnected){stop();return;}if(root!==next){if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);}root=next;root.addEventListener('click',action);root.addEventListener('change',action);}paint();if(!started)void read();}
  function refresh(){observe();if(!active())return;const focused=root.getRootNode().activeElement;if(root.contains(focused)&&focused.matches('input,select'))return;void read();}
  function stop(){exportButtons.clear();selectionPending=false;calendarOpen=false;started=false;ticket++;if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);root.replaceChildren();root=null;}binding.stop();identity=null;}
- return {mount,stop,observe,refresh,state:exportState};
+ return {mount,stop,observe,refresh,state:exportState,selection:()=>({...selection})};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalysisHostV53};
 
 // END SMART CALENDAR ha-smart-reports-analysis-host.js
+
+// BEGIN SMART SURFACE ha-smart-reports-panel.js
+// Adapted from Baby b9c920486de82e06873a820f9fbe4733b8d1ac3f.
+// HA owns the live hass after source detach. The real Smart child owns its reads.
+function createSmartReportPanelV53({host,getHass,getConfig,getSourceKey,getSelection,
+  applySelection,createGuard=typeof createTariffGuardV3==='function'?createTariffGuardV3:null}) {
+  const doc=host.ownerDocument,win=doc.defaultView,tag='ha-tools-smart-report-panel-dialog-v53';
+  const route=()=>win.location.pathname+win.location.search+win.location.hash;
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  const identity=h=>[h?.user?.id,h?.user?.is_admin===true,h?.user?.is_owner===true,
+    h?.user?.is_active!==false,JSON.stringify(h?.user?.groups||[]),JSON.stringify(h?.user?.group_ids||[]),h?.connection,h?.callWS];
+  const same=(a,b)=>a.length===b.length&&a.every((value,index)=>value===b[index]);
+  // Only selection primitives cross the boundary, never host/controller state.
+  const seed=value=>{
+    value=value||{};
+    const selected={tab:['energy','automations','system'].includes(value.tab)?value.tab:null};
+    if(['1d','7d','30d'].includes(value.recordedPeriod))selected.recordedPeriod=value.recordedPeriod;
+    if(['summary','devices','costs'].includes(value.energyView))selected.energyView=value.energyView;
+    if(['recorded','calendar'].includes(value.analysisMode))selected.analysisMode=value.analysisMode;
+    const calendar=value.calendarSelection;
+    if(calendar&&['day','week','month','year'].includes(calendar.period)){
+      selected.calendarSelection={period:calendar.period};
+      if(typeof calendar.anchor==='string')selected.calendarSelection.anchor=calendar.anchor;
+      const comparisons=calendar.period==='day'?['previous','same_weekday','mean7']:['previous','year_ago'];
+      if(comparisons.includes(calendar.comparison))selected.calendarSelection.comparison=calendar.comparison;
+    }
+    return selected;
+  };
+  if(!win.customElements.get(tag))win.customElements.define(tag,class extends win.HTMLElement {
+    set hass(value){
+      this._hass=value;this.style.colorScheme=value?.themes?.darkMode?'dark':'light';
+      if(!this._request)return;
+      this._guard?.observe();
+      if(!this._current()){this.closeDialog();return;}
+      if(this._card)this._card.hass=value;const close=this.querySelector('[data-smart-panel-close]');if(close)close.textContent=String(value?.locale?.language||value?.language||'en').startsWith('pl')?'Zamknij raport':'Close report';
+      this._start();
+    }
+    get hass(){return this._hass;}
+    _current(){
+      const r=this._request,h=this._hass;
+      return !!r&&!r.closed&&same(identity(h),r.identity)&&route()===r.route&&
+        h?.connection?.connected!==false&&win.navigator.onLine!==false&&
+        (!this._guard||this._guard.current(this._token,false));
+    }
+    showDialog(request){
+      this.closeDialog();
+      if(request.closed)return;
+      this._request=request;request.owner=this;
+      // HA can call showDialog before attaching the element/providing hass.
+      win.queueMicrotask(()=>this._start());
+    }
+    connectedCallback(){this._start();}
+    disconnectedCallback(){this.closeDialog();}
+    _start(){
+      const r=this._request;
+      if(!r||r.closed||this._dialog||!this.isConnected||!this._hass)return;
+      if(!this._current()){this.closeDialog();return;}
+      if(!this._guard){
+        this._guard=r.createGuard({getHass:()=>this._hass,
+          getContext:()=>({config:r.config,route:route()}),browser:win});
+        this._token=this._guard.snapshot();
+        if(!this._guard.current(this._token,false)){this.closeDialog();return;}
+        this._unsubscribe=this._guard.subscribe(()=>{if(!this._current())this.closeDialog();});
+      }
+      const dialog=doc.createElement('dialog');
+      dialog.setAttribute('data-smart-report-panel','');dialog.setAttribute('aria-label',r.title);
+      const style=doc.createElement('style');
+      style.textContent='dialog[data-smart-report-panel]{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:12px;border:1px solid var(--divider-color,#888);border-radius:16px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#222);overflow:auto}dialog[data-smart-report-panel]::backdrop{background:rgba(0,0,0,.5)}dialog[data-smart-report-panel] [data-smart-panel-close]{min-width:44px;min-height:44px;font:inherit;float:right}dialog[data-smart-report-panel] :focus-visible{outline:3px solid var(--primary-color,#1565c0);outline-offset:2px}';
+      const close=doc.createElement('button');close.type='button';close.setAttribute('data-smart-panel-close','');
+      close.textContent=r.language==='pl'?'Zamknij raport':'Close report';
+      close.addEventListener('click',()=>this.closeDialog());
+      const card=doc.createElement('ha-smart-reports');
+      card._inReportPanelV53=true; // Before config, hass, or connectedCallback.
+      this._card=card;this._dialog=dialog;
+      try{
+        card.setConfig(clone(r.config));
+        // Pure owner-supplied adapter; runs before hass/connected reads start.
+        r.applySelection(card,clone(r.selection));
+        card.hass=this._hass;
+        dialog.append(style,close,card);this.append(dialog);
+        dialog.addEventListener('cancel',event=>{event.preventDefault();this.closeDialog();});
+        dialog.addEventListener('close',()=>this.closeDialog());
+        this._leave=()=>this.closeDialog();
+        for(const name of ['offline','location-changed','popstate','hashchange'])win.addEventListener(name,this._leave);
+        dialog.showModal();close.focus({preventScroll:true});
+      }catch(error){this.closeDialog();throw error;}
+    }
+    closeDialog(){
+      const r=this._request;if(!r)return true;
+      this._request=null;r.owner=null;r.closed=true;
+      this._unsubscribe?.();this._unsubscribe=null;
+      this._guard?.dispose();this._guard=null;this._token=null;
+      for(const name of ['offline','location-changed','popstate','hashchange'])win.removeEventListener(name,this._leave);
+      this._leave=null;
+      this._card?.remove();this._card=null;
+      const dialog=this._dialog;this._dialog=null;dialog?.close();dialog?.remove();
+      if(r.opener?.isConnected)r.opener.focus({preventScroll:true});
+      r.opener=null;r.config=null;r.selection=null;r.identity=null;r.applySelection=null;r.createGuard=null;
+      this.dispatchEvent(new win.CustomEvent('dialog-closed',{detail:{dialog:tag},bubbles:true,composed:true}));
+      if(r.standalone)this.remove();
+      return true;
+    }
+  });
+  let request=null;
+  const close=()=>{
+    const r=request;request=null;if(!r)return;
+    if(r.owner)r.owner.closeDialog();
+    else{r.closed=true;r.opener=null;r.config=null;r.selection=null;r.identity=null;r.applySelection=null;r.createGuard=null;}
+  };
+  return {
+    open(opener){
+      if(request&&!request.closed)return true;
+      const h=getHass();
+      if(!host.isConnected||host.preview||host._inReportPanelV53||!h?.user?.id||h.user.is_active===false||
+        !h.connection||h.connection.connected===false||typeof h.callWS!=='function'||win.navigator.onLine===false||
+        typeof createGuard!=='function'||typeof applySelection!=='function')return false;
+      const config=clone(getConfig()),selection=seed(getSelection?.());
+      const available=['energy','automations','system'].filter(tab=>config['show_'+tab]!==false);
+      selection.tab=available.includes(selection.tab)?selection.tab:available.includes(config.default_tab)?config.default_tab:available[0]||null;
+      let ancestor=host;
+      while(ancestor&&ancestor.localName!=='home-assistant')ancestor=ancestor.parentElement||ancestor.getRootNode?.().host;
+      const native=typeof ancestor?.provideHass==='function';
+      request={config:{...config,type:'custom:ha-smart-reports',variant:'full',compact:false,tap_target:'full',default_tab:selection.tab||'energy'},
+        selection,identity:identity(h),route:route(),source:JSON.stringify(getSourceKey()),
+        title:config.title||'Smart Reports',language:String(h.locale?.language||h.language||'en').startsWith('pl')?'pl':'en',
+        opener,applySelection,createGuard,closed:false,standalone:!native};
+      if(native)host.dispatchEvent(new win.CustomEvent('show-dialog',{bubbles:true,composed:true,
+        detail:{dialogTag:tag,dialogImport:()=>Promise.resolve(),dialogParams:request,addHistory:false}}));
+      else{
+        const owner=doc.createElement(tag);owner.hass=h;owner.showDialog(request);doc.body.append(owner);
+      }
+      return true;
+    },
+    update(){
+      if(!request||request.closed)return;
+      // Native ownership survives source removal; never authorize from stale hass.
+      if(!host.isConnected){if(request.standalone)close();return;}
+      if(JSON.stringify(getSourceKey())!==request.source){close();return;}
+      const h=getHass();
+      if(!same(identity(h),request.identity)||h?.connection?.connected===false||route()!==request.route||win.navigator.onLine===false){close();return;}
+      if(request.standalone&&request.owner)request.owner.hass=h;
+    },
+    close,
+    sourceDisconnected(){if(request?.standalone)close();}
+  };
+}
+if(typeof module!=='undefined'&&module.exports)module.exports={createSmartReportPanelV53};
+
+// END SMART SURFACE ha-smart-reports-panel.js
 
   class HASmartReports extends HTMLElement {
     constructor() {
@@ -3392,6 +3548,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
     }
 
     disconnectedCallback() {
+      this._reportPanelV53?.sourceDisconnected();
       this._connected = false;
       this._calendarAccessGate?.stop();this._featureAccessV53?.stop();
       this._calendarHost?.stop();
@@ -3420,6 +3577,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       const languageChanged = language !== this._language;
       this._language = language;
       this._hass = hass;
+      this._reportPanelV53?.update();
       this._featureAccessGuard?.observe();
       this._calendarAccessGate?.observe();this._featureAccessV53?.observe();
       const calendarChanged=this._calendarHost?.observe();
@@ -3463,6 +3621,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
     }
 
     setConfig(config) {
+      this._reportPanelV53?.close();
       this._calendarAccessGate?.stop();this._featureAccessV53?.stop();
       this._calendarHost?.stop();
       this._analysisMode='recorded';
@@ -3490,6 +3649,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         currency,
         compare_previous_period: next.compare_previous_period === true,
         variant: ['tile','compact','full'].includes(next.variant)?next.variant:next.compact===true?'compact':'full',
+        tap_target:next.tap_target==='panel'?'panel':'full',
         default_tab: ['energy','automations','system'].includes(next.default_tab)?next.default_tab:'energy',
       };
       if(initial)this._activeTab=this._availableTabs().includes(this._config.default_tab)?this._config.default_tab:this._availableTabs()[0]||null;
@@ -5013,6 +5173,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       if(back){back.hidden=simple||this._config.variant==='full';back.textContent=String(languageOf(this._hass)).startsWith('pl')?'Wróć do skrótu':'Back to summary';}
     }
 
+    _openReportV53(opener) {
+      if(!this.isConnected||this.preview||this._hass?.user?.is_active===false||!this._hass?.user?.id||this._hass?.connection?.connected===false||window.navigator.onLine===false)return false;
+      if(this._config.tap_target==='panel'&&!this._inReportPanelV53){
+        this._reportPanelV53 ||= createSmartReportPanelV53({host:this,getHass:()=>this._hass,getConfig:()=>this._config,getSourceKey:()=>this._config,
+          getSelection:()=>({tab:this._simpleFullTab||this._activeTab,recordedPeriod:this._period,energyView:this._energyView,analysisMode:this._analysisMode,calendarSelection:this._calendarHost?.selection()}),
+          applySelection:(child,seed)=>{if(seed.tab)child._activeTab=seed.tab;if(seed.recordedPeriod)child._period=seed.recordedPeriod;if(seed.energyView)child._energyView=seed.energyView;if(seed.analysisMode)child._analysisMode=seed.analysisMode;
+            if(seed.calendarSelection)child._calendarHost=createSmartAnalysisHostV53({card:child,initialSelection:seed.calendarSelection});},createGuard:createTariffGuardV3});
+        return this._reportPanelV53.open(opener);
+      }
+      this._simpleExpanded=true;if(this._availableTabs().includes(this._simpleFullTab))this._activeTab=this._simpleFullTab;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});return true;
+    }
+
     _renderSimpleReport(container,state,calendar=false){
       const pl=String(languageOf(this._hass)).startsWith('pl'),t=(en,polish)=>pl?polish:en;
       const focused=this.shadowRoot.activeElement?.matches('[data-smart-open]');
@@ -5070,7 +5242,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         const list=document.createElement('ul');list.setAttribute('aria-label',t('Largest measured changes','Największe zmierzone zmiany'));
         for(const row of changes.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||a.name.localeCompare(b.name)).slice(0,3)){const li=document.createElement('li');li.dataset.smartChange='';const name=document.createElement('span');name.textContent=row.name;name.title=row.name;const value=document.createElement('span');value.textContent=`${this._formatReportChange(row.delta)} kWh`;li.append(name,value);list.append(li);}section.append(list);
       }
-      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>{this._simpleExpanded=true;if(this._availableTabs().includes(this._simpleFullTab))this._activeTab=this._simpleFullTab;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});});if(this._config.variant==='tile'){open.setAttribute('aria-label',open.textContent);open.setAttribute('aria-description',primary.title);open.title=primary.title;open.textContent='';}section.append(open);
+      const open=document.createElement('button');open.type='button';open.className='action';open.dataset.smartOpen='';open.textContent=t('Open report','Otwórz raport');open.addEventListener('click',()=>this._openReportV53(open));if(this._config.variant==='tile'){open.setAttribute('aria-label',open.textContent);open.setAttribute('aria-description',primary.title);open.title=primary.title;open.textContent='';}section.append(open);
       container.replaceChildren(section);if(focused)open.focus({preventScroll:true});this._syncVariantChrome();
     }
 
@@ -5594,10 +5766,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       const mode = document.createElement('select'); mode.id = 'cf_source_mode'; mode.style.cssText = 'font:inherit;padding:9px;background:var(--card-background-color,#fff);color:inherit;border:1px solid var(--divider-color,#d9e0ea);border-radius:8px';
       for (const [value, text] of [['dashboard', 'Energy Dashboard'], ['explicit', 'Explicit statistics']]) { const option = document.createElement('option'); option.value = value; option.textContent = translate(this._hass, text); mode.appendChild(option); }
       mode.value = this._config.energy_source_mode === 'explicit' ? 'explicit' : 'dashboard'; modeLabel.appendChild(mode); this.shadowRoot.appendChild(modeLabel);
-      for(const [id,key,label,choices] of [['cf_variant','variant','View',[['full','Full'],['compact','Compact'],['tile','Tile']]],['cf_default_tab','default_tab','Initial report',[['energy','Energy'],['automations','Automations'],['system','System']]]]){
+      for(const [id,key,label,choices] of [['cf_tap_target','tap_target','Open report in',[['full','This card'],['panel','Full report window']]],['cf_variant','variant','View',[['full','Full'],['compact','Compact'],['tile','Tile']]],['cf_default_tab','default_tab','Initial report',[['energy','Energy'],['automations','Automations'],['system','System']]]]){
         const wrap=document.createElement('label');wrap.textContent=translate(this._hass,label);const select=document.createElement('select');select.id=id;
         for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=translate(this._hass,text);select.append(option);}
-        select.value=this._config[key]||(key==='variant'?(this._config.compact===true?'compact':'full'):'energy');select.addEventListener('change',()=>{this._config={...this._config,[key]:select.value};this._dispatch();});wrap.append(select);this.shadowRoot.append(wrap);
+        select.value=this._config[key]||(key==='variant'?(this._config.compact===true?'compact':'full'):key==='tap_target'?'full':'energy');select.addEventListener('change',()=>{this._config={...this._config,[key]:select.value};this._dispatch();});wrap.append(select);this.shadowRoot.append(wrap);
       }
       const sources = document.createElement('section'); sources.style.cssText = 'display:grid;gap:12px'; sources.hidden = mode.value !== 'explicit';
       for (const [key, title] of [['energy_total_statistics', 'Total statistic IDs'], ['energy_device_statistics', 'Device statistic IDs'], ['energy_cost_statistics', 'Cost statistic IDs']]) {

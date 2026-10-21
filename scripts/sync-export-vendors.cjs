@@ -33,6 +33,14 @@ for(const file of [...Object.keys(analysis.files),'shared/ha-smart-reports-analy
  if(process.argv.includes('--write'))card=card.slice(0,a)+expected+card.slice(b+end.length);
  else if(card.slice(a,b+end.length)!==expected)throw Error('Analysis source/runtime drift: '+file);
 }
+const surface=JSON.parse(fs.readFileSync(path.join(root,'shared/smart-surface-vendors.json'),'utf8'));
+for(const file of surface.files){
+ const source=fs.readFileSync(path.join(root,file),'utf8'),name=path.basename(file),start='// BEGIN SMART SURFACE '+name,end='// END SMART SURFACE '+name;
+ const a=card.indexOf(start),b=card.indexOf(end,a);if(a<0||b<0||card.indexOf(start,a+1)>=0)throw Error('Missing or competing Smart surface: '+file);
+ const expected=start+'\n'+source+'\n'+end;
+ if(process.argv.includes('--write'))card=card.slice(0,a)+expected+card.slice(b+end.length);
+ else if(card.slice(a,b+end.length)!==expected)throw Error('Smart surface source/runtime drift: '+file);
+}
 if((card.match(/function projectSmartReportV3\(/g)||[]).length!==1)throw new Error('Competing projection factories');
 if((card.match(/function createUiV3\(/g)||[]).length!==1 || (card.match(/function createExportDialog\(/g)||[]).length!==1)throw new Error('Competing factories');
 for(const file of ['ha-smart-reports.js']) {
