@@ -89,3 +89,10 @@ test('Compact cost follows selected mean-seven comparison',async()=>{
  h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();let r=h.card.shadowRoot;const select=r.querySelector('[data-analysis-action="comparison"]');select.value='mean7';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();r.querySelector('[data-smart-back]').click();const node=r.querySelector('[data-smart-cost-comparison]');assert.ok(node);assert.match(node.textContent,/(?:seven|7).*−4.*EUR/);
  }finally{h.close();}
 });
+
+test('Panel adapter seeds the selected calendar reference and child obtains a fresh authorized snapshot',async()=>{
+ const h=await setup(m=>{const d=clone(fixture);if(m.comparison==='mean7'){d.context.comparison_kind='mean7';d.comparisons={mean7:clone(d.comparisons.previous)};}return d;},{tap_target:'panel'});try{
+ await h.open();const r=h.card.shadowRoot,comparison=r.querySelector('[data-analysis-action="comparison"]');comparison.value='mean7';comparison.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();const before=h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length;
+ assert.equal(h.card._openReportV53(comparison),true);for(let i=0;i<24;i++)await delay();const owner=h.w.document.querySelector('ha-tools-smart-report-panel-dialog-v53'),child=owner.querySelector('ha-smart-reports');assert.equal(child._analysisMode,'calendar');assert.equal(child._calendarHost.selection().comparison,'mean7');const reads=h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis');assert.ok(reads.length>before);assert.ok(reads.slice(before).every(m=>m.period==='day'&&m.comparison==='mean7'));owner.querySelector('[data-smart-panel-close]').click();
+ }finally{h.close();}
+});

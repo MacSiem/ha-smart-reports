@@ -76,8 +76,8 @@ function createSmartReportPanelV53({host,getHass,getConfig,getSourceKey,getSelec
         r.applySelection(card,clone(r.selection));
         card.hass=this._hass;
         dialog.append(style,close,card);this.append(dialog);
-        dialog.addEventListener('cancel',event=>{event.preventDefault();this.closeDialog();});
-        dialog.addEventListener('close',()=>this.closeDialog());
+        dialog.addEventListener('cancel',event=>{event.preventDefault();if(this._dialog===dialog)this.closeDialog();});
+        dialog.addEventListener('close',()=>{if(this._dialog===dialog)this.closeDialog();});
         this._leave=()=>this.closeDialog();
         for(const name of ['offline','location-changed','popstate','hashchange'])win.addEventListener(name,this._leave);
         dialog.showModal();close.focus({preventScroll:true});

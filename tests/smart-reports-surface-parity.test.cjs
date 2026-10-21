@@ -21,7 +21,7 @@ test('public card, metadata and editor contracts remain registered exactly once'
   assert.equal((window.customCards || []).filter((entry) => entry.type === 'ha-smart-reports').length, 1);
   assert.deepEqual(
     JSON.parse(JSON.stringify(Card.getStubConfig())),
-    { title: 'Smart Reports', energy_source_mode: 'dashboard' },
+    { title: 'Smart Reports', energy_source_mode: 'dashboard', variant:'compact' },
   );
 
   const card = window.document.createElement('ha-smart-reports');
