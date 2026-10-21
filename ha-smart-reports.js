@@ -1124,6 +1124,7 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "Technical details": "Szczegóły techniczne",
     "Details": "Szczegóły",
     "No change": "Bez zmiany",
+    "Scroll to see all days": "Przewiń, aby zobaczyć wszystkie dni",
     "source complete": "źródło z pełną historią",
     "sources complete": "źródeł z pełną historią",
     "Retry": "Ponów",
@@ -2964,8 +2965,8 @@ function projectSmartReportV3(report, includePrivate = false) {
       const section=document.createElement('section');section.className='section comparison-overview';
       const style=document.createElement('style');style.textContent=`
         .comparison-hint{font-size:14px;line-height:1.6;overflow-wrap:anywhere;margin-top:6px}
-        .comparison-overview{min-width:0}.comparison-overview p{overflow-wrap:anywhere}
-        .comparison-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin-top:8px}.comparison-legend span{display:inline-flex;align-items:center;gap:5px}.comparison-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--sr-primary)}.comparison-legend .previous i{background:var(--sr-text);opacity:.25}\n        .comparison-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+        .comparison-overview{min-width:0;container-type:inline-size;container-name:smart-overview}.comparison-overview p{overflow-wrap:anywhere}
+        .comparison-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin-top:8px}.comparison-legend span{display:inline-flex;align-items:center;gap:5px}.comparison-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--sr-primary)}.comparison-legend .previous i{background:var(--sr-text);opacity:.25}\n        .comparison-days{display:grid;grid-template-columns:repeat(7,minmax(44px,1fr));gap:6px;overflow-x:auto;overscroll-behavior-x:contain;padding:3px;scroll-padding:3px}.comparison-scroll-note{display:none}@container smart-overview (max-width:350px){.comparison-scroll-note{display:block;margin-top:6px}}
         .comparison-mini-day{border:0;background:none;color:var(--sr-text);font:inherit;min-width:0;min-height:44px;padding:4px;cursor:pointer}
         .comparison-mini-bars{height:160px;display:flex;align-items:flex-end;gap:3px;border-bottom:1px solid var(--sr-border)}
         .comparison-mini-bar{flex:1;background:var(--sr-primary);min-height:2px}.comparison-mini-bar.previous{background:var(--sr-text);opacity:.25}.comparison-mini-bar.gap{background:transparent;border:1px dashed var(--sr-border);box-sizing:border-box;min-height:6px}.comparison-mini-bar.partial{background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,var(--sr-card) 3px,var(--sr-card) 5px)}
@@ -2993,6 +2994,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         for(const [side,label]of [['current','Current period'],['previous','Previous period']]){const item=document.createElement('span');item.className=side;const swatch=document.createElement('i');swatch.setAttribute('aria-hidden','true');item.append(swatch,document.createTextNode(this._t(label)));legend.appendChild(item);}section.appendChild(legend);
         if(pair.daily.length>7){const more=document.createElement('p');more.className='muted';more.textContent=this._t('Comparison details');section.appendChild(more);}
       }
+      if(this._energyView==='summary') { const scrollNote=document.createElement('p');scrollNote.className='muted comparison-scroll-note';scrollNote.textContent=this._t('Scroll to see all days');section.appendChild(scrollNote); }
       const detail=document.createElement('details');detail.className='comparison-details';detail.open=this._comparisonDetailsOpen===true;
       const summary=document.createElement('summary');summary.textContent=this._t('Comparison details');summary.dataset.reportControl='comparison-details';detail.appendChild(summary);
       detail.addEventListener('toggle',()=>{if(detail.isConnected)this._comparisonDetailsOpen=detail.open;});
@@ -3297,7 +3299,8 @@ function projectSmartReportV3(report, includePrivate = false) {
       let range = '—';
       if (start && end && end >= start) {
         const dates = new Intl.DateTimeFormat(languageOf(this._hass), { dateStyle: 'medium', timeZone });
-        range = dates.formatRange(start, end);
+        // Recorder windows end exclusively; midnight is not another measured day.
+        range = dates.formatRange(start, end > start ? new Date(end.getTime() - 1) : end);
       }
       context.textContent = `${range} · ${periodLabel} · ${complete}/${sources.length} ${this._t(sources.length === 1 ? 'source complete' : 'sources complete')}`;
       context.dataset.periodStart = period.start || '';
