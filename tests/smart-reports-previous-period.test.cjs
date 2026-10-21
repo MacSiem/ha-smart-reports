@@ -344,3 +344,18 @@ test('summary shows one period context while both exact comparison windows remai
     }
   } finally { f.close(); }
 });
+
+for (const [zone, now, end] of [
+  ['UTC', '2026-08-31T00:00:00Z', '2026-08-31T00:00:00.000Z'],
+  ['Europe/Warsaw', '2026-08-30T22:00:00Z', '2026-08-30T22:00:00.000Z'],
+]) test(`brief date range excludes an exclusive midnight endpoint in ${zone}`, async () => {
+  const f = await fixture({zone, now});
+  try {
+    const context = f.card.shadowRoot.querySelector('.report-context');
+    assert.equal(context.dataset.periodEnd, end);
+    assert.match(context.textContent, /Aug.*25.*30.*2026/);
+    assert.doesNotMatch(context.textContent, /31/);
+    assert.ok(f.card.shadowRoot.querySelector('.report-context-details').textContent.includes(end));
+    assert.equal(f.card._energyViewState.period.end, end);
+  } finally { f.close(); }
+});
