@@ -281,7 +281,11 @@ async function captureOnce(client, origin, variant, sourceSha256) {
       bodyScrollWidth: document.body.scrollWidth,
       bodyClientWidth: document.body.clientWidth,
       text: card.shadowRoot?.textContent || '',
-      visibleText: card.shadowRoot?.querySelector('ha-card')?.innerText
+      visibleText: card.shadowRoot?.querySelector('ha-card')?.innerText,
+      reportViewLabels: [...(card.shadowRoot?.querySelectorAll('.report-views button') || [])].map(button => {
+        const range = document.createRange(); range.selectNodeContents(button);
+        return { text: button.textContent.trim(), lines: range.getClientRects().length };
+      })
     };
   })()`);
 
@@ -296,6 +300,7 @@ async function captureOnce(client, origin, variant, sourceSha256) {
   if (/697(?:[.,]0)?|104[.,]55|0[.,]15|undefined|NaN/i.test(readback.text)) throw new Error(`Stale or invalid content rendered in ${variant.file}`);
   // Exact UTC evidence inside closed Details is intentional; polish applies to painted text.
   if (typeof readback.visibleText !== 'string' || !readback.visibleText.trim()) throw new Error('Visible report text was not measured');
+  if (readback.reportViewLabels.some(label => !/\s/.test(label.text) && label.lines > 1)) throw new Error(`A report tab splits a word in ${variant.file}: ${JSON.stringify(readback.reportViewLabels)}`);
   if (/T\d{2}:\d{2}:\d{2}|sensor\.demo_grid_import\s*\(sensor\.demo_grid_import\)/i.test(readback.visibleText)) throw new Error(`Unpolished report context rendered in ${variant.file}`);
   if (/\bmaciej\b|person\.maciej|phone_maciej|bearer\s+|access[_-]?token|password\s*[:=]/i.test(readback.text)) throw new Error(`Private or secret-like content rendered in ${variant.file}`);
   if (blocked.size > 0) throw new Error(`Renderer attempted non-local requests: ${[...blocked].join(', ')}`);
