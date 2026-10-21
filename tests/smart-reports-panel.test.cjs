@@ -1,11 +1,12 @@
 "use strict";
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {loadRuntime,makeHass,explicitConfig,delay}=require('./helpers/smart-reports-harness.cjs');
-async function setup({native=true,preview=false,deferOwner=false,config={}}={}){
+async function setup({native=true,preview=false,deferOwner=false,reuseOwner=false,config={}}={}){
  const dom=loadRuntime(),w=dom.window,ha=w.document.createElement('home-assistant'),card=w.document.createElement('ha-smart-reports'),requests=[];
+ let cachedOwner;
  if(native)ha.provideHass=()=>{};
  const hass=makeHass();hass.user.is_admin=false;hass.user.is_active=true;hass.connection=Object.assign(new w.EventTarget(),{connected:true});
- ha.addEventListener('show-dialog',event=>{requests.push(event.detail);if(deferOwner)return;const owner=w.document.createElement(event.detail.dialogTag);owner.showDialog(event.detail.dialogParams);owner.hass=hass;ha.append(owner);});
+ ha.addEventListener('show-dialog',event=>{requests.push(event.detail);if(deferOwner)return;const owner=reuseOwner&&cachedOwner?cachedOwner:w.document.createElement(event.detail.dialogTag);cachedOwner=owner;owner.showDialog(event.detail.dialogParams);owner.hass=hass;ha.append(owner);});
  card.preview=preview;card.setConfig(explicitConfig({variant:'tile',tap_target:'panel',future:{keep:true},...config}));card._period='30d';card._energyView='costs';ha.append(card);w.document.body.append(ha);card.hass=hass;for(let i=0;i<4;i++)await delay();
  return {w,dom,ha,card,hass,requests,async open(){card.shadowRoot.querySelector('[data-smart-open]').click();for(let i=0;i<4;i++)await delay();return w.document.querySelector('ha-tools-smart-report-panel-dialog-v53');},close(){ha.remove();w.close();}};
 }
@@ -27,4 +28,8 @@ test('Fallback panel closes on source detach and native pending request can be c
 });
 test('Editor roundtrips panel target, unknown config and label language',async()=>{
  const f=await setup();try{const e=f.w.document.createElement('ha-smart-reports-editor');e.setConfig({...f.card._config});f.ha.append(e);e.hass=f.hass;const target=e.shadowRoot.querySelector('#cf_tap_target');assert.ok(target);assert.equal(target.value,'panel');let config;e.addEventListener('config-changed',event=>config=event.detail.config);target.value='full';target.dispatchEvent(new f.w.Event('change'));assert.equal(config.tap_target,'full');assert.equal(config.future.keep,true);e.hass={...f.hass,language:'pl'};assert.match(e.shadowRoot.querySelector('#cf_tap_target').parentElement.textContent,/oknie/);}finally{f.close();}
+});
+
+test('A queued close from the previous dialog cannot close a new request on the reused native owner',async()=>{
+ const f=await setup({reuseOwner:true});try{const owner=await f.open();owner.querySelector('[data-smart-panel-close]').click();f.card.shadowRoot.querySelector('[data-smart-open]').click();for(let i=0;i<6;i++)await delay();assert.equal(f.requests.length,2);assert.equal(f.requests[1].dialogParams.closed,false);assert.ok(owner.querySelector('dialog[open]'));assert.ok(owner.querySelector('ha-smart-reports'));}finally{f.close();}
 });
