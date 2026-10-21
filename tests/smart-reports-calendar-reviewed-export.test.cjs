@@ -51,3 +51,7 @@ test('calendar cached same-source refresh preserves reviewed bytes, consent and 
 test('calendar producer household-period fee scope survives both comparison sides',async()=>{
  const f=await setup();try{const report=JSON.parse(await open(f));assert.equal(report.comparisons.previous.costs.current.fixed_scope,'household_period');assert.equal(report.comparisons.previous.costs.baseline.fixed_scope,'household_period');}finally{f.close();}
 });
+
+test('calendar cancel returns focus to its live opener after a cached refresh',async()=>{
+ const f=await setup();try{const opener=f.card.shadowRoot.querySelector('[data-smart-calendar-export="json"]');opener.focus();await open(f);const name=field(f.card,'filename');name.value='calendar-review.json';name.dispatchEvent(new f.w.Event('input'));field(f.card,'refresh').click();await delay();name.focus();name.setSelectionRange(3,8);await f.card._runRefresh();await delay();assert.equal(field(f.card,'filename'),name);assert.equal(name.selectionStart,3);assert.equal(name.selectionEnd,8);field(f.card,'cancel').click();assert.equal(f.card.shadowRoot.activeElement,f.card.shadowRoot.querySelector('[data-smart-calendar-export="json"]'));}finally{f.close();}
+});
