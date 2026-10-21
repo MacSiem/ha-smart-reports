@@ -34,3 +34,13 @@ test('leaving calendar view unsubscribes; standalone periods and export are rest
 test('calendar Data and room/floor/device changes reuse the accepted snapshot without refetch',async()=>{
  const h=await setup();try{await h.open();const r=h.card.shadowRoot;r.querySelector('[data-analysis-action="view"][data-analysis-value="data"]').click();assert.ok(r.querySelector('[data-analysis-bin]'));const level=r.querySelector('[data-analysis-action="level"]');level.value='floors';level.dispatchEvent(new h.w.Event('change',{bubbles:true}));assert.equal(r.querySelector('[data-analysis-action="level"]').value,'floors');assert.equal(h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length,1);}finally{h.close();}
 });
+
+test('ordinary same-context hass refresh preserves the live calendar date node, open options and unfinished draft',async()=>{
+ const h=await setup();try{await h.open();const r=h.card.shadowRoot,details=r.querySelector('[data-analysis-calendar-options]');details.open=true;const input=details.querySelector('input');input.focus();input.value='2026-10-16';h.card.hass=h.hass;assert.equal(r.querySelector('[data-analysis-calendar-options]'),details);assert.equal(details.open,true);assert.equal(r.activeElement,input);assert.equal(input.value,'2026-10-16');assert.equal(h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length,1);}finally{h.close();}
+});
+test('scheduled calendar refresh does not interrupt an active date draft',async()=>{
+ const h=await setup();try{await h.open();const r=h.card.shadowRoot,details=r.querySelector('[data-analysis-calendar-options]');details.open=true;const input=details.querySelector('input');input.focus();input.value='2026-10-16';await h.card._runRefresh();assert.equal(r.querySelector('[data-analysis-calendar-options]'),details);assert.equal(r.activeElement,input);assert.equal(input.value,'2026-10-16');}finally{h.close();}
+});
+test('calendar date options stay open when switching Chart to Data',async()=>{
+ const h=await setup();try{await h.open();const r=h.card.shadowRoot;r.querySelector('[data-analysis-calendar-options]').open=true;r.querySelector('[data-analysis-action="view"][data-analysis-value="data"]').click();assert.equal(r.querySelector('[data-analysis-calendar-options]').open,true);}finally{h.close();}
+});
