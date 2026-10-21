@@ -44,3 +44,10 @@ test('calendar authorization invalidation cannot export the accepted snapshot or
 test('calendar source round trip cannot reuse a reviewed file or its private consent',async()=>{
  const f=await setup();try{await open(f);await consent(f);const old=f.card._reviewedExportContext().revision;f.card.shadowRoot.querySelector('[data-smart-analysis="recorded"]').click();assert.equal(field(f.card,'save')?.disabled??true,true);assert.equal(field(f.card,'preview')?.textContent??'','');f.card.shadowRoot.querySelector('[data-smart-analysis="calendar"]').click();for(let i=0;i<12;i++)await delay();assert.ok(f.card._reviewedExportContext().revision>old);assert.equal(field(f.card,'private')?.checked??false,false);assert.equal(field(f.card,'preview')?.textContent??'','');}finally{f.close();}
 });
+
+test('calendar cached same-source refresh preserves reviewed bytes, consent and revision',async()=>{
+ const f=await setup();try{await open(f);await consent(f);const before=field(f.card,'preview').textContent,revision=f.card._reviewedExportContext().revision,calls=f.hass.calls.length;await f.card._runRefresh();await delay();assert.equal(field(f.card,'preview').textContent,before);assert.equal(field(f.card,'private').checked,true);assert.equal(field(f.card,'save').disabled,false);assert.equal(f.card._reviewedExportContext().revision,revision);assert.equal(f.hass.calls.length,calls);}finally{f.close();}
+});
+test('calendar producer household-period fee scope survives both comparison sides',async()=>{
+ const f=await setup();try{const report=JSON.parse(await open(f));assert.equal(report.comparisons.previous.costs.current.fixed_scope,'household_period');assert.equal(report.comparisons.previous.costs.baseline.fixed_scope,'household_period');}finally{f.close();}
+});
