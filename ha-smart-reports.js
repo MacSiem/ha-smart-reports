@@ -3530,7 +3530,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           :host(.bento-dark){--sr-good:#4ade80;--sr-warn:#fbbf24;--sr-bad:#f87171}
 
           .smart-simple-card .pane{padding:0;min-height:0}.smart-simple-card{overflow:hidden}
-          [data-smart-simple]{display:grid;gap:6px;padding:12px 16px;font-size:14px;line-height:20px;min-width:0;box-sizing:border-box}
+          [data-smart-simple]{display:grid;gap:4px;padding:12px 16px;font-size:14px;line-height:20px;min-width:0;box-sizing:border-box}
           [data-smart-simple] h2{font-size:14px;line-height:20px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
           [data-smart-simple] p{margin:0;overflow-wrap:anywhere;font-size:12px;line-height:16px;color:var(--sr-muted)}
           [data-smart-import]{font-size:22px;line-height:28px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -5033,7 +5033,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       status.textContent=ready?periodText:['idle','loading'].includes(state.status)?t('Loading report…','Wczytywanie raportu…'):t('Report data unavailable','Dane raportu niedostępne');section.append(status);
       const primary=document.createElement('strong');primary.dataset.smartImport='';primary.textContent=format(energy,'kWh');section.append(primary);
       const costLine=document.createElement('span');costLine.dataset.smartCost='';costLine.textContent=`${calendar?t('Period cost','Koszt okresu'):this._t(state.cost?.method==='flat_rate_estimate'?'Estimated cost':'Actual cost')}: ${format(cost,currency)}`;
-      if(this._config.variant==='tile'){primary.textContent=`${periodText}: ${format(energy,'kWh')} · ${format(cost,currency)}`;status.hidden=true;}
+      if(this._config.variant==='tile'){primary.textContent=`${periodText}: ${format(energy,'kWh')} · ${!calendar&&state.cost?.method==='flat_rate_estimate'?'≈ ':''}${format(cost,currency)}`;status.hidden=true;}
       else{
         section.append(costLine);const delta=document.createElement('p');delta.dataset.smartComparison='';
         delta.textContent=comparison?`${t('vs previous','względem poprzedniego')}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
