@@ -1122,6 +1122,10 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "Couldn’t load energy statistics.": "Nie udało się wczytać statystyk energii.",
     "The previous period is not shown as current data.": "Dane z poprzedniego okresu nie są wyświetlane jako bieżące.",
     "Technical details": "Szczegóły techniczne",
+    "Details": "Szczegóły",
+    "No change": "Bez zmiany",
+    "source complete": "źródło z pełną historią",
+    "sources complete": "źródeł z pełną historią",
     "Retry": "Ponów",
     "No recorded energy change in this period.": "Brak zarejestrowanych zmian energii w tym okresie.",
     "Measured zero is rendered separately; this state means no recorder samples were available.": "Zmierzone zero jest wyświetlane osobno; ten stan oznacza brak próbek rejestratora.",
@@ -1845,7 +1849,7 @@ function projectSmartReportV3(report, includePrivate = false) {
         <style>
           ${createUiV3({ language: languageOf(this._hass) }).css}
           :host{--sr-primary:var(--primary-color,#3b82f6);--sr-card:var(--card-background-color,var(--ha-card-background,#fff));--sr-text:var(--primary-text-color,#172033);--sr-muted:var(--secondary-text-color,#667085);--sr-border:var(--divider-color,#d9e0ea);--sr-good:#15803d;--sr-warn:#b45309;--sr-bad:#b42318;display:block;color:var(--sr-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}.card{background:var(--sr-card);border:1px solid var(--sr-border);border-radius:16px;overflow:hidden}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}h2,h3,p{margin:0}h2{font-size:20px}h3{font-size:15px}.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--sr-border);overflow-x:auto}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--sr-muted);padding:10px 12px}.tab.active{color:var(--sr-primary);border-bottom-color:var(--sr-primary);font-weight:650}.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 0}.toolbar-actions{display:flex;flex-wrap:wrap;gap:8px}.control,.action{min-height:44px;min-width:44px;max-width:100%;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);padding:8px 11px}.action.primary{background:var(--hat-primary-fill-computed,var(--_hat-primary-fill));border-color:var(--hat-primary-fill-computed,var(--_hat-primary-fill));color:var(--hat-on-primary-computed,var(--_hat-on-primary))}.action:disabled{cursor:not-allowed;opacity:.45}.pane{padding:20px;min-height:220px}.state{display:grid;gap:12px;place-items:start;padding:22px;border:1px solid var(--sr-border);border-radius:12px}.state[role="status"]{border-left:4px solid var(--sr-primary)}.state.partial{border-left-color:var(--sr-warn)}.state.error{border-left-color:var(--sr-bad)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{border:1px solid var(--sr-border);border-radius:12px;padding:14px}.metric-label,.muted{color:var(--sr-muted);font-size:12px}.metric-value{margin-top:5px;font-size:23px;font-weight:720}.section{margin-top:18px}.list{display:grid;gap:8px;margin-top:10px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--sr-border);padding:9px 2px}.row.child{padding-left:24px}.row-name{overflow-wrap:anywhere}.status-ready{color:var(--sr-good)}.warning{color:var(--sr-warn)}.fixed-link{color:var(--sr-primary)}.donate-section{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;border-top:1px solid var(--sr-border);padding:13px 18px;color:var(--sr-muted);font-size:12px}.donate-section a{color:var(--sr-primary);text-decoration:none;min-height:44px;display:inline-flex;align-items:center}[hidden]{display:none!important}@media(max-width:520px){.header,.toolbar{align-items:stretch;flex-direction:column}.toolbar-actions{width:100%}.action{flex:1}}
-          .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:grid;gap:12px;min-width:0;margin-top:14px}.daily-history h3,.daily-history p{overflow-wrap:anywhere}.daily-list{display:grid;gap:8px}.daily-day{display:grid;gap:6px;width:100%;text-align:left;line-height:1.4}.daily-day[aria-pressed="true"]{border-color:var(--sr-primary);box-shadow:inset 3px 0 var(--sr-primary)}.daily-label{font-size:12px;color:var(--sr-muted)}.daily-value{font-size:16px;font-variant-numeric:tabular-nums}.daily-coverage{font-size:12px;color:var(--sr-muted)}.daily-track{display:block;height:9px;background:var(--sr-border);border-radius:4px;overflow:hidden}.daily-track .bar-fill{display:block;min-width:0}.daily-day[data-availability="partial"] .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.daily-day[data-availability="no_data"] .daily-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.daily-detail{border:1px solid var(--sr-border);border-left:3px solid var(--sr-primary);border-radius:10px;padding:12px;display:grid;gap:8px;overflow-wrap:anywhere;line-height:1.5}.daily-detail h4{margin:0}.daily-detail p{font-size:12px}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:14px;line-height:1.6}summary{cursor:pointer;overflow-wrap:anywhere;min-height:44px;display:flex;align-items:center;padding:8px 0}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
+          .report-views{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.report-views [aria-selected="true"]{border-color:var(--sr-primary);color:var(--sr-primary);font-weight:650}.bar-chart{display:grid;gap:12px}.chart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px}.chart-row.child{margin-left:20px}.bar-track{grid-column:1/-1;height:9px;background:var(--sr-border);border-radius:5px;overflow:hidden}.bar-fill{background:var(--sr-primary);height:100%;border-radius:4px}.chart-row small{grid-column:1/-1}.daily-history{display:grid;gap:12px;min-width:0;margin-top:14px}.daily-history h3,.daily-history p{overflow-wrap:anywhere}.daily-list{display:grid;gap:8px}.daily-day{display:grid;gap:6px;width:100%;text-align:left;line-height:1.4}.daily-day[aria-pressed="true"]{border-color:var(--sr-primary);box-shadow:inset 3px 0 var(--sr-primary)}.daily-label{font-size:12px;color:var(--sr-muted)}.daily-value{font-size:16px;font-variant-numeric:tabular-nums}.daily-coverage{font-size:12px;color:var(--sr-muted)}.daily-track{display:block;height:9px;background:var(--sr-border);border-radius:4px;overflow:hidden}.daily-track .bar-fill{display:block;min-width:0}.daily-day[data-availability="partial"] .bar-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.daily-day[data-availability="no_data"] .daily-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.daily-detail{border:1px solid var(--sr-border);border-left:3px solid var(--sr-primary);border-radius:10px;padding:12px;display:grid;gap:8px;overflow-wrap:anywhere;line-height:1.5}.daily-detail h4{margin:0}.daily-detail p{font-size:12px}.cost-source{font-size:12px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}.report-context{margin-bottom:0;line-height:1.6;font-size:14px;overflow-wrap:anywhere}.report-context-details{margin-bottom:14px}.report-context-details summary{font-size:14px}.report-context-details p{font-size:12px;line-height:1.6;overflow-wrap:anywhere}summary{cursor:pointer;overflow-wrap:anywhere;min-height:44px;display:flex;align-items:center;padding:8px 0}.daily-history:focus-visible,summary:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}
           .tariff-evidence{display:grid;gap:12px;min-width:0}.tariff-evidence p,.tariff-evidence h4{overflow-wrap:anywhere}.tariff-day-chart{display:grid;gap:8px;margin-top:12px}.tariff-day-chart h4{margin:0;font-size:14px}.tariff-day{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;min-height:64px;min-width:44px;max-width:100%;padding:10px 12px;border:1px solid var(--sr-border);border-radius:10px;background:var(--sr-card);color:var(--sr-text);text-align:left;font:inherit}.tariff-day[aria-pressed=true]{border-color:var(--sr-primary);outline:1px solid var(--sr-primary)}.tariff-day strong{overflow-wrap:anywhere}.tariff-day small{grid-column:1/-1;color:var(--sr-muted);font-size:11px}.tariff-day-track{grid-column:1/-1;position:relative;height:8px;background:var(--sr-border);border-radius:4px;overflow:hidden}.tariff-day-track.signed{background:linear-gradient(to right,var(--sr-border) calc(50% - 1px),var(--sr-text) 50%,var(--sr-border) calc(50% + 1px))}.tariff-day-fill{position:absolute;top:0;height:100%;background:var(--sr-primary);border-radius:3px}.tariff-day[data-availability=partial] .tariff-day-fill{background:repeating-linear-gradient(135deg,var(--sr-primary) 0 4px,var(--sr-border) 4px 7px)}.tariff-day[data-availability=gap] .tariff-day-track{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--sr-border) 4px 7px)}.tariff-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.tariff-pagination span{flex:1;min-width:0}.tariff-evidence button{min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}.tariff-data-row{border:1px solid var(--sr-border);border-radius:10px;padding:12px;margin-top:8px;min-width:0;overflow-wrap:anywhere}.tariff-data-row h4{font-size:13px;margin:0 0 8px}.tariff-data-row dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 12px;margin:0;font-size:12px}.tariff-data-row dt{color:var(--sr-muted)}.tariff-data-row dd{margin:0}.tariff-day:focus-visible{outline:3px solid var(--sr-primary);outline-offset:2px}
           .device-report-details>summary:before{content:'▸';margin-right:8px}.device-report-details[open]>summary:before{content:'▾'}.device-total-note{border:1px solid var(--sr-border);border-radius:10px;padding:10px;overflow-wrap:anywhere}
           .device-search-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0}.device-search-form label{flex:1;min-width:min(100%,180px);display:grid;gap:6px;font-size:13px}.device-search{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--sr-border);border-radius:9px;background:var(--sr-card);color:var(--sr-text);font:inherit}.device-search-clear{min-height:44px;min-width:44px}.device-search:focus-visible{outline:2px solid var(--sr-primary);outline-offset:2px}.device-search-count,.device-export-note{overflow-wrap:anywhere;line-height:1.5}.chart-row small{overflow-wrap:anywhere}
@@ -2943,9 +2947,14 @@ function projectSmartReportV3(report, includePrivate = false) {
       } else {
         const delta = pair.metrics[key];
         note.textContent = `${this._t('Previous period')}: ${this._formatNumber(delta.previous,2)} ${key === 'cost' ? pair.previous?.cost.currency || (pair.previous?.cost_sources.length && pair.previous.cost_sources.every(source => source.unit === delta.unit) ? delta.unit : '') : delta.unit || ''}`;
-        if (typeof delta.delta === 'number') note.textContent += ` · Δ ${this._formatNumber(delta.delta,2)} ${delta.unit || ''}`;
-        if (typeof delta.percent === 'number') note.textContent += ` · ${this._formatNumber(delta.percent,2)}%`;
-        else note.textContent += ` · ${this._t(delta.reason || pair.reason || 'unavailable')}`;
+        const hasDelta = Number.isFinite(delta.delta), hasPercent = Number.isFinite(delta.percent);
+        if (hasDelta && delta.delta === 0 && hasPercent && delta.percent === 0) {
+          note.textContent += ` · ${this._t('No change')}`;
+        } else if (hasDelta) {
+          note.textContent += ` · ${this._formatReportChange(delta.delta)} ${delta.unit || ''}`;
+          if (hasPercent) note.textContent += ` (${this._formatReportChange(delta.percent)}%)`;
+        }
+        if (!hasDelta || !hasPercent) note.textContent += ` · ${this._t(delta.reason || pair.reason || 'unavailable')}`;
       }
       metric.appendChild(note);
     }
@@ -3288,11 +3297,28 @@ function projectSmartReportV3(report, includePrivate = false) {
       const period = state.period || {}; const context = document.createElement('p'); context.className = 'muted report-context';
       const timeZone = period.time_zone || this._timeZone();
       const periodLabel = this._t(period.key === '1d' ? 'Today' : (period.key === '30d' ? '30 days' : (period.key === '7d' ? '7 days' : (period.key || '—'))));
-      context.textContent = `${this._t('Period')}: ${periodLabel} · ${this._formatPeriodDate(period.start, timeZone)} – ${this._formatPeriodDate(period.end, timeZone)} · ${this._t('Time zone')}: ${timeZone} · ${this._t('Sources')}: ${(state.total_sources || []).length} ${this._t('total')}, ${(state.cost_sources || []).length} ${this._t('cost')}`;
+      const sources = state.total_sources || [], complete = sources.filter(source => source.status === 'ready').length;
+      const start = asDate(period.start), end = asDate(period.end);
+      let range = '—';
+      if (start && end && end >= start) {
+        const dates = new Intl.DateTimeFormat(languageOf(this._hass), { dateStyle: 'medium', timeZone });
+        range = dates.formatRange(start, end);
+      }
+      context.textContent = `${range} · ${periodLabel} · ${complete}/${sources.length} ${this._t(sources.length === 1 ? 'source complete' : 'sources complete')}`;
       context.dataset.periodStart = period.start || '';
       context.dataset.periodEnd = period.end || '';
       context.title = `${this._t('Exact recorder window')}: ${period.start || '—'} → ${period.end || '—'}`;
       container.appendChild(context);
+      const periodDetails = document.createElement('details'); periodDetails.className = 'report-context-details';
+      periodDetails.open = this._reportContextDetailsOpen === true;
+      const periodSummary = document.createElement('summary'); periodSummary.textContent = this._t('Details'); periodSummary.dataset.reportControl = 'period-details';
+      periodDetails.appendChild(periodSummary);
+      const exact = document.createElement('p');
+      exact.textContent = `${this._t('Period')}: ${periodLabel} · ${this._formatPeriodDate(period.start, timeZone)} – ${this._formatPeriodDate(period.end, timeZone)} · ${this._t('Time zone')}: ${timeZone} · ${this._t('Sources')}: ${sources.length} ${this._t('total')}, ${(state.cost_sources || []).length} ${this._t('cost')}`;
+      const window = document.createElement('p'); window.textContent = context.title;
+      periodDetails.append(exact, window);
+      periodDetails.addEventListener('toggle', () => { if (periodDetails.isConnected) this._reportContextDetailsOpen = periodDetails.open; });
+      container.appendChild(periodDetails);
       if (state.status === 'no_data') {
         if(state.comparison)this._renderComparisonOverview(container,state.comparison);
         container.appendChild(this._stateBlock('No recorded energy change in this period.', 'Measured zero is rendered separately; this state means no recorder samples were available.', '', 'status', 'no_data'));
@@ -3371,6 +3397,19 @@ function projectSmartReportV3(report, includePrivate = false) {
 
     _metric(labelText, valueText) {
       const metric = document.createElement('div'); metric.className = 'metric'; const label = document.createElement('div'); label.className = 'metric-label'; label.textContent = this._t(labelText); const value = document.createElement('div'); value.className = 'metric-value'; value.textContent = valueText; metric.append(label, value); return metric;
+    }
+
+    _formatReportChange(value) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+      const magnitude = Math.abs(value), places = magnitude > 0 && magnitude < 0.01 ? 6 : 2;
+      const format = new Intl.NumberFormat(languageOf(this._hass), { minimumFractionDigits: 0, maximumFractionDigits: places });
+      const shown = format.format(magnitude);
+      // As in Energy's briefNumber, a nonzero value never becomes a zero label.
+      if (magnitude > 0 && shown === format.format(0)) {
+        const threshold = format.format(10 ** -places);
+        return value < 0 ? `>−${threshold}` : `<${threshold}`;
+      }
+      return (value < 0 ? '−' : value > 0 ? '+' : '') + shown;
     }
 
     _formatNumber(value, digits) {
