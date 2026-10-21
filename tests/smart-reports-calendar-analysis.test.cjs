@@ -62,3 +62,9 @@ test('revoked calendar in Compact still offers a safe route to the available ful
  const call=h.hass.callWS;h.hass.callWS=function(m){return m.type==='ha_tools_email/feature_capabilities'?Promise.resolve({status:'ready',revision:1,capabilities:{energy_analysis:{visible:true,read:false}}}):call.call(this,m);};h.card.hass=h.hass;for(let i=0;i<18;i++)await delay();const root=h.card.shadowRoot;assert.ok(root.querySelector('[data-smart-open]'));assert.doesNotMatch(root.querySelector('[data-smart-simple]').textContent,/240|241/);root.querySelector('[data-smart-open]').click();assert.ok(root.querySelector('[data-smart-analysis="recorded"]'));
  }finally{h.close();}
 });
+
+test('Compact retains the selected mean-seven comparison and its measured device changes',async()=>{
+ const h=await setup(m=>{const d=clone(fixture);if(m.comparison==='mean7'){d.context.comparison_kind='mean7';d.comparisons={mean7:clone(d.comparisons.previous)};d.comparisons.mean7.delta_kwh=12;d.comparisons.mean7.percent=5;d.comparisons.mean7.groups.devices['sensor.device'].delta_kwh=7;}return d;},{variant:'compact'});try{
+ h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();const r=h.card.shadowRoot;const comparison=r.querySelector('[data-analysis-action="comparison"]');comparison.value='mean7';comparison.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();h.card.shadowRoot.querySelector('[data-smart-back]').click();const s=r.querySelector('[data-smart-simple]');assert.match(s.querySelector('[data-smart-comparison]').textContent,/12/);assert.match(s.querySelector('[data-smart-comparison]').textContent,/seven|7/);assert.match(s.querySelector('[data-smart-change]').textContent,/7 kWh/);
+ }finally{h.close();}
+});
