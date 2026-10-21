@@ -5014,18 +5014,28 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       const ready=['ready','partial','no_data'].includes(state.status),snapshot=calendar?state.snapshot:null;
       const period=snapshot?.period||state.period||{};
       const number=v=>typeof v==='number'&&Number.isFinite(v)?v:typeof v==='string'&&v.trim()!==''&&Number.isFinite(Number(v))?Number(v):null;
-      const format=(v,unit)=>number(v)===null?'—':`${this._formatNumber(number(v),2)}${unit?' '+unit:''}`;
-      let energy=null,cost=null,currency=null,comparison=null,changes=[];
+      const format=(v,unit)=>{const n=number(v);return n===null?'—':`${n!==0&&Math.abs(n)<0.01?this._formatReportChange(n).replace(/^\+/,''):this._formatNumber(n,2)}${unit?' '+unit:''}`;};
+      let energy=null,cost=null,currency=null,comparison=null,costComparison=null,changes=[];
       if(ready){
         if(calendar&&snapshot){
           energy=snapshot.totals?.measurement_complete===true?snapshot.totals.kwh:null;
           cost=snapshot.totals?.pricing_complete===true?snapshot.totals.total_cost:null;currency=snapshot.totals?.currency;
           const kind=state.selection?.comparison||snapshot.context?.comparison_kind||'previous',c=snapshot.comparisons?.[kind];if(c?.status==='ready')comparison={delta:c.delta_kwh,percent:c.percent,scope:c.comparison_scope,kind};
+          const costs=c?.costs,a=costs?.current,b=costs?.baseline;
+          // The producer percentage describes usage_cost, even when a separate
+          // whole-period delta includes fixed fees. Never mix those two scopes.
+          const samePrice=costs?.status==='ready'&&a?.pricing_complete===true&&b?.pricing_complete===true&&a.compatible===true&&b.compatible===true&&a.currency&&a.currency===b.currency&&a.price_basis&&a.price_basis===b.price_basis;
+          if(samePrice){
+            const total=costs.comparison_scope==='calendar_totals'&&number(costs.delta_total_cost)!==null;
+            const delta=total?costs.delta_total_cost:costs.metric==='usage_cost'?costs.delta_cost:null;
+            if(number(delta)!==null)costComparison={delta,percent:total&&costs.metric!=='total_cost'?null:costs.percent,currency:a.currency,scope:costs.comparison_scope,kind,total};
+          }
           const rows=c?.groups?.devices||{};
           changes=Object.entries(rows).filter(([,v])=>v.status==='ready'&&number(v.delta_kwh)!==null).map(([id,v])=>({name:snapshot.groups?.devices?.[id]?.name||id,delta:number(v.delta_kwh)}));
         }else{
           energy=state.total?.value;cost=state.cost?.value;currency=state.cost?.currency;
           const c=state.comparison,metric=c?.metrics?.energy;if(metric?.comparable)comparison={delta:metric.delta,percent:metric.percent,scope:'calendar_totals'};
+          const money=c?.metrics?.cost;if(money?.comparable&&number(money.delta)!==null)costComparison={delta:money.delta,percent:money.percent,currency:money.unit,scope:'calendar_totals',kind:'previous',total:true};
           const previous=new Map((c?.previous?.devices||[]).map(v=>[v.statistic_id,v]));
           changes=(state.devices||[]).flatMap(v=>{const before=previous.get(v.statistic_id);return v.status==='ready'&&before?.status==='ready'&&v.unit===before.unit&&number(v.value)!==null&&number(before.value)!==null?[{name:v.label||v.statistic_id,delta:number(v.value)-number(before.value)}]:[];});
         }
@@ -5039,6 +5049,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       else{
         section.append(costLine);const delta=document.createElement('p');delta.dataset.smartComparison='';
         delta.textContent=comparison?`${({previous:t('vs previous','względem poprzedniego'),same_weekday:t('vs same weekday','względem tego samego dnia tygodnia'),mean7:t('vs seven-period mean','względem średniej z 7 okresów'),year_ago:t('vs year ago','względem ubiegłego roku')})[comparison.kind||'previous']}: ${this._formatReportChange(number(comparison.delta))} kWh${number(comparison.percent)===null?'':` (${this._formatReportChange(number(comparison.percent))}%)`}${comparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:t('Previous period: no comparable data','Poprzedni okres: brak porównywalnych danych');section.append(delta);
+        const moneyDelta=document.createElement('p');moneyDelta.dataset.smartCostComparison='';
+        const costKind=costComparison?.kind||state.selection?.comparison||snapshot?.context?.comparison_kind||'previous';
+        const costBaseline=({previous:t('vs previous','względem poprzedniego'),same_weekday:t('vs same weekday','względem tego samego dnia tygodnia'),mean7:t('vs seven-period mean','względem średniej z 7 okresów'),year_ago:t('vs year ago','względem ubiegłego roku')})[costKind];
+        moneyDelta.textContent=costComparison?`${costComparison.total?t('Period cost','Koszt okresu'):t('Usage cost','Koszt zużycia')} ${costBaseline}: ${this._formatReportChange(number(costComparison.delta))} ${costComparison.currency}${number(costComparison.percent)===null?'':` (${this._formatReportChange(number(costComparison.percent))}%)`}${costComparison.scope==='common_measurements'?t(' · common measurements',' · wspólne pomiary'):''}`:`${t('Cost','Koszt')} ${costBaseline}: ${t('no comparable data','brak porównywalnych danych')}`;
+        section.append(moneyDelta);
         const list=document.createElement('ul');list.setAttribute('aria-label',t('Largest measured changes','Największe zmierzone zmiany'));
         for(const row of changes.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||a.name.localeCompare(b.name)).slice(0,3)){const li=document.createElement('li');li.dataset.smartChange='';const name=document.createElement('span');name.textContent=row.name;name.title=row.name;const value=document.createElement('span');value.textContent=`${this._formatReportChange(row.delta)} kWh`;li.append(name,value);list.append(li);}section.append(list);
       }
