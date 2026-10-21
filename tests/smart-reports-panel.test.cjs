@@ -33,3 +33,25 @@ test('Editor roundtrips panel target, unknown config and label language',async()
 test('A queued close from the previous dialog cannot close a new request on the reused native owner',async()=>{
  const f=await setup({reuseOwner:true});try{const owner=await f.open();owner.querySelector('[data-smart-panel-close]').click();f.card.shadowRoot.querySelector('[data-smart-open]').click();for(let i=0;i<6;i++)await delay();assert.equal(f.requests.length,2);assert.equal(f.requests[1].dialogParams.closed,false);assert.ok(owner.querySelector('dialog[open]'));assert.ok(owner.querySelector('ha-smart-reports'));}finally{f.close();}
 });
+
+for(const native of [true,false])for(const action of ['click','cancel'])test(`Panel ${native?'native':'fallback'} ${action} returns focus to the current source button after a hass refresh`,async()=>{
+ const f=await setup({native});try{
+  const owner=await f.open(),oldButton=f.card.shadowRoot.querySelector('[data-smart-open]');
+  f.card._refreshThrottleMs=0;f.card.hass={...f.hass};
+  for(let i=0;i<6;i++)await delay();
+  const current=f.card.shadowRoot.querySelector('[data-smart-open]');
+  assert.equal(oldButton.isConnected,false,'ordinary report refresh replaced the opener');assert.notEqual(current,oldButton);
+  if(action==='click')owner.querySelector('[data-smart-panel-close]').click();
+  else owner.querySelector('dialog').dispatchEvent(new f.w.Event('cancel',{cancelable:true}));
+  assert.equal(f.card.shadowRoot.activeElement,current);
+ }finally{f.close();}
+});
+
+test('Panel close control occupies its own row above the size-contained report',async()=>{
+ const f=await setup();try{
+  const owner=await f.open(),close=owner.querySelector('[data-smart-panel-close]');
+  const style=f.w.getComputedStyle(close);
+  assert.notEqual(style.cssFloat,'right','a floated close forces the report into a narrow adjacent column');
+  assert.equal(style.display,'block');
+ }finally{f.close();}
+});
