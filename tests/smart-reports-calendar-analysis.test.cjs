@@ -68,3 +68,24 @@ test('Compact retains the selected mean-seven comparison and its measured device
  h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();const r=h.card.shadowRoot;const comparison=r.querySelector('[data-analysis-action="comparison"]');comparison.value='mean7';comparison.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();h.card.shadowRoot.querySelector('[data-smart-back]').click();const s=r.querySelector('[data-smart-simple]');assert.match(s.querySelector('[data-smart-comparison]').textContent,/12/);assert.match(s.querySelector('[data-smart-comparison]').textContent,/seven|7/);assert.match(s.querySelector('[data-smart-change]').textContent,/7 kWh/);
  }finally{h.close();}
 });
+
+for (const scenario of ['total','common','incomplete','currency','basis']) test(`Compact cost comparison preserves producer scope: ${scenario}`,async()=>{
+ const h=await setup(()=>{const d=clone(fixture),c=d.comparisons.previous.costs;c.delta_cost='7.00';c.delta_total_cost='11.00';c.percent='3';
+ if(scenario==='common')c.comparison_scope='common_measurements';
+ if(scenario==='incomplete')c.current.pricing_complete=false;
+ if(scenario==='currency')c.baseline.currency='PLN';
+ if(scenario==='basis')c.baseline.price_basis='net';
+ return d;},{variant:'compact'});try{
+ h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();const before=h.hass.calls.length;h.card.shadowRoot.querySelector('[data-smart-back]').click();
+ const node=h.card.shadowRoot.querySelector('[data-smart-cost-comparison]');assert.ok(node,'cost comparison is explicit, including unavailable');
+ if(scenario==='total'){assert.match(node.textContent,/Period cost.*\+11.*EUR/);assert.doesNotMatch(node.textContent,/3%/,'usage percentage must not describe total cost');}
+ else if(scenario==='common'){assert.match(node.textContent,/Usage cost.*\+7.*EUR.*common measurements/);assert.doesNotMatch(node.textContent,/11/);}
+ else assert.match(node.textContent,/no comparable data/);
+ assert.equal(h.hass.calls.length,before,'summary uses accepted facts only');
+ }finally{h.close();}
+});
+test('Compact cost follows selected mean-seven comparison independently of energy availability',async()=>{
+ const h=await setup(m=>{const d=clone(fixture);if(m.comparison==='mean7'){d.context.comparison_kind='mean7';const c=clone(d.comparisons.previous);c.status='noncomparable';c.delta_kwh=null;c.percent=null;c.costs.delta_total_cost='-4.00';d.comparisons={mean7:c};}return d;},{variant:'compact'});try{
+ h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();let r=h.card.shadowRoot;const select=r.querySelector('[data-analysis-action="comparison"]');select.value='mean7';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));for(let i=0;i<18;i++)await delay();r.querySelector('[data-smart-back]').click();const node=r.querySelector('[data-smart-cost-comparison]');assert.ok(node);assert.match(node.textContent,/seven.*−4.*EUR/);
+ }finally{h.close();}
+});

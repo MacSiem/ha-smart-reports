@@ -52,3 +52,13 @@ test('energy summaries remain usable with a different initial full tab and after
  f.card.setConfig({variant:'compact',show_energy:false});assert.doesNotMatch(r.querySelector('[data-smart-simple]').textContent,/Loading/);assert.ok(r.querySelector('[data-smart-open]'));
  }finally{f.close();}
 });
+
+test('Compact independently uses comparable recorded cost and refuses historical flat-rate estimates',async()=>{
+ const f=await setup({variant:'compact'});try{const r=f.card.shadowRoot;assert.match(r.querySelector('[data-smart-cost-comparison]')?.textContent||'',/no comparable data/);
+ const state={...f.card._energyViewState,comparison:{metrics:{energy:{comparable:false},cost:{comparable:true,delta:-12,percent:-5,unit:'PLN'}}}};
+ f.card._renderSimpleReport(r.getElementById('content'),state);assert.match(r.querySelector('[data-smart-cost-comparison]').textContent,/−12 PLN.*−5%/);
+ }finally{f.close();}
+});
+test('Tile and Compact preserve a small nonzero amount rather than showing zero',async()=>{
+ for(const variant of ['tile','compact']){const f=await setup({variant});try{const r=f.card.shadowRoot,state={...f.card._energyViewState,total:{value:0.000000001},cost:{value:-0.000000001,currency:'PLN'}};f.card._renderSimpleReport(r.getElementById('content'),state);assert.match(r.querySelector('[data-smart-import]').textContent,/<0.000001/);assert.doesNotMatch(r.querySelector('[data-smart-import]').textContent,/0.00 kWh/);if(variant==='compact')assert.match(r.querySelector('[data-smart-cost]').textContent,/>−0.000001/);}finally{f.close();}}
+});
