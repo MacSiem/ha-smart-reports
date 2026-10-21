@@ -1,5 +1,7 @@
 # Smart Reports
 
+[Instrukcja po polsku](README.pl.md)
+
 ![Preview](banner.png)
 
 Smart Reports is a Lovelace card with three focused views:
