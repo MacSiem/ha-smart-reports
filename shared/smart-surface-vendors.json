@@ -1,11 +1,14 @@
 {
   "donors": {
-    "panel": "ha-baby-tracker@b9c920486de82e06873a820f9fbe4733b8d1ac3f"
+    "panel": "ha-baby-tracker@b9c920486de82e06873a820f9fbe4733b8d1ac3f",
+    "placement": "ha-energy-optimizer@a1d333dc3fef54e8a1fb430202d275699b65b016"
   },
   "adaptations": [
-    "Smart child, selection allowlist and independent identity guard; distinct native tag"
+    "Smart child, selection allowlist and independent identity guard; distinct native tag",
+    "Placement algorithm unchanged; Smart-only hardcoded and caller allowlists plus distinct tag"
   ],
   "files": [
-    "shared/ha-smart-reports-panel.js"
+    "shared/ha-smart-reports-panel.js",
+    "shared/ha-tools-dashboard-placement.js"
   ]
 }
