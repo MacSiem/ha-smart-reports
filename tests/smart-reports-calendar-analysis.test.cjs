@@ -96,3 +96,36 @@ test('Panel adapter seeds the selected calendar reference and child obtains a fr
  assert.equal(h.card._openReportV53(comparison),true);for(let i=0;i<24;i++)await delay();const owner=h.w.document.querySelector('ha-tools-smart-report-panel-dialog-v53'),child=owner.querySelector('ha-smart-reports');assert.equal(child._analysisMode,'calendar');assert.equal(child._calendarHost.selection().comparison,'mean7');const reads=h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis');assert.ok(reads.length>before);assert.ok(reads.slice(before).every(m=>m.period==='day'&&m.comparison==='mean7'));owner.querySelector('[data-smart-panel-close]').click();
  }finally{h.close();}
 });
+
+for(const from of ['week','month','year'])test(`calendar ${from}/year-ago to day restores a valid previous comparison and usable controls`,async()=>{
+ // This fixture exercises selection transport, not calendar arithmetic. Keep
+ // each requested period/context valid so the starting year-ago view is ready.
+ const response=m=>{const d=clone(fixture),kind=m.period,comparison=m.comparison||'previous';
+  d.period.kind=d.context.period_kind=kind;
+  d.chart.grain={day:'hour',week:'day',month:'day',year:'month'}[kind];
+  d.context.comparison_kind=comparison;
+  d.comparisons={[comparison]:clone(fixture.comparisons.previous)};
+  d.comparisons[comparison].baseline_kind=comparison;
+  return d;
+ };
+ const h=await setup(response);try{
+  await h.open();let r=h.card.shadowRoot;
+  r.querySelector(`[data-analysis-action="period"][data-analysis-value="${from}"]`).click();
+  for(let i=0;i<18;i++)await delay();
+  let comparison=r.querySelector('[data-analysis-action="comparison"]');assert.ok(comparison,'period options stay available');
+  comparison.value='year_ago';comparison.dispatchEvent(new h.w.Event('change',{bubbles:true}));
+  for(let i=0;i<18;i++)await delay();
+  assert.equal(h.card._calendarHost.state().status,'ready','accepted year-ago view before transition');
+  assert.equal(h.card._calendarHost.selection().comparison,'year_ago');
+  const callsBefore=h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length;
+  r.querySelector('[data-analysis-action="period"][data-analysis-value="day"]').click();
+  for(let i=0;i<18;i++)await delay();
+  const reads=h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis');
+  assert.equal(h.card._calendarHost.selection().comparison,'previous','day cannot retain year_ago');
+  assert.equal(h.card._calendarHost.state().status,'ready','valid day request recovers a rendered report');
+  assert.equal(reads.length,callsBefore+1,'exactly one valid replacement request');
+  assert.equal(reads.at(-1).period,'day');assert.equal(reads.at(-1).comparison,'previous');
+  assert.equal(r.querySelector('[data-analysis-action="comparison"]').value,'previous');
+  assert.ok(r.querySelector('[data-analysis-action="anchor"]'),'date remains editable');
+ }finally{h.close();}
+});
