@@ -1,0 +1,41 @@
+ 'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {loadRuntime,makeHass,explicitConfig,metadata,calendarSeries,delay}=require('./helpers/smart-reports-harness.cjs');
+async function setup(config={}){
+ const dom=loadRuntime(),w=dom.window,card=w.document.createElement('ha-smart-reports');
+ card._now=()=>new Date('2026-08-30T12:00:00Z');card._refreshThrottleMs=1000000;
+ const ids=['sensor.grid_import','sensor.a','sensor.b','sensor.c','sensor.d'];
+ const hass=makeHass({timeZone:'UTC',metadataById:Object.fromEntries(ids.map(id=>[id,metadata()])),deferred:{'recorder/statistics_during_period':m=>{
+ const current=m.end_time==='2026-08-30T12:00:00.000Z';return Object.fromEntries(ids.map((id,i)=>[id,calendarSeries(m.start_time,m.end_time,Array(Math.ceil((Date.parse(m.end_time)-Date.parse(m.start_time))/3600000)).fill(current?[10,2,4,1,3][i]:1))]));
+ }}});hass.connection={connected:true};
+ card.setConfig(explicitConfig({energy_device_statistics:ids.slice(1),energy_price:2,currency:'PLN',...config}));w.document.body.append(card);card.hass=hass;
+ if(card._refreshTimer!==null){w.clearTimeout(card._refreshTimer);card._refreshTimer=null;}
+ if(card._activeTab==='energy')await card._loadEnergy();for(let i=0;i<4;i++)await delay();
+ return {dom,w,card,hass,close(){card.remove();w.close();}};
+}
+test('old cards retain full view; picker creates compact and an explicit default tab only applies on initial configuration',async()=>{
+ const f=await setup();try{assert.equal(f.card.shadowRoot.querySelector('[data-smart-simple]'),null);assert.equal(f.card.constructor.getStubConfig().variant,'compact');
+ f.card.setConfig(explicitConfig({default_tab:'system'}));assert.equal(f.card._activeTab,'energy');
+ const other=f.w.document.createElement('ha-smart-reports');other.setConfig({default_tab:'system'});f.w.document.body.append(other);other.hass=f.hass;assert.equal(other._activeTab,'system');other.setConfig({default_tab:'energy',show_system:false});assert.equal(other._activeTab,'energy');other.remove();
+ }finally{f.close();}
+});
+test('tile and compact advertise native Sections sizes',async()=>{
+ for(const [variant,columns,rows] of [['tile',6,1],['compact',12,4]]){const f=await setup({variant});try{const g=f.card.getGridOptions();assert.equal(g.columns,columns);assert.equal(g.rows,rows);assert.equal(f.card.getCardSize(),rows);}finally{f.close();}}
+});
+test('compact uses the accepted report and three largest measured changes with no report controls',async()=>{
+ const f=await setup({variant:'compact'});try{const root=f.card.shadowRoot,summary=root.querySelector('[data-smart-simple="compact"]');assert.ok(summary);assert.equal(root.getElementById('tabs').hidden,true);assert.equal(root.getElementById('energyToolbar').hidden,true);assert.equal(root.querySelector('.donate-section').hidden,true);assert.equal(root.querySelector('[data-smart-access-settings]').hidden,true);
+ assert.match(summary.querySelector('[data-smart-import]').textContent,/kWh/);assert.match(summary.querySelector('[data-smart-cost]').textContent,/PLN|zł/);const changes=[...summary.querySelectorAll('[data-smart-change]')];assert.equal(changes.length,3);assert.match(changes[0].textContent,/sensor.b/);assert.match(changes[1].textContent,/sensor.d/);assert.match(changes[2].textContent,/sensor.a/);assert.ok(summary.querySelector('[data-smart-comparison]'));assert.equal(summary.querySelectorAll('button').length,1);
+ }finally{f.close();}
+});
+test('tile exposes one headline and opens full with keyboard focus; Back restores the opener without extra statistics reads',async()=>{
+ const f=await setup({variant:'tile'});try{let root=f.card.shadowRoot;const s=root.querySelector('[data-smart-simple="tile"]');assert.ok(s);assert.equal(s.querySelectorAll('button').length,1);assert.equal(s.querySelector('[data-smart-change]'),null);const before=f.hass.calls.length;const open=s.querySelector('button');open.focus();open.click();const back=root.querySelector('[data-smart-back]');assert.ok(back);assert.equal(root.activeElement,back);assert.equal(root.querySelector('[data-smart-simple]'),null);back.click();assert.equal(root.activeElement,root.querySelector('[data-smart-open]'));assert.equal(f.hass.calls.length,before);
+ }finally{f.close();}
+});
+test('simple summaries clear accepted data immediately when the current user changes',async()=>{
+ const f=await setup({variant:'compact'});try{assert.match(f.card.shadowRoot.querySelector('[data-smart-import]').textContent,/kWh/);f.hass.user.id='other';f.card.hass=f.hass;assert.doesNotMatch(f.card.shadowRoot.querySelector('[data-smart-simple]').textContent,/1,680|3,360/);assert.equal(f.card._energyViewState.status,'idle');}finally{f.close();}
+});
+test('compact alias and editor keep unknown keys, selected variant and title caret on language updates',async()=>{
+ const f=await setup({compact:true});try{assert.ok(f.card.shadowRoot.querySelector('[data-smart-simple="compact"]'));const e=f.w.document.createElement('ha-smart-reports-editor');e.setConfig({type:'custom:ha-smart-reports',variant:'tile',default_tab:'system',foreign:{keep:true},title:'My report'});f.w.document.body.append(e);e.hass=f.hass;
+ const select=e.shadowRoot.getElementById('cf_variant');assert.equal(select.value,'tile');let emitted;e.addEventListener('config-changed',ev=>emitted=ev.detail.config);select.value='compact';select.dispatchEvent(new f.w.Event('change'));assert.deepEqual(JSON.parse(JSON.stringify(emitted.foreign)),{keep:true});assert.equal(emitted.default_tab,'system');const title=e.shadowRoot.getElementById('cf_title');title.focus();title.setSelectionRange(2,5);f.hass.language='pl';e.hass=f.hass;assert.equal(e.shadowRoot.activeElement.id,'cf_title');assert.equal(e.shadowRoot.activeElement.selectionStart,2);assert.equal(e.shadowRoot.getElementById('cf_variant').value,'compact');e.remove();
+ }finally{f.close();}
+});
