@@ -3254,8 +3254,9 @@ function createSmartCalendarAccessV53({card,guard,onChange=()=>{},onInvalidate=(
   if(subscribing)return subscribing;
   const connection=card._hass?.connection;
   if(typeof connection?.subscribeMessage!=='function')throw {code:'analysis_subscription_unavailable'};
+  const association=identity;
   const task=(async()=>{
-   const unsub=await connection.subscribeMessage(()=>{if(enabled)invalidate();},{type:'ha_tools_email/subscribe_analysis_updates'});
+   const unsub=await connection.subscribeMessage(()=>{if(enabled&&same(association,context()))invalidate();},{type:'ha_tools_email/subscribe_analysis_updates'});
    if(typeof unsub!=='function')throw {code:'analysis_subscription_unavailable'};
    if(!current(e)){try{unsub();}catch(_){}return false;}
    off=unsub;ack=true;return true;
@@ -3375,6 +3376,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       this._bindReviewedExportEvents();
       this._observeReviewedExportSource();
       this._tariffGuard?.resume();
+      this._featureAccessGuard?.resume();
       this._tariffGuard?.observe();
       this._renderScaffold();
       this._syncTheme();
@@ -3392,6 +3394,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       this._unbindReviewedExportEvents();
       this._observeReviewedExportSource();
       this._tariffGuard?.suspend();
+      this._featureAccessGuard?.suspend();
       this._tariffGuard?.observe();
       if (this._refreshTimer !== null) clearTimeout(this._refreshTimer);
       this._refreshTimer = null;
@@ -3410,6 +3413,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       const languageChanged = language !== this._language;
       this._language = language;
       this._hass = hass;
+      this._featureAccessGuard?.observe();
       this._calendarAccessGate?.observe();this._featureAccessV53?.observe();
       const calendarChanged=this._calendarHost?.observe();
       if(this._analysisMode==='calendar'&&this._connected&&this._activeTab==='energy'&&(calendarChanged||languageChanged))this._renderEnergyState();
@@ -4428,8 +4432,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
         getContext:()=>({config:this._config,period:this._period,tab:this._activeTab,connected:this._connected})});
     }
 
+    _featureWire() {
+      return this._featureAccessGuard ||= createTariffGuardV3({getHass:()=>this._hass,
+        getContext:()=>({config:this._config,period:this._period,tab:this._activeTab,connected:this._connected})});
+    }
+
     _calendarAccess() {
-      if(!this._calendarAccessGate)this._calendarAccessGate=createSmartCalendarAccessV53({card:this,guard:this._sharedTariffGuard(),
+      if(!this._calendarAccessGate)this._calendarAccessGate=createSmartCalendarAccessV53({card:this,guard:this._featureWire(),
         onInvalidate:()=>{if(this._analysisMode==='calendar'){this._calendarHost?.stop();this._invalidateReviewedExport(true);}},
         onChange:()=>{if(this._calendarGateRenderPending)return;this._calendarGateRenderPending=true;queueMicrotask(()=>{this._calendarGateRenderPending=false;this._syncCalendarAccess();});}});
       this._calendarAccessGate.start();return this._calendarAccessGate;
@@ -4453,7 +4462,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       container.replaceChildren();const section=document.createElement('section');section.dataset.smartAccessView='';section.dataset.language=language;
       const back=document.createElement('button');back.type='button';back.className='action';back.textContent=this._t('Back to reports');back.addEventListener('click',()=>{this._featureAccessV53?.stop();this._activeTab=this._availableTabs().includes(this._lastReportTab)?this._lastReportTab:this._availableTabs()[0]||null;this._tariffGuard?.observe();this._syncTabs();this._scheduleRefresh(true);});section.append(back);
       const details=document.createElement('details');details.dataset.featureAccessV53='';const summary=document.createElement('summary');summary.textContent=this._t('Access to HA Tools features');details.append(summary);const body=document.createElement('div');body.dataset.featureAccessBody='';details.append(body);section.append(details);container.append(section);
-      this._featureAccessV53 ||= createFeatureAccessV53({card:this,guard:this._sharedTariffGuard()});this._featureAccessV53.mount(details);
+      this._featureAccessV53 ||= createFeatureAccessV53({card:this,guard:this._featureWire()});this._featureAccessV53.mount(details);
     }
 
     _tariffController() {

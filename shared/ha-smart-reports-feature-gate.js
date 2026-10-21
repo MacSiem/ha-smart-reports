@@ -23,8 +23,9 @@ function createSmartCalendarAccessV53({card,guard,onChange=()=>{},onInvalidate=(
   if(subscribing)return subscribing;
   const connection=card._hass?.connection;
   if(typeof connection?.subscribeMessage!=='function')throw {code:'analysis_subscription_unavailable'};
+  const association=identity;
   const task=(async()=>{
-   const unsub=await connection.subscribeMessage(()=>{if(enabled)invalidate();},{type:'ha_tools_email/subscribe_analysis_updates'});
+   const unsub=await connection.subscribeMessage(()=>{if(enabled&&same(association,context()))invalidate();},{type:'ha_tools_email/subscribe_analysis_updates'});
    if(typeof unsub!=='function')throw {code:'analysis_subscription_unavailable'};
    if(!current(e)){try{unsub();}catch(_){}return false;}
    off=unsub;ack=true;return true;
