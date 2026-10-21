@@ -5,11 +5,11 @@ const fixture=require('./fixtures/analysis-calendar-v53.json');
 const {featureCapabilities}=require('./helpers/smart-reports-feature-capabilities.cjs');
 const {loadRuntime,makeHass,explicitConfig,delay}=require('./helpers/smart-reports-harness.cjs');
 const clone=x=>JSON.parse(JSON.stringify(x));
-async function setup(response=()=>clone(fixture)) {
+async function setup(response=()=>clone(fixture),config={}) {
  const dom=loadRuntime(),w=dom.window,card=w.document.createElement('ha-smart-reports'),listeners=new Set();let removed=0;
  const hass=makeHass({timeZone:'UTC',deferred:{'ha_tools_email/feature_capabilities':()=>featureCapabilities(hass.user.is_admin===true),'ha_tools_email/energy_analysis':m=>Promise.resolve().then(()=>response(m))}});
  hass.user.is_active=true;hass.connection={connected:true,subscribeMessage:async(fn,m)=>{assert.equal(m.type,'ha_tools_email/subscribe_analysis_updates');listeners.add(fn);return ()=>{listeners.delete(fn);removed++;};}};
- card.setConfig(explicitConfig());w.document.body.append(card);card.hass=hass;
+ card.setConfig(explicitConfig(config));w.document.body.append(card);card.hass=hass;
  if(card._refreshTimer!==null){w.clearTimeout(card._refreshTimer);card._refreshTimer=null;}
  const open=async()=>{const button=card.shadowRoot.querySelector('[data-smart-analysis="calendar"]');assert.ok(button,'visible calendar analysis entry');for(let i=0;i<12&&button.disabled;i++)await delay();assert.equal(button.disabled,false);button.click();for(let i=0;i<12;i++)await delay();};
  return {dom,w,card,hass,listeners,open,get removed(){return removed;},close(){card.remove();dom.window.close();}};
@@ -46,4 +46,13 @@ test('scheduled calendar refresh does not interrupt an active date draft',async(
 });
 test('calendar date options stay open when switching Chart to Data',async()=>{
  const h=await setup();try{await h.open();const r=h.card.shadowRoot;r.querySelector('[data-analysis-calendar-options]').open=true;r.querySelector('[data-analysis-action="view"][data-analysis-value="data"]').click();assert.equal(r.querySelector('[data-analysis-calendar-options]').open,true);}finally{h.close();}
+});
+
+test('compact reuses the accepted calendar totals, measured device changes and native full view without another analysis read',async()=>{
+ const h=await setup(()=>clone(fixture),{variant:'compact'});try{
+ h.card.shadowRoot.querySelector('[data-smart-open]').click();await h.open();
+ const calls=h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length;
+ h.card.shadowRoot.querySelector('[data-smart-back]').click();const r=h.card.shadowRoot,s=r.querySelector('[data-smart-simple="compact"]');assert.ok(s);assert.match(s.querySelector('[data-smart-import]').textContent,/240/);assert.match(s.querySelector('[data-smart-cost]').textContent,/241/);assert.equal(s.querySelectorAll('[data-smart-change]').length,1);assert.match(s.querySelector('[data-smart-change]').textContent,/Desk/);assert.match(s.querySelector('[data-smart-comparison]').textContent,/0/);assert.equal(r.querySelector('[data-analysis-chart]'),null);assert.equal(h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length,calls);
+ s.querySelector('[data-smart-open]').click();assert.ok(r.querySelector('[data-analysis-chart]'));assert.equal(h.hass.calls.filter(m=>m.type==='ha_tools_email/energy_analysis').length,calls);
+ }finally{h.close();}
 });
