@@ -140,3 +140,28 @@ test('unreadable surface falls back to the HA dark preference', (t) => {
   fixture.card.hass = fixture.hass;
   assertReadable(fixture.palette(), LIGHT_SURFACE);
 });
+
+// A missing host theme application leaves export actions with an unreadable
+// foreground on bright custom accents. Exercise the real card lifecycle; the
+// browser color surface is the only jsdom adapter, as in the tests above.
+test('bright HA primary accent gives export actions a readable foreground after connect and theme change', (t) => {
+  const fixture = themeFixture(t, DARK_SURFACE);
+  fixture.card.style.setProperty('--primary-color', '#9ecfff');
+  fixture.connect();
+  fixture.card.hass = fixture.hass;
+  const colors = () => ({
+    fill: fixture.card.style.getPropertyValue('--hat-primary-fill-computed').trim(),
+    text: fixture.card.style.getPropertyValue('--hat-on-primary-computed').trim(),
+  });
+  const first = colors();
+  assert.equal(first.fill, '#9ecfff', 'keep an already readable HA accent');
+  assertReadable({ foreground: first.text }, first.fill, ['foreground']);
+  assert.ok(fixture.card.shadowRoot.getElementById('exportJsonBtn'));
+
+  fixture.card.style.setProperty('--primary-color', '#17366d');
+  fixture.card.hass = fixture.hass; // HA can reuse the same object.
+  const changed = colors();
+  assert.equal(changed.fill, '#17366d');
+  assert.notEqual(changed.text, first.text, 'foreground follows the new accent');
+  assertReadable({ foreground: changed.text }, changed.fill, ['foreground']);
+});
