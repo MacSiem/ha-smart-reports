@@ -3429,7 +3429,7 @@ function createSmartReportPanelV53({host,getHass,getConfig,getSourceKey,getSelec
       const dialog=doc.createElement('dialog');
       dialog.setAttribute('data-smart-report-panel','');dialog.setAttribute('aria-label',r.title);
       const style=doc.createElement('style');
-      style.textContent='dialog[data-smart-report-panel]{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:12px;border:1px solid var(--divider-color,#888);border-radius:16px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#222);overflow:auto}dialog[data-smart-report-panel]::backdrop{background:rgba(0,0,0,.5)}dialog[data-smart-report-panel] [data-smart-panel-close]{min-width:44px;min-height:44px;font:inherit;float:right}dialog[data-smart-report-panel] :focus-visible{outline:3px solid var(--primary-color,#1565c0);outline-offset:2px}';
+      style.textContent='dialog[data-smart-report-panel]{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:12px;border:1px solid var(--divider-color,#888);border-radius:16px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#222);overflow:auto}dialog[data-smart-report-panel]::backdrop{background:rgba(0,0,0,.5)}dialog[data-smart-report-panel] [data-smart-panel-close]{min-width:44px;min-height:44px;font:inherit;display:block;margin-inline-start:auto;margin-block-end:8px}dialog[data-smart-report-panel] :focus-visible{outline:3px solid var(--primary-color,#1565c0);outline-offset:2px}';
       const close=doc.createElement('button');close.type='button';close.setAttribute('data-smart-panel-close','');
       close.textContent=r.language==='pl'?'Zamknij raport':'Close report';
       close.addEventListener('click',()=>this.closeDialog());
@@ -5698,7 +5698,14 @@ dialog[data-ha-tools-placement]{box-sizing:border-box;width:min(640px,calc(100vw
           getSelection:()=>({tab:this._simpleFullTab||this._activeTab,recordedPeriod:this._period,energyView:this._energyView,analysisMode:this._analysisMode,calendarSelection:this._calendarHost?.selection()}),
           applySelection:(child,seed)=>{if(seed.tab)child._activeTab=seed.tab;if(seed.recordedPeriod)child._period=seed.recordedPeriod;if(seed.energyView)child._energyView=seed.energyView;if(seed.analysisMode)child._analysisMode=seed.analysisMode;
             if(seed.calendarSelection)child._calendarHost=createSmartAnalysisHostV53({card:child,initialSelection:seed.calendarSelection});},createGuard:createTariffGuardV3});
-        return this._reportPanelV53.open(opener);
+        // Ordinary hass refreshes replace the small card's button while the
+        // independently owned dialog stays open. Resolve only this card's
+        // current opener when returning focus.
+        const source=this;
+        return this._reportPanelV53.open({
+          get isConnected(){return source.isConnected;},
+          focus(options){source.shadowRoot.querySelector('[data-smart-open]')?.focus(options);}
+        });
       }
       this._simpleExpanded=true;if(this._availableTabs().includes(this._simpleFullTab))this._activeTab=this._simpleFullTab;this._syncTabs();this.shadowRoot.querySelector('[data-smart-back]')?.focus({preventScroll:true});return true;
     }
