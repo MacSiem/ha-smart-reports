@@ -34,7 +34,8 @@ for (const language of ['pl', 'pl-PL', 'en']) {
       assert.equal(card.shadowRoot.getElementById('exportCsvBtn').textContent, pl ? 'Eksport CSV' : 'Export CSV');
       assert.equal(card.shadowRoot.getElementById('tabs').getAttribute('aria-label'), pl ? 'Sekcje raportu' : 'Report sections');
       assert.deepEqual(labelTexts(card), pl ? ['Pobór z sieci', 'Koszt niedostępny', 'Źródła z danymi', 'Źródła z pełną historią'] : ['Grid import', 'Cost unavailable', 'Sources with data', 'Complete sources']);
-      assert.match(card.shadowRoot.querySelector('.report-context').textContent, pl ? /Okres: 7 dni.*Strefa czasowa:.*Źródła:/ : /Period: 7 days.*Time zone:.*Sources:/);
+      assert.match(card.shadowRoot.querySelector('.report-context').textContent, pl ? /7 dni.*pełną historią/ : /7 days.*source.*complete/);
+      assert.match(card.shadowRoot.querySelector('.report-context-details').textContent, pl ? /Okres: 7 dni.*Strefa czasowa:.*Źródła:/ : /Period: 7 days.*Time zone:.*Sources:/);
       card._selectTab('automations');
       assert.deepEqual(labelTexts(card), pl ? ['Wszystkie automatyzacje', 'Aktywne', 'Wyłączone', 'Uruchomione dzisiaj'] : ['Total automations', 'Active', 'Disabled', 'Triggered today']);
       assert.equal(card.shadowRoot.querySelector('.row-name').textContent, 'User Energy <img src=x>');

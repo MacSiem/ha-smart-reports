@@ -244,7 +244,7 @@ test('approved comparison keeps current KPIs first and the previous amount besid
  try{
   const root=f.card.shadowRoot,main=root.getElementById('content');
   const headline=[...main.querySelectorAll('.metric')].find(e=>e.querySelector('.metric-label')?.textContent==='Grid import');
-  assert.ok(headline);assert.match(headline.textContent,/312\.00 kWh/);assert.match(headline.textContent,/Previous period.*156\.00 kWh/);assert.match(headline.textContent,/100\.00%/);
+  assert.ok(headline);assert.match(headline.textContent,/312\.00 kWh/);assert.match(headline.textContent,/Previous period.*156\.00 kWh/);assert.match(headline.textContent,/\+156 kWh \(\+100%\)/);
   const details=[...main.querySelectorAll('details')].find(e=>e.querySelector('summary')?.textContent==='Comparison details');
   assert.ok(details,'full ranges and hourly records remain accessible');assert.equal(details.open,false);
   assert.ok(headline.compareDocumentPosition(details)&f.window.Node.DOCUMENT_POSITION_FOLLOWING);

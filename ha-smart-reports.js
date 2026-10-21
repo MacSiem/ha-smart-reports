@@ -3315,8 +3315,8 @@ function projectSmartReportV3(report, includePrivate = false) {
       periodDetails.appendChild(periodSummary);
       const exact = document.createElement('p');
       exact.textContent = `${this._t('Period')}: ${periodLabel} · ${this._formatPeriodDate(period.start, timeZone)} – ${this._formatPeriodDate(period.end, timeZone)} · ${this._t('Time zone')}: ${timeZone} · ${this._t('Sources')}: ${sources.length} ${this._t('total')}, ${(state.cost_sources || []).length} ${this._t('cost')}`;
-      const window = document.createElement('p'); window.textContent = context.title;
-      periodDetails.append(exact, window);
+      const exactWindow = document.createElement('p'); exactWindow.textContent = context.title;
+      periodDetails.append(exact, exactWindow);
       periodDetails.addEventListener('toggle', () => { if (periodDetails.isConnected) this._reportContextDetailsOpen = periodDetails.open; });
       container.appendChild(periodDetails);
       if (state.status === 'no_data') {

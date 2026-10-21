@@ -98,7 +98,7 @@ test('report exposes exact local hours and separate cost coverage in visible tex
   })}});
   const {card,dom}=await mountCard({hass,config:explicitConfig({energy_cost_statistics:['sensor.cost']})});
   try{
-    assert.match(card.shadowRoot.querySelector('.report-context').textContent,/14:00|2:00/);
+    assert.match(card.shadowRoot.querySelector('.report-context-details').textContent,/14:00|2:00/);
     const coverage=card.shadowRoot.querySelector('.cost-coverage');assert.ok(coverage);
     assert.match(coverage.textContent,/1.*158.*h/);
     const report=card._buildExportDocument();assert.equal(report.energy.recorded_cost.value,0.25);assert.equal(report.energy.cost.value,null);

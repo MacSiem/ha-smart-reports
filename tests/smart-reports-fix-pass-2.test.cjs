@@ -406,7 +406,7 @@ test('N-05 ready UI exposes exact period range timezone and total/cost source co
   const context = card.shadowRoot.querySelector('.report-context');
   assert.ok(context, 'expected a visible report context line');
   assert.equal(
-    context.textContent,
+    card.shadowRoot.querySelector('.report-context-details p').textContent,
     'Period: 7 days · Aug 24, 2026, 12:00 AM – Aug 30, 2026, 2:00 PM · Time zone: Europe/Warsaw · Sources: 1 total, 1 cost',
   );
   assert.equal(context.dataset.periodStart, '2026-08-23T22:00:00.000Z');
@@ -436,7 +436,7 @@ test('N-05 partial UI exposes exact period range timezone and total/cost source 
   const context = card.shadowRoot.querySelector('.report-context');
   assert.ok(context, 'expected a visible report context line');
   assert.equal(
-    context.textContent,
+    card.shadowRoot.querySelector('.report-context-details p').textContent,
     'Period: 7 days · Aug 24, 2026, 12:00 AM – Aug 30, 2026, 2:00 PM · Time zone: Europe/Warsaw · Sources: 2 total, 1 cost',
   );
   assert.equal(context.dataset.periodStart, '2026-08-23T22:00:00.000Z');
