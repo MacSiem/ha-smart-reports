@@ -114,7 +114,7 @@ if (!customElements.get('ha-card')) customElements.define('ha-card', class exten
   };
 
   const hass = {
-    language: 'en-US',
+    language: locale,
     themes: { darkMode: theme === 'dark' },
     config: { time_zone: timezone, version: '2026.8.0', currency: 'PLN' },
     user: { id: 'demo_user', name: 'Demo User', is_admin: true },
@@ -167,6 +167,7 @@ if (!customElements.get('ha-card')) customElements.define('ha-card', class exten
   card._refreshThrottleMs = 0;
   card.setConfig({
     type: 'custom:ha-smart-reports',
+    variant: ['tile','compact'].includes(params.get('variant'))?params.get('variant'):'full',
     title: 'Smart Reports',
     show_support: false,
     compare_previous_period: true,
