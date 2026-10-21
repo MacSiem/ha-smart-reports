@@ -17,7 +17,7 @@ for (const language of ['en', 'pl']) {
       assert.equal(card._energyViewState.cost.reason, 'not_configured');
       assert.equal(card.shadowRoot.querySelector('a.fixed-link').getAttribute('href'), '/config/energy');
       assert.match(card.shadowRoot.textContent, language === 'en' ? /Configure Energy Dashboard/ : /Skonfiguruj panel energii/);
-      assert.equal(card.shadowRoot.querySelector('details'), null);
+      assert.equal(card.shadowRoot.getElementById('content').querySelector('details'), null);
       assert.equal(card.shadowRoot.querySelector('.summary'), null);
       assert.equal(card.shadowRoot.getElementById('exportJsonBtn').disabled, true);
       assert.equal(card.shadowRoot.getElementById('exportCsvBtn').disabled, true);
