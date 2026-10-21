@@ -280,7 +280,8 @@ async function captureOnce(client, origin, variant, sourceSha256) {
       cardClientWidth: card.clientWidth,
       bodyScrollWidth: document.body.scrollWidth,
       bodyClientWidth: document.body.clientWidth,
-      text: card.shadowRoot?.textContent || ''
+      text: card.shadowRoot?.textContent || '',
+      visibleText: card.shadowRoot?.querySelector('ha-card')?.innerText
     };
   })()`);
 
@@ -293,7 +294,9 @@ async function captureOnce(client, origin, variant, sourceSha256) {
   if (readback.cardScrollWidth > readback.cardClientWidth || readback.bodyScrollWidth > readback.bodyClientWidth) throw new Error(`Horizontal overflow detected for ${variant.file}`);
   if (!/Smart Reports/.test(readback.text) || !/Grid import/.test(readback.text) || !/Actual cost/.test(readback.text)) throw new Error(`Truthful report content did not render in ${variant.file}`);
   if (/697(?:[.,]0)?|104[.,]55|0[.,]15|undefined|NaN/i.test(readback.text)) throw new Error(`Stale or invalid content rendered in ${variant.file}`);
-  if (/T\d{2}:\d{2}:\d{2}|sensor\.demo_grid_import\s*\(sensor\.demo_grid_import\)/i.test(readback.text)) throw new Error(`Unpolished report context rendered in ${variant.file}`);
+  // Exact UTC evidence inside closed Details is intentional; polish applies to painted text.
+  if (typeof readback.visibleText !== 'string' || !readback.visibleText.trim()) throw new Error('Visible report text was not measured');
+  if (/T\d{2}:\d{2}:\d{2}|sensor\.demo_grid_import\s*\(sensor\.demo_grid_import\)/i.test(readback.visibleText)) throw new Error(`Unpolished report context rendered in ${variant.file}`);
   if (/\bmaciej\b|person\.maciej|phone_maciej|bearer\s+|access[_-]?token|password\s*[:=]/i.test(readback.text)) throw new Error(`Private or secret-like content rendered in ${variant.file}`);
   if (blocked.size > 0) throw new Error(`Renderer attempted non-local requests: ${[...blocked].join(', ')}`);
 
