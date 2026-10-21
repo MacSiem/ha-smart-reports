@@ -2951,8 +2951,9 @@ function projectSmartCalendarV53(snapshot, {includePrivate = false} = {}) {
   // Two explicitly supported shapes for group-comparison coverage.
   const comparisonCoverage = {...coverage,baselines:[coverage],current:v=>typeof v==='number'?num(v):project(v,coverage),baseline:v=>typeof v==='number'?num(v):project(v,coverage)};
   const period = {status,reason,kind:choice(['day','week','month','year']),...fields('start end local_start local_end calendar_end calendar_local_end',timestamp),...fields('start_fold end_fold hours calendar_hours',num),timezone:tz,...fields('partial recorder_hour_aligned calendar_clamped',bool),clamps:[choice(['future','recorder','current_time','calendar_end','unknown'])]};
-  const fees = {components,known_components:components,complete:bool,days:[{day:date,version_id:version,day_fraction:amount}]};
-  const costs = {...costFields,known_costs:known,currency,price_basis:basis,...fields('measurement_complete pricing_complete components_complete compatible comparable',bool),mask_source_seconds:num,priced_source_seconds:fields('energy_cost variable_cost legacy_combined_cost usage_cost',num),fixed_scope:scope,fees,rounding,rate_semantics:[choice(['components','legacy_combined'])],issues:[reason]};
+  const periodFees = {components,known_components:components,complete:bool,days:[{day:date,version_id:version,day_fraction:amount}]};
+  const fees = {...periodFees,periods:[periodFees]};
+  const costs = {...costFields,known_costs:known,currency,price_basis:basis,...fields('measurement_complete pricing_complete components_complete compatible comparable',bool),mask_source_seconds:num,priced_source_seconds:fields('energy_cost variable_cost legacy_combined_cost usage_cost',num),fixed_scope:choice(['household_period','arithmetic_mean_seven_household_periods']),period_count:num,aggregation:choice(['arithmetic_mean_seven_unrounded_components']),fees,rounding,rate_semantics:[choice(['components','legacy_combined'])],issues:[reason]};
   const totals = {...costs,...fields('kwh recorded_household_kwh',amount)};
   const zoneRow = {...costFields,known_costs:known,tariff_id:tariff,version_id:version,zone_id:zone,label,...fields('kwh recorded_kwh',amount),measured_seconds:num,complete:bool};
   const zoneBreakdown = {status,reason,scope,fixed_fee_scope:scope,currency,price_basis:basis,reconciles_recorded_kwh:bool,reconciles_known_costs:bool,zones:[zoneRow],unattributed:{recorded_kwh:amount,measured_seconds:num,missing_seconds:num,known_costs:known,reasons:[reason]}};
@@ -2984,7 +2985,9 @@ function projectSmartCalendarV53(snapshot, {includePrivate = false} = {}) {
     const result = Object.create(null);
     if (schema.mapKey) {
       for (const key of Object.keys(value).sort()) {
-        const id=schema.mapKey(key); if(id!==null) result[id]=project(value[key],schema.mapShape);
+        const item=project(value[key],schema.mapShape);
+        if(!item||typeof item!=='object'||Array.isArray(item)||Object.keys(item).length===0)continue;
+        const id=schema.mapKey(key); if(id!==null) result[id]=item;
       }
     } else {
       for (const key of Object.keys(schema)) if (Object.hasOwn(value,key) && value[key] !== undefined) result[key]=project(value[key],schema[key]);
@@ -3055,7 +3058,7 @@ function createSmartAnalysisHostV53({card}) {
   const nextCalendar=root.querySelector('[data-analysis-calendar-options]');if(nextCalendar)nextCalendar.open=calendarOpen;
   if(saved){const next=[...root.querySelectorAll('[data-analysis-action]')].find(e=>e.dataset.analysisAction===saved.action&&e.dataset.analysisValue===saved.value);if(next){if(saved.draft!==null&&next.matches('input'))next.value=saved.draft;next.focus({preventScroll:true});}}
  }
- async function read(){if(!active())return;const token=++ticket;started=true;await binding.read(selection);if(token===ticket&&active()){selectionPending=false;paint();card._invalidateReviewedExport?.();}}
+ async function read(){if(!active())return;const token=++ticket;started=true;await binding.read(selection);if(token===ticket&&active()){const changed=selectionPending;selectionPending=false;paint();if(changed)card._invalidateReviewedExport?.();}}
  function action(event){
   const el=event.target.closest('[data-analysis-action]');if(!el||!root?.contains(el))return;
   if(event.type==='click'&&el.matches('select,input')||event.type==='change'&&!el.matches('select,input'))return;

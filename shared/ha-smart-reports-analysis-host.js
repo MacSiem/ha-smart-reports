@@ -25,7 +25,7 @@ function createSmartAnalysisHostV53({card}) {
   const nextCalendar=root.querySelector('[data-analysis-calendar-options]');if(nextCalendar)nextCalendar.open=calendarOpen;
   if(saved){const next=[...root.querySelectorAll('[data-analysis-action]')].find(e=>e.dataset.analysisAction===saved.action&&e.dataset.analysisValue===saved.value);if(next){if(saved.draft!==null&&next.matches('input'))next.value=saved.draft;next.focus({preventScroll:true});}}
  }
- async function read(){if(!active())return;const token=++ticket;started=true;await binding.read(selection);if(token===ticket&&active()){selectionPending=false;paint();card._invalidateReviewedExport?.();}}
+ async function read(){if(!active())return;const token=++ticket;started=true;await binding.read(selection);if(token===ticket&&active()){const changed=selectionPending;selectionPending=false;paint();if(changed)card._invalidateReviewedExport?.();}}
  function action(event){
   const el=event.target.closest('[data-analysis-action]');if(!el||!root?.contains(el))return;
   if(event.type==='click'&&el.matches('select,input')||event.type==='change'&&!el.matches('select,input'))return;
