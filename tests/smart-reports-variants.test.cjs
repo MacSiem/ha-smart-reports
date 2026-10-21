@@ -28,7 +28,7 @@ test('compact uses the accepted report and three largest measured changes with n
  }finally{f.close();}
 });
 test('tile exposes one headline and opens full with keyboard focus; Back restores the opener without extra statistics reads',async()=>{
- const f=await setup({variant:'tile'});try{let root=f.card.shadowRoot;const s=root.querySelector('[data-smart-simple="tile"]');assert.ok(s);assert.equal(s.querySelectorAll('button').length,1);assert.equal(s.querySelector('[data-smart-change]'),null);const before=f.hass.calls.length;const open=s.querySelector('button');open.focus();open.click();const back=root.querySelector('[data-smart-back]');assert.ok(back);assert.equal(root.activeElement,back);assert.equal(root.querySelector('[data-smart-simple]'),null);back.click();assert.equal(root.activeElement,root.querySelector('[data-smart-open]'));assert.equal(f.hass.calls.length,before);
+ const f=await setup({variant:'tile'});try{let root=f.card.shadowRoot;const s=root.querySelector('[data-smart-simple="tile"]');assert.ok(s);assert.equal(s.querySelectorAll('button').length,1);assert.equal(s.querySelector('[data-smart-change]'),null);const before=f.hass.calls.filter(m=>m.type.startsWith('recorder/')).length;const open=s.querySelector('button');open.focus();open.click();const back=root.querySelector('[data-smart-back]');assert.ok(back);assert.equal(root.activeElement,back);assert.equal(root.querySelector('[data-smart-simple]'),null);back.click();assert.equal(root.activeElement,root.querySelector('[data-smart-open]'));assert.equal(f.hass.calls.filter(m=>m.type.startsWith('recorder/')).length,before);
  }finally{f.close();}
 });
 test('simple summaries clear accepted data immediately when the current user changes',async()=>{

@@ -3449,6 +3449,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
       // Clear accepted source DOM before a throttled/new-session read starts.
       // Request/export association and any occupied tariff wire keep their fences.
       if (this._scaffoldRendered && (allViews || this._activeTab === 'energy')) this.shadowRoot.getElementById('content')?.replaceChildren();
+      if(this._scaffoldRendered&&this._simpleReport()&&this._analysisMode!=='calendar')this._renderSimpleReport(this.shadowRoot.getElementById('content'),this._energyViewState);
     }
 
     get hass() {
