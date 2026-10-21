@@ -1100,6 +1100,11 @@ function createTariffHostV3({ card, kind, createModel, legacyProfile, createSett
     "Settings": "Ustawienia",
     "Access to HA Tools features": "Dostęp do funkcji HA Tools",
     "Back to reports": "Wróć do raportów",
+    "View": "Widok",
+    "Full": "Pełny",
+    "Compact": "Skrót",
+    "Tile": "Kafelek",
+    "Initial report": "Początkowy raport",
     "Administrator access is required.": "Wymagany jest dostęp administratora.",
     "Automations": "Automatyzacje",
     "System": "System",
@@ -5014,7 +5019,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalys
           energy=snapshot.totals?.measurement_complete===true?snapshot.totals.kwh:null;
           cost=snapshot.totals?.pricing_complete===true?snapshot.totals.total_cost:null;currency=snapshot.totals?.currency;
           const c=snapshot.comparisons?.previous;if(c?.status==='ready')comparison={delta:c.delta_kwh,percent:c.percent,scope:c.comparison_scope};
-          const rows=snapshot.comparisons?.previous?.attribution?.devices||{};
+          const rows=snapshot.comparisons?.previous?.groups?.devices||{};
           changes=Object.entries(rows).filter(([,v])=>v.status==='ready'&&number(v.delta_kwh)!==null).map(([id,v])=>({name:snapshot.groups?.devices?.[id]?.name||id,delta:number(v.delta_kwh)}));
         }else{
           energy=state.total?.value;cost=state.cost?.value;currency=state.cost?.currency;
