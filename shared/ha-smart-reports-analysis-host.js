@@ -10,7 +10,7 @@ function createSmartAnalysisHostV53({card}) {
  const controller=createEnergyAnalysisV53({card,onChange:()=>{paint();card._invalidateReviewedExport?.();}});
  const binding=createEnergyAnalysisBindingV53({card,controller,onInvalidate:()=>{started=false;ticket++;root?.replaceChildren();if(active())void read();}});
  function observe(){const next=context(),changed=!same(identity,next);if(changed){calendarOpen=false;started=false;ticket++;root?.replaceChildren();identity=next;binding.stop();}binding.observe();return changed;}
- function exportState(){if(!active())return {status:'idle',selection:null,snapshot:null,error:null};observe();const state=binding.observe();return selectionPending?{status:'loading',selection:{...selection},snapshot:null,error:null}:state;}
+ function exportState(){if(!active())return {status:'idle',selection:null,snapshot:null,error:null};observe();const state=binding.observe(),grant=card._calendarAccessGate?.state();if(grant&&(grant.status!=='ready'||grant.analysis?.visible!==true||grant.analysis?.read!==true||state.snapshot&&state.snapshot.context.feature_access_revision!==grant.revision))return {status:'error',selection:state.selection,snapshot:null,error:'analysis_access_unconfirmed'};return selectionPending?{status:'loading',selection:{...selection},snapshot:null,error:null}:state;}
  function paint(){
   if(!active())return;
   const state=exportState(),view=createEnergyAnalysisViewV53({card});
@@ -31,7 +31,7 @@ function createSmartAnalysisHostV53({card}) {
   const el=event.target.closest('[data-analysis-action]');if(!el||!root?.contains(el))return;
   if(event.type==='click'&&el.matches('select,input')||event.type==='change'&&!el.matches('select,input'))return;
   const key=el.dataset.analysisAction,value=el.matches('select,input')?el.value:el.dataset.analysisValue;
-  if(key==='retry'){binding.invalidate();started=false;void read();return;}
+  if(key==='retry'){card._calendarAccessGate?.refresh();binding.invalidate();started=false;void read();return;}
   if(key==='section'&&['overview','comparison','rates'].includes(value))section=value;
   else if(key==='period'&&['day','week','month','year'].includes(value)){selection.period=value;if(value!=='day'&&['same_weekday','mean7'].includes(selection.comparison))selection.comparison='previous';}
   else if(key==='anchor'){if(value)selection.anchor=value;else delete selection.anchor;}

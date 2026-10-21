@@ -2,6 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fixture=require('./fixtures/analysis-calendar-v53.json');
+const {featureCapabilities}=require('./helpers/smart-reports-feature-capabilities.cjs');
 const {loadRuntime,makeHass,explicitConfig,delay}=require('./helpers/smart-reports-harness.cjs');
 const clone=x=>JSON.parse(JSON.stringify(x));
 const dialog=card=>card.shadowRoot.querySelector('[data-ha-tools-export]')?.shadowRoot;
@@ -9,7 +10,7 @@ const field=(card,key)=>dialog(card)?.querySelector(`[data-export="${key}"]`);
 async function setup(){
  const dom=loadRuntime(),w=dom.window,card=w.document.createElement('ha-smart-reports'),listeners=new Set();let pending=false;
  const dto=clone(fixture);dto.groups.devices['sensor.device'].unknown='NEVER_EXPORT';dto.context.auth='NEVER_EXPORT';
- const hass=makeHass({timeZone:'UTC',deferred:{'ha_tools_email/energy_analysis':()=>pending?new Promise(()=>{}):Promise.resolve(clone(dto))}});
+ const hass=makeHass({timeZone:'UTC',deferred:{'ha_tools_email/feature_capabilities':()=>featureCapabilities(hass.user.is_admin===true),'ha_tools_email/energy_analysis':()=>pending?new Promise(()=>{}):Promise.resolve(clone(dto))}});
  hass.user.is_active=true;hass.user.is_admin=false;
  hass.connection={connected:true,subscribeMessage:async(fn)=>{listeners.add(fn);return()=>listeners.delete(fn);},addEventListener(){},removeEventListener(){}};
  card.setConfig(explicitConfig());w.document.body.append(card);card.hass=hass;card._refreshThrottleMs=1000000;

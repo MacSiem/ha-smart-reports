@@ -13,6 +13,9 @@
     },
     "shared/ha-tools-energy-analysis-view.js": {
       "sha256": "deb57a4a03edb4862e5431f4f224494fc205cb632b604b4a9569fb87df524704"
+    },
+    "shared/ha-tools-feature-access.js": {
+      "sha256": "6d7fee4844668c1ef69a47fae0d449c41a8298ffb0cbe3af51f33bd8f6ffa2a6"
     }
   }
 }

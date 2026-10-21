@@ -24,7 +24,7 @@ for(const [name,file,transform]of units) {
  else if(card.slice(first,last+end.length)!==expected)throw new Error('Runtime/source drift: '+name);
 }
 const analysis=JSON.parse(fs.readFileSync(path.join(root,'shared/smart-analysis-vendors.json'),'utf8'));
-for(const file of [...Object.keys(analysis.files),'shared/ha-smart-reports-analysis-host.js','shared/ha-smart-reports-calendar-export.js']) {
+for(const file of [...Object.keys(analysis.files),'shared/ha-smart-reports-analysis-host.js','shared/ha-smart-reports-calendar-export.js','shared/ha-smart-reports-feature-gate.js']) {
  const source=fs.readFileSync(path.join(root,file),'utf8');
  if(analysis.files[file]&&hash(source)!==analysis.files[file].sha256)throw Error('Analysis donor drift: '+file);
  const name=path.basename(file),start='// BEGIN SMART CALENDAR '+name,end='// END SMART CALENDAR '+name;
