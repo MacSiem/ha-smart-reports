@@ -3034,6 +3034,7 @@ if(typeof module!=='undefined' && module.exports) module.exports={projectSmartCa
 // Smart owns only the selected HA Energy calendar snapshot. No Recorder fallback.
 function createSmartAnalysisHostV53({card}) {
  let root=null,started=false,ticket=0,section='overview',identity=null,calendarOpen=false,selectionPending=false;
+ const exportButtons=new Map();
  let selection={period:'day',comparison:'previous'},options={level:'areas',view:'chart',selected:null};
  const context=()=>[card._hass?.connection,card._hass?.user?.id,card._hass?.user?.is_active,card._hass?.user?.is_admin,card._hass?.connected,card._hass?.config?.time_zone,card._hass?.connection?.connected,card._hass?.callWS,JSON.stringify([card._hass?.user?.is_owner,card._hass?.user?.groups,card._hass?.user?.group_ids])];
  const same=(a,b)=>a&&b&&a.every((v,i)=>v===b[i]);
@@ -3050,7 +3051,7 @@ function createSmartAnalysisHostV53({card}) {
   const focused=root.getRootNode().activeElement,saved=root.contains(focused)?{action:focused.dataset.analysisAction,value:focused.dataset.analysisValue,draft:focused.matches('input')?focused.value:null}:null;
   root.innerHTML=`<style>${view.styles()}</style>`;
   const nav=root.ownerDocument.createElement('nav');nav.setAttribute('aria-label',text('Calendar report views','Widoki raportu kalendarzowego'));
-  for(const [key,en,pl]of [['overview','Summary','Podsumowanie'],['comparison','Comparison','Porównanie'],['rates','Rates and costs','Stawki i koszty']]){const b=root.ownerDocument.createElement('button');b.type='button';b.className='action';b.dataset.analysisAction='section';b.dataset.analysisValue=key;b.setAttribute('aria-pressed',String(section===key));b.textContent=text(en,pl);nav.append(b);}for(const format of ['csv','json']){const b=root.ownerDocument.createElement('button');b.type='button';b.className='action';b.dataset.smartCalendarExport=format;b.disabled=state.status!=='ready';b.textContent=text('Export ','Eksport ')+format.toUpperCase();b.addEventListener('click',()=>card._downloadExport(format));nav.append(b);}root.append(nav);
+  for(const [key,en,pl]of [['overview','Summary','Podsumowanie'],['comparison','Comparison','Porównanie'],['rates','Rates and costs','Stawki i koszty']]){const b=root.ownerDocument.createElement('button');b.type='button';b.className='action';b.dataset.analysisAction='section';b.dataset.analysisValue=key;b.setAttribute('aria-pressed',String(section===key));b.textContent=text(en,pl);nav.append(b);}for(const format of ['csv','json']){let b=exportButtons.get(format);if(!b){b=root.ownerDocument.createElement('button');b.type='button';b.className='action';b.dataset.smartCalendarExport=format;b.addEventListener('click',()=>card._downloadExport(format));exportButtons.set(format,b);}b.disabled=state.status!=='ready';b.textContent=text('Export ','Eksport ')+format.toUpperCase();nav.append(b);}root.append(nav);
   const body=root.ownerDocument.createElement('div');
   if(state.status==='ready')body.innerHTML=view.markup(state.snapshot,{...selection,...options,section});
   else{const p=root.ownerDocument.createElement('p');p.setAttribute('role','status');p.textContent=state.status==='error'?(state.error==='unknown_command'?text('Install or update HA Tools Email to use calendar analysis. Your standalone reports remain available.','Zainstaluj lub zaktualizuj HA Tools Email, aby korzystać z analizy kalendarzowej. Samodzielne raporty pozostają dostępne.'):text('Calendar analysis unavailable. Access or the server response could not be confirmed.','Analiza kalendarzowa niedostępna. Nie potwierdzono dostępu lub odpowiedzi serwera.')):text('Loading calendar analysis…','Ładowanie analizy kalendarzowej…');body.append(p);}root.append(body);
@@ -3058,7 +3059,7 @@ function createSmartAnalysisHostV53({card}) {
   const nextCalendar=root.querySelector('[data-analysis-calendar-options]');if(nextCalendar)nextCalendar.open=calendarOpen;
   if(saved){const next=[...root.querySelectorAll('[data-analysis-action]')].find(e=>e.dataset.analysisAction===saved.action&&e.dataset.analysisValue===saved.value);if(next){if(saved.draft!==null&&next.matches('input'))next.value=saved.draft;next.focus({preventScroll:true});}}
  }
- async function read(){if(!active())return;const token=++ticket;started=true;await binding.read(selection);if(token===ticket&&active()){const changed=selectionPending;selectionPending=false;paint();if(changed)card._invalidateReviewedExport?.();}}
+ async function read(){if(!active())return;const token=++ticket,before=binding.observe();started=true;await binding.read(selection);if(token===ticket&&active()){const changed=selectionPending;selectionPending=false;const after=binding.observe();if(changed||before.status!==after.status||before.error!==after.error||before.snapshot?.snapshot_id!==after.snapshot?.snapshot_id)paint();if(changed)card._invalidateReviewedExport?.();}}
  function action(event){
   const el=event.target.closest('[data-analysis-action]');if(!el||!root?.contains(el))return;
   if(event.type==='click'&&el.matches('select,input')||event.type==='change'&&!el.matches('select,input'))return;
@@ -3076,7 +3077,7 @@ function createSmartAnalysisHostV53({card}) {
  }
  function mount(next){observe();if(!next?.isConnected){stop();return;}if(root!==next){if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);}root=next;root.addEventListener('click',action);root.addEventListener('change',action);}paint();if(!started)void read();}
  function refresh(){observe();if(!active())return;const focused=root.getRootNode().activeElement;if(root.contains(focused)&&focused.matches('input,select'))return;void read();}
- function stop(){selectionPending=false;calendarOpen=false;started=false;ticket++;if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);root.replaceChildren();root=null;}binding.stop();identity=null;}
+ function stop(){exportButtons.clear();selectionPending=false;calendarOpen=false;started=false;ticket++;if(root){root.removeEventListener('click',action);root.removeEventListener('change',action);root.replaceChildren();root=null;}binding.stop();identity=null;}
  return {mount,stop,observe,refresh,state:exportState};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={createSmartAnalysisHostV53};
